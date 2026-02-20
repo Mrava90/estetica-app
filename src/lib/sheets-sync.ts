@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { GoogleAuth } from 'google-auth-library'
 
 // ── Types ───────────────────────────────────────────────────
 interface CitaInsert {
@@ -28,50 +29,33 @@ export interface SyncResult {
   errors: string[]
 }
 
-// ── CSV Parser ──────────────────────────────────────────────
-function parseCSV(text: string): string[][] {
-  const rows: string[][] = []
-  let current = ''
-  let inQuotes = false
-  let row: string[] = []
+// ── Google Sheets API ───────────────────────────────────────
+async function fetchSheetData(spreadsheetId: string, sheetName: string): Promise<string[][]> {
+  const auth = new GoogleAuth({
+    credentials: {
+      client_email: process.env.GOOGLE_CLIENT_EMAIL,
+      private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+    },
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+  })
 
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    const next = text[i + 1]
+  const client = await auth.getClient()
+  const token = await client.getAccessToken()
 
-    if (inQuotes) {
-      if (ch === '"' && next === '"') {
-        current += '"'
-        i++ // skip escaped quote
-      } else if (ch === '"') {
-        inQuotes = false
-      } else {
-        current += ch
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true
-      } else if (ch === ',') {
-        row.push(current)
-        current = ''
-      } else if (ch === '\n' || (ch === '\r' && next === '\n')) {
-        row.push(current)
-        current = ''
-        if (row.some(cell => cell.trim() !== '')) rows.push(row)
-        row = []
-        if (ch === '\r') i++ // skip \n after \r
-      } else {
-        current += ch
-      }
-    }
-  }
-  // Last row
-  if (current || row.length > 0) {
-    row.push(current)
-    if (row.some(cell => cell.trim() !== '')) rows.push(row)
+  const range = encodeURIComponent(`${sheetName}!A:O`)
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`
+
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token.token}` },
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Google Sheets API error (${sheetName}): ${res.status} ${text}`)
   }
 
-  return rows
+  const data = await res.json()
+  return (data.values || []) as string[][]
 }
 
 // ── Helpers ─────────────────────────────────────────────────
@@ -98,17 +82,14 @@ function parseSheetDate(dateStr: string): string | null {
 
 function parseAmount(raw: string): number {
   if (!raw || !raw.trim()) return 0
-  // Handle Argentine locale: "1.234,50" → 1234.50
-  // Also handle plain numbers: "1234.50"
   let cleaned = raw.trim()
-    .replace(/[$\s]/g, '') // remove $ and spaces
-    .replace(/"/g, '')      // remove quotes
+    .replace(/[$\s]/g, '')
+    .replace(/"/g, '')
 
-  // If has both . and , → Argentine format (1.234,50)
+  // Argentine format: "1.234,50" → 1234.50
   if (cleaned.includes('.') && cleaned.includes(',')) {
     cleaned = cleaned.replace(/\./g, '').replace(',', '.')
   } else if (cleaned.includes(',') && !cleaned.includes('.')) {
-    // Only comma → could be decimal (1234,50)
     cleaned = cleaned.replace(',', '.')
   }
 
@@ -159,22 +140,18 @@ function parseAppointmentSheet(
     const row = rows[i]
     if (!row || row.length < 6) continue
 
-    // Column mapping (same for SSR and KW)
-    const dateVal = row[0]
+    const dateVal = row[0] || ''
     const clientName = row[1]?.trim()
     const serviceName = row[2]?.trim()
-    const entryAmount = parseAmount(row[4]) // ENTRADA column
+    const entryAmount = parseAmount(row[4] || '') // ENTRADA column
     const paymentMethod = row[5]?.trim()
     const professional = row[6]?.trim()
 
-    // Update current date if present
     const parsedDate = parseSheetDate(dateVal)
     if (parsedDate) currentDate = parsedDate
 
-    // Skip rows without essential data
     if (!currentDate || !clientName || entryAmount <= 0) continue
 
-    // Sequential time within day
     if (!dailyCount[currentDate]) dailyCount[currentDate] = 0
     dailyCount[currentDate]++
     const minuteOffset = (dailyCount[currentDate] - 1) * 5
@@ -201,11 +178,10 @@ function parseAppointmentSheet(
 function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
   const movs: MovimientoInsert[] = []
 
-  // Three sections side by side, data starts at row 3 (0-indexed)
   const sections = [
-    { cols: [0, 1, 2, 3], prefix: 'Gasto local' },       // GASTOS LOCAL
-    { cols: [6, 7, 8, 9], prefix: 'Adelanto comisión' },  // ADELANTOS/PAGOS COMISION
-    { cols: [11, 12, 13, 14], prefix: 'Gasto personal' }, // GASTOS CASA
+    { cols: [0, 1, 2, 3], prefix: 'Gasto local' },
+    { cols: [6, 7, 8, 9], prefix: 'Adelanto comisión' },
+    { cols: [11, 12, 13, 14], prefix: 'Gasto personal' },
   ]
 
   for (const section of sections) {
@@ -226,7 +202,7 @@ function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
       if (lastDate && desc && amount > 0) {
         movs.push({
           fecha: lastDate,
-          monto: -amount, // negative = expense
+          monto: -amount,
           tipo: mapMetodoPagoForMov(method),
           descripcion: `${section.prefix}: ${desc}`,
           origen: 'sheets',
@@ -242,24 +218,18 @@ function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
 export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResult> {
   const errors: string[] = []
 
-  const ssrUrl = process.env.SHEETS_CSV_URL_SSR
-  const kwUrl = process.env.SHEETS_CSV_URL_KW
-  const gastosUrl = process.env.SHEETS_CSV_URL_GASTOS
-
-  if (!ssrUrl || !kwUrl || !gastosUrl) {
-    throw new Error('Missing SHEETS_CSV_URL_* environment variables')
+  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
+  if (!spreadsheetId) throw new Error('Missing GOOGLE_SPREADSHEET_ID')
+  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    throw new Error('Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY')
   }
 
-  // 1. Fetch all CSVs in parallel
-  const [ssrText, kwText, gastosText] = await Promise.all([
-    fetch(ssrUrl).then(r => r.text()),
-    fetch(kwUrl).then(r => r.text()),
-    fetch(gastosUrl).then(r => r.text()),
+  // 1. Fetch all sheets via Google Sheets API
+  const [ssrRows, kwRows, gastosRows] = await Promise.all([
+    fetchSheetData(spreadsheetId, 'SSR'),
+    fetchSheetData(spreadsheetId, 'KW'),
+    fetchSheetData(spreadsheetId, 'Gastos'),
   ])
-
-  const ssrRows = parseCSV(ssrText)
-  const kwRows = parseCSV(kwText)
-  const gastosRows = parseCSV(gastosText)
 
   // 2. Get professionals map
   const { data: profs } = await supabase.from('profesionales').select('id, nombre')
