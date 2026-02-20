@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS } from '@/lib/constants'
 import { Scissors } from 'lucide-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -12,9 +13,12 @@ export function Sidebar() {
   return (
     <aside className="hidden w-64 flex-shrink-0 border-r bg-card lg:block">
       <div className="flex h-full flex-col">
-        <div className="flex h-16 items-center gap-2 border-b px-6">
-          <Scissors className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold">Estética</span>
+        <div className="flex h-16 items-center justify-between border-b px-6">
+          <div className="flex items-center gap-2">
+            <Scissors className="h-6 w-6 text-primary" />
+            <span className="text-lg font-semibold">Estética SR</span>
+          </div>
+          <ThemeToggle />
         </div>
         <nav className="flex-1 space-y-1 p-4">
           {NAV_ITEMS.map((item) => {

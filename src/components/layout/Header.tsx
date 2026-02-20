@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { LogOut, Menu } from 'lucide-react'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { MobileNav } from './MobileNav'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 export function Header() {
   const router = useRouter()
@@ -30,13 +31,15 @@ export function Header() {
             <MobileNav />
           </SheetContent>
         </Sheet>
-        <span className="text-lg font-semibold lg:hidden">Estética</span>
+        <span className="text-lg font-semibold lg:hidden">Estética SR</span>
       </div>
-      <div className="hidden lg:block" />
-      <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-        <LogOut className="h-4 w-4" />
-        <span className="hidden sm:inline">Cerrar sesión</span>
-      </Button>
+      <div className="flex items-center gap-1">
+        <ThemeToggle />
+        <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Cerrar sesión</span>
+        </Button>
+      </div>
     </header>
   )
 }

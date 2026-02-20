@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Scissors } from 'lucide-react'
 
 export function ReservarHeader() {
-  const [nombreSalon, setNombreSalon] = useState('Mi Estética')
+  const [nombreSalon, setNombreSalon] = useState('Estética SR')
 
   useEffect(() => {
     async function fetchConfig() {
