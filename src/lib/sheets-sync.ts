@@ -4,7 +4,7 @@ import { GoogleAuth } from 'google-auth-library'
 // ── Types ───────────────────────────────────────────────────
 interface CitaInsert {
   profesional_id: string | null
-  servicio_id: string
+  servicio_id: null
   fecha_inicio: string
   fecha_fin: string
   status: 'completada'
@@ -145,7 +145,6 @@ function parseAppointmentSheet(
   rows: string[][],
   sheetName: 'SSR' | 'KW',
   profMap: Record<string, string>,
-  servicioId: string
 ): CitaInsert[] {
   const citas: CitaInsert[] = []
   let currentDate: string | null = null
@@ -176,7 +175,7 @@ function parseAppointmentSheet(
 
     citas.push({
       profesional_id: mapProfesional(professional, profMap),
-      servicio_id: servicioId,
+      servicio_id: null,
       fecha_inicio: formatISO(currentDate, hour, minute),
       fecha_fin: formatISO(currentDate, hour + 1, minute),
       status: 'completada',
@@ -254,28 +253,9 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     profMap[p.nombre.toLowerCase()] = p.id
   }
 
-  // 3. Get or create sync services
-  const servicioIds: Record<string, string> = {}
-  for (const name of ['Sync SSR', 'Sync KW']) {
-    const { data: existing } = await supabase.from('servicios').select('id').eq('nombre', name).single()
-    if (existing) {
-      servicioIds[name] = existing.id
-    } else {
-      const { data: created } = await supabase.from('servicios').insert({
-        nombre: name,
-        descripcion: `Servicio sincronizado desde hoja ${name.replace('Sync ', '')}`,
-        duracion_minutos: 60,
-        precio_efectivo: 0,
-        precio_mercadopago: 0,
-        activo: false,
-      }).select('id').single()
-      if (created) servicioIds[name] = created.id
-    }
-  }
-
-  // 4. Parse sheets
-  const citasSSR = parseAppointmentSheet(ssrRows, 'SSR', profMap, servicioIds['Sync SSR'])
-  const citasKW = parseAppointmentSheet(kwRows, 'KW', profMap, servicioIds['Sync KW'])
+  // 3. Parse sheets
+  const citasSSR = parseAppointmentSheet(ssrRows, 'SSR', profMap)
+  const citasKW = parseAppointmentSheet(kwRows, 'KW', profMap)
   const allCitas = [...citasSSR, ...citasKW]
   const allMovimientos = parseGastosSheet(gastosRows)
 
