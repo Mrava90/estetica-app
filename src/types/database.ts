@@ -89,6 +89,7 @@ export interface MovimientoCaja {
   monto: number
   tipo: 'efectivo' | 'mercadopago'
   descripcion: string
+  origen: string
   user_id: string | null
   created_at: string
 }
