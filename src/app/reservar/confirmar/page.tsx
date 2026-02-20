@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft, CalendarDays, User, Scissors, Banknote, CreditCard } from 'lucide-react'
+import { ArrowLeft, CalendarDays, User, Scissors, Banknote, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
 
 function ConfirmarContent() {
@@ -126,7 +126,7 @@ function ConfirmarContent() {
             <div>
               <p className="text-sm font-medium">{servicio.nombre}</p>
               <p className="text-xs text-muted-foreground">
-                {servicio.duracion_minutos} min — Efectivo: {formatPrecio(servicio.precio_efectivo)} | Tarjeta: {formatPrecio(servicio.precio_tarjeta)}
+                {servicio.duracion_minutos} min — Efectivo: {formatPrecio(servicio.precio_efectivo)} | Mercadopago: {formatPrecio(servicio.precio_mercadopago)}
               </p>
             </div>
           </div>

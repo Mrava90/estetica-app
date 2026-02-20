@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Phone, Banknote, CreditCard } from 'lucide-react'
+import { Phone, Banknote, Smartphone, Building2 } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -65,7 +65,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
           profesional_id: cita.profesional_id || '',
           servicio_id: cita.servicio_id || '',
           fecha_inicio: cita.fecha_inicio,
-          metodo_pago: (cita.metodo_pago as 'efectivo' | 'tarjeta') || 'efectivo',
+          metodo_pago: (cita.metodo_pago as 'efectivo' | 'mercadopago' | 'transferencia') || 'efectivo',
           notas: cita.notas || '',
         })
       } else if (selectedDate) {
@@ -97,7 +97,8 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
   function getPrecioServicio(servicio: Servicio | undefined, metodo: string): number | null {
     if (!servicio) return null
-    return metodo === 'tarjeta' ? servicio.precio_tarjeta : servicio.precio_efectivo
+    if (metodo === 'mercadopago') return servicio.precio_mercadopago
+    return servicio.precio_efectivo
   }
 
   async function onSubmit(data: CitaInput) {
@@ -226,8 +227,10 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
         {isEditing && cita && (
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={STATUS_COLORS[cita.status]}>{STATUS_LABELS[cita.status]}</Badge>
-            {cita.metodo_pago === 'tarjeta' ? (
-              <Badge variant="outline" className="gap-1"><CreditCard className="h-3 w-3" />Tarjeta</Badge>
+            {cita.metodo_pago === 'mercadopago' ? (
+              <Badge variant="outline" className="gap-1"><Smartphone className="h-3 w-3" />Mercadopago</Badge>
+            ) : cita.metodo_pago === 'transferencia' ? (
+              <Badge variant="outline" className="gap-1"><Building2 className="h-3 w-3" />Transferencia</Badge>
             ) : (
               <Badge variant="outline" className="gap-1"><Banknote className="h-3 w-3" />Efectivo</Badge>
             )}
@@ -365,7 +368,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
               <p className="text-xs text-muted-foreground">
                 Duración: {selectedServicio.duracion_minutos} min |
                 Efectivo: {formatPrecio(selectedServicio.precio_efectivo)} |
-                Tarjeta: {formatPrecio(selectedServicio.precio_tarjeta)}
+                Mercadopago: {formatPrecio(selectedServicio.precio_mercadopago)}
               </p>
             )}
           </div>
@@ -378,7 +381,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                 type="button"
                 variant={selectedMetodoPago === 'efectivo' ? 'default' : 'outline'}
                 size="sm"
-                className="flex-1 gap-2"
+                className="flex-1 gap-1"
                 onClick={() => setValue('metodo_pago', 'efectivo')}
               >
                 <Banknote className="h-4 w-4" />
@@ -389,15 +392,28 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
               </Button>
               <Button
                 type="button"
-                variant={selectedMetodoPago === 'tarjeta' ? 'default' : 'outline'}
+                variant={selectedMetodoPago === 'mercadopago' ? 'default' : 'outline'}
                 size="sm"
-                className="flex-1 gap-2"
-                onClick={() => setValue('metodo_pago', 'tarjeta')}
+                className="flex-1 gap-1"
+                onClick={() => setValue('metodo_pago', 'mercadopago')}
               >
-                <CreditCard className="h-4 w-4" />
-                Tarjeta
+                <Smartphone className="h-4 w-4" />
+                MP
                 {selectedServicio && (
-                  <span className="text-xs opacity-80">({formatPrecio(selectedServicio.precio_tarjeta)})</span>
+                  <span className="text-xs opacity-80">({formatPrecio(selectedServicio.precio_mercadopago)})</span>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant={selectedMetodoPago === 'transferencia' ? 'default' : 'outline'}
+                size="sm"
+                className="flex-1 gap-1"
+                onClick={() => setValue('metodo_pago', 'transferencia')}
+              >
+                <Building2 className="h-4 w-4" />
+                Transf.
+                {selectedServicio && (
+                  <span className="text-xs opacity-80">({formatPrecio(selectedServicio.precio_efectivo)})</span>
                 )}
               </Button>
             </div>

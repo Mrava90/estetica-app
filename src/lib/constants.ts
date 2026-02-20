@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Settings,
   BarChart3,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -21,6 +22,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Clientes', href: '/clientes', icon: Users },
   { label: 'Servicios', href: '/servicios', icon: Scissors },
   { label: 'Equipo', href: '/equipo', icon: UserCircle },
+  { label: 'Caja Diaria', href: '/caja', icon: Wallet },
   { label: 'Informes', href: '/informes', icon: BarChart3 },
   { label: 'Configuración', href: '/configuracion', icon: Settings },
 ]

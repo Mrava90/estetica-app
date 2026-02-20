@@ -121,7 +121,7 @@ export default function InformesPage() {
   const metodoPagoData = useMemo(
     () => [
       { name: 'Efectivo', value: resumen.efectivo },
-      { name: 'Tarjeta', value: resumen.tarjeta },
+      { name: 'Mercadopago', value: resumen.mercadopago },
     ],
     [resumen]
   )
@@ -232,7 +232,7 @@ export default function InformesPage() {
               <CardContent>
                 <div className="text-2xl font-bold">{formatPrecio(resumen.ingresos)}</div>
                 <p className="text-xs text-muted-foreground">
-                  {formatPrecio(resumen.efectivo)} efectivo / {formatPrecio(resumen.tarjeta)} tarjeta
+                  {formatPrecio(resumen.efectivo)} efectivo / {formatPrecio(resumen.mercadopago)} mercadopago
                 </p>
               </CardContent>
             </Card>
@@ -382,7 +382,7 @@ export default function InformesPage() {
                 <Card className="lg:col-span-2">
                   <CardHeader>
                     <CardTitle className="text-base">Facturación por día</CardTitle>
-                    <CardDescription>Efectivo vs Tarjeta</CardDescription>
+                    <CardDescription>Efectivo vs Mercadopago</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {ingresosPorDia.length > 0 ? (
@@ -397,7 +397,7 @@ export default function InformesPage() {
                           />
                           <Legend />
                           <Bar dataKey="efectivo" name="Efectivo" stackId="a" fill={CHART_COLORS[3]} radius={[0, 0, 0, 0]} />
-                          <Bar dataKey="tarjeta" name="Tarjeta" stackId="a" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="mercadopago" name="Mercadopago" stackId="a" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     ) : (
@@ -411,7 +411,7 @@ export default function InformesPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">Método de pago</CardTitle>
-                    <CardDescription>Proporción efectivo / tarjeta</CardDescription>
+                    <CardDescription>Proporción efectivo / mercadopago</CardDescription>
                   </CardHeader>
                   <CardContent>
                     {resumen.ingresos > 0 ? (

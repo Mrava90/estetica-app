@@ -25,7 +25,7 @@ export interface CitasPorSemana {
 export interface IngresosPorDia {
   fecha: string
   efectivo: number
-  tarjeta: number
+  mercadopago: number
   total: number
 }
 
@@ -50,7 +50,7 @@ export interface Resumen {
   noAsistio: number
   ingresos: number
   efectivo: number
-  tarjeta: number
+  mercadopago: number
   ticketPromedio: number
 }
 
@@ -111,16 +111,17 @@ export function calcularCitasPorSemana(citas: CitaConRelaciones[]): CitasPorSema
 
 export function calcularIngresosPorDia(citas: CitaConRelaciones[]): IngresosPorDia[] {
   const completadas = citas.filter((c) => c.status === 'completada' && c.precio_cobrado)
-  const map = new Map<string, { efectivo: number; tarjeta: number }>()
+  const map = new Map<string, { efectivo: number; mercadopago: number }>()
 
   for (const cita of completadas) {
     const fecha = format(parseISO(cita.fecha_inicio), 'dd/MM', { locale: es })
-    const entry = map.get(fecha) || { efectivo: 0, tarjeta: 0 }
+    const entry = map.get(fecha) || { efectivo: 0, mercadopago: 0 }
     const monto = cita.precio_cobrado || 0
-    if (cita.metodo_pago === 'tarjeta') {
-      entry.tarjeta += monto
-    } else {
+    if (cita.metodo_pago === 'efectivo') {
       entry.efectivo += monto
+    } else {
+      // mercadopago + transferencia van juntos
+      entry.mercadopago += monto
     }
     map.set(fecha, entry)
   }
@@ -128,8 +129,8 @@ export function calcularIngresosPorDia(citas: CitaConRelaciones[]): IngresosPorD
   return Array.from(map.entries()).map(([fecha, vals]) => ({
     fecha,
     efectivo: vals.efectivo,
-    tarjeta: vals.tarjeta,
-    total: vals.efectivo + vals.tarjeta,
+    mercadopago: vals.mercadopago,
+    total: vals.efectivo + vals.mercadopago,
   }))
 }
 
@@ -177,22 +178,23 @@ export function calcularResumen(citas: CitaConRelaciones[]): Resumen {
   let completadas = 0
   let noAsistio = 0
   let efectivo = 0
-  let tarjeta = 0
+  let mercadopago = 0
 
   for (const cita of citas) {
     if (cita.status === 'completada') {
       completadas += 1
       const monto = cita.precio_cobrado || 0
-      if (cita.metodo_pago === 'tarjeta') {
-        tarjeta += monto
-      } else {
+      if (cita.metodo_pago === 'efectivo') {
         efectivo += monto
+      } else {
+        // mercadopago + transferencia van juntos
+        mercadopago += monto
       }
     }
     if (cita.status === 'no_asistio') noAsistio += 1
   }
 
-  const ingresos = efectivo + tarjeta
+  const ingresos = efectivo + mercadopago
   const ticketPromedio = completadas > 0 ? ingresos / completadas : 0
 
   return {
@@ -201,7 +203,7 @@ export function calcularResumen(citas: CitaConRelaciones[]): Resumen {
     noAsistio,
     ingresos,
     efectivo,
-    tarjeta,
+    mercadopago,
     ticketPromedio,
   }
 }

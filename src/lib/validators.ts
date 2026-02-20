@@ -17,7 +17,7 @@ export const servicioSchema = z.object({
   descripcion: z.string().optional(),
   duracion_minutos: z.number().min(5, 'Mínimo 5 minutos'),
   precio_efectivo: z.number().min(0, 'Precio inválido'),
-  precio_tarjeta: z.number().min(0, 'Precio inválido'),
+  precio_mercadopago: z.number().min(0, 'Precio inválido'),
 })
 
 export const profesionalSchema = z.object({
@@ -32,7 +32,7 @@ export const citaSchema = z.object({
   profesional_id: z.string().uuid('Seleccioná un profesional'),
   servicio_id: z.string().uuid('Seleccioná un servicio'),
   fecha_inicio: z.string().min(1, 'Fecha requerida'),
-  metodo_pago: z.enum(['efectivo', 'tarjeta']),
+  metodo_pago: z.enum(['efectivo', 'mercadopago', 'transferencia']),
   notas: z.string().optional(),
 })
 
@@ -42,9 +42,16 @@ export const horarioSchema = z.object({
   hora_fin: z.string().regex(/^\d{2}:\d{2}$/, 'Formato HH:MM'),
 })
 
+export const movimientoCajaSchema = z.object({
+  monto: z.number().refine((v) => v !== 0, 'El monto no puede ser 0'),
+  tipo: z.enum(['efectivo', 'mercadopago']),
+  descripcion: z.string().min(2, 'Descripción requerida'),
+})
+
 export type LoginInput = z.infer<typeof loginSchema>
 export type ClienteInput = z.infer<typeof clienteSchema>
 export type ServicioInput = z.infer<typeof servicioSchema>
 export type ProfesionalInput = z.infer<typeof profesionalSchema>
 export type CitaInput = z.infer<typeof citaSchema>
 export type HorarioInput = z.infer<typeof horarioSchema>
+export type MovimientoCajaInput = z.infer<typeof movimientoCajaSchema>

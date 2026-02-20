@@ -13,7 +13,7 @@ export interface Profesional {
   updated_at: string
 }
 
-export type MetodoPago = 'efectivo' | 'tarjeta'
+export type MetodoPago = 'efectivo' | 'mercadopago' | 'transferencia'
 
 export interface Servicio {
   id: string
@@ -21,7 +21,7 @@ export interface Servicio {
   descripcion: string | null
   duracion_minutos: number
   precio_efectivo: number
-  precio_tarjeta: number
+  precio_mercadopago: number
   activo: boolean
   created_at: string
   updated_at: string
@@ -80,6 +80,16 @@ export interface Recordatorio {
   status: ReminderStatus
   enviado_at: string | null
   error_mensaje: string | null
+  created_at: string
+}
+
+export interface MovimientoCaja {
+  id: string
+  fecha: string
+  monto: number
+  tipo: 'efectivo' | 'mercadopago'
+  descripcion: string
+  user_id: string | null
   created_at: string
 }
 

@@ -7,7 +7,7 @@ import type { Servicio, Profesional } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Clock, Banknote, CreditCard } from 'lucide-react'
+import { Clock, Banknote, Smartphone } from 'lucide-react'
 
 export default function ReservarPage() {
   const router = useRouter()
@@ -68,8 +68,8 @@ export default function ReservarPage() {
                     {formatPrecio(s.precio_efectivo)}
                   </span>
                   <span className="flex items-center gap-1">
-                    <CreditCard className="h-3 w-3" />
-                    {formatPrecio(s.precio_tarjeta)}
+                    <Smartphone className="h-3 w-3" />
+                    {formatPrecio(s.precio_mercadopago)}
                   </span>
                 </div>
               </CardContent>

@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Plus, Pencil, Banknote, CreditCard } from 'lucide-react'
+import { Plus, Pencil, Banknote, Smartphone } from 'lucide-react'
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([])
@@ -45,7 +45,7 @@ export default function ServiciosPage() {
 
   function openNew() {
     setEditingId(null)
-    reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_tarjeta: 0 })
+    reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_mercadopago: 0 })
     setDialogOpen(true)
   }
 
@@ -56,7 +56,7 @@ export default function ServiciosPage() {
       descripcion: servicio.descripcion || '',
       duracion_minutos: servicio.duracion_minutos,
       precio_efectivo: servicio.precio_efectivo,
-      precio_tarjeta: servicio.precio_tarjeta,
+      precio_mercadopago: servicio.precio_mercadopago,
     })
     setDialogOpen(true)
   }
@@ -116,7 +116,7 @@ export default function ServiciosPage() {
                 <TableHead>Nombre</TableHead>
                 <TableHead>Duración</TableHead>
                 <TableHead>Efectivo</TableHead>
-                <TableHead>Tarjeta</TableHead>
+                <TableHead>Mercadopago</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -148,8 +148,8 @@ export default function ServiciosPage() {
                   </TableCell>
                   <TableCell>
                     <span className="flex items-center gap-1">
-                      <CreditCard className="h-3 w-3 text-blue-600" />
-                      {formatPrecio(s.precio_tarjeta)}
+                      <Smartphone className="h-3 w-3 text-blue-600" />
+                      {formatPrecio(s.precio_mercadopago)}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -206,11 +206,11 @@ export default function ServiciosPage() {
               </div>
               <div className="space-y-2">
                 <Label className="flex items-center gap-1">
-                  <CreditCard className="h-3.5 w-3.5 text-blue-600" />
-                  Precio tarjeta
+                  <Smartphone className="h-3.5 w-3.5 text-blue-600" />
+                  Precio Mercadopago
                 </Label>
-                <Input type="number" step="0.01" {...register('precio_tarjeta', { valueAsNumber: true })} />
-                {errors.precio_tarjeta && <p className="text-sm text-destructive">{errors.precio_tarjeta.message}</p>}
+                <Input type="number" step="0.01" {...register('precio_mercadopago', { valueAsNumber: true })} />
+                {errors.precio_mercadopago && <p className="text-sm text-destructive">{errors.precio_mercadopago.message}</p>}
               </div>
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
