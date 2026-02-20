@@ -79,41 +79,41 @@ export default function ClienteDetailPage() {
   if (!cliente) return <div className="flex items-center justify-center py-12 text-muted-foreground">Cargando...</div>
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-bold">{cliente.nombre}</h1>
+        <h1 className="text-xl sm:text-2xl font-bold truncate">{cliente.nombre}</h1>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
         {/* Client info */}
         <Card>
-          <CardHeader>
-            <CardTitle>Datos del cliente</CardTitle>
+          <CardHeader className="pb-3 sm:pb-6">
+            <CardTitle className="text-base sm:text-lg">Datos del cliente</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
+              <div className="space-y-1.5">
                 <Label>Nombre</Label>
                 <Input {...register('nombre')} />
                 {errors.nombre && <p className="text-sm text-destructive">{errors.nombre.message}</p>}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Teléfono</Label>
-                <Input {...register('telefono')} />
+                <Input {...register('telefono')} type="tel" />
                 {errors.telefono && <p className="text-sm text-destructive">{errors.telefono.message}</p>}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Email</Label>
                 <Input type="email" {...register('email')} />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Notas</Label>
                 <Textarea {...register('notas')} placeholder="Alergias, preferencias, etc." />
               </div>
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading} className="w-full sm:w-auto">
                 {loading ? 'Guardando...' : 'Guardar cambios'}
               </Button>
             </form>
@@ -122,26 +122,26 @@ export default function ClienteDetailPage() {
 
         {/* Service history */}
         <Card>
-          <CardHeader>
-            <CardTitle>Historial de servicios</CardTitle>
+          <CardHeader className="pb-3 sm:pb-6">
+            <CardTitle className="text-base sm:text-lg">Historial de servicios</CardTitle>
           </CardHeader>
           <CardContent>
             {citas.length === 0 ? (
               <p className="text-center text-muted-foreground py-4">Sin historial de citas</p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {citas.map((cita) => (
-                  <div key={cita.id} className="flex items-start justify-between rounded-lg border p-3">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{cita.servicios?.nombre || 'Servicio eliminado'}</p>
+                  <div key={cita.id} className="flex items-start justify-between gap-2 rounded-lg border p-2.5 sm:p-3">
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="text-sm font-medium truncate">{cita.servicios?.nombre || 'Servicio eliminado'}</p>
                       <p className="text-xs text-muted-foreground">
-                        Con {cita.profesionales?.nombre || 'N/A'} - {formatFechaHora(cita.fecha_inicio)}
+                        {cita.profesionales?.nombre || 'N/A'} · {formatFechaHora(cita.fecha_inicio)}
                       </p>
                       {cita.precio_cobrado && (
-                        <p className="text-xs text-muted-foreground">{formatPrecio(cita.precio_cobrado)}</p>
+                        <p className="text-xs font-medium">{formatPrecio(cita.precio_cobrado)}</p>
                       )}
                     </div>
-                    <Badge className={STATUS_COLORS[cita.status]}>{STATUS_LABELS[cita.status]}</Badge>
+                    <Badge className={`shrink-0 text-[10px] sm:text-xs ${STATUS_COLORS[cita.status]}`}>{STATUS_LABELS[cita.status]}</Badge>
                   </div>
                 ))}
               </div>

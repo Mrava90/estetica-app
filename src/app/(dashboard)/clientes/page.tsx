@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Search, Eye } from 'lucide-react'
+import { Search, Eye, ChevronRight, Phone } from 'lucide-react'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -38,17 +38,46 @@ export default function ClientesPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Clientes</h1>
 
-      <div className="relative max-w-sm">
+      <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Buscar por nombre o teléfono..."
-          className="pl-10"
+          className="pl-10 sm:max-w-sm"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </div>
 
-      <Card>
+      {/* Mobile: cards */}
+      <div className="flex flex-col gap-2 md:hidden">
+        {clientes.length === 0 && (
+          <p className="text-center text-muted-foreground py-8">
+            {search ? 'No se encontraron clientes' : 'No hay clientes registrados'}
+          </p>
+        )}
+        {clientes.map((c) => (
+          <Link key={c.id} href={`/clientes/${c.id}`}>
+            <Card className="active:bg-muted/50 transition-colors">
+              <CardContent className="flex items-center justify-between p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{c.nombre}</p>
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Phone className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{c.telefono}</span>
+                  </div>
+                  {c.notas && (
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{c.notas}</p>
+                  )}
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
+              </CardContent>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      {/* Desktop: table */}
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
