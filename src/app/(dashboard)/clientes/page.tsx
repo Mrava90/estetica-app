@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Search, Eye, ChevronRight, Phone } from 'lucide-react'
+import { Search, Eye, ChevronRight, Phone, X } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -34,6 +35,17 @@ export default function ClientesPage() {
     return () => clearTimeout(timer)
   }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  async function handleDelete(id: string, nombre: string) {
+    if (!confirm(`¿Eliminar a "${nombre}"? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('clientes').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar: ' + error.message)
+    } else {
+      toast.success(`"${nombre}" eliminado`)
+      setClientes((prev) => prev.filter((c) => c.id !== id))
+    }
+  }
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Clientes</h1>
@@ -56,23 +68,34 @@ export default function ClientesPage() {
           </p>
         )}
         {clientes.map((c) => (
-          <Link key={c.id} href={`/clientes/${c.id}`}>
-            <Card className="active:bg-muted/50 transition-colors">
-              <CardContent className="flex items-center justify-between p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{c.nombre}</p>
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Phone className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{c.telefono}</span>
-                  </div>
-                  {c.notas && (
-                    <p className="text-xs text-muted-foreground truncate mt-0.5">{c.notas}</p>
-                  )}
+          <Card key={c.id} className="transition-colors">
+            <CardContent className="flex items-center justify-between p-4">
+              <Link href={`/clientes/${c.id}`} className="min-w-0 flex-1">
+                <p className="font-medium truncate">{c.nombre}</p>
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Phone className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{c.telefono}</span>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-              </CardContent>
-            </Card>
-          </Link>
+                {c.notas && (
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">{c.notas}</p>
+                )}
+              </Link>
+              <div className="flex items-center gap-1 shrink-0 ml-2">
+                <Button variant="ghost" size="icon" asChild>
+                  <Link href={`/clientes/${c.id}`}>
+                    <Eye className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDelete(c.id, c.nombre)}
+                >
+                  <X className="h-4 w-4 text-red-500" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
@@ -108,6 +131,13 @@ export default function ClientesPage() {
                       <Link href={`/clientes/${c.id}`}>
                         <Eye className="h-4 w-4" />
                       </Link>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(c.id, c.nombre)}
+                    >
+                      <X className="h-4 w-4 text-red-500" />
                     </Button>
                   </TableCell>
                 </TableRow>
