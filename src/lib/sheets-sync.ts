@@ -42,7 +42,7 @@ async function fetchSheetData(spreadsheetId: string, sheetName: string): Promise
   const client = await auth.getClient()
   const token = await client.getAccessToken()
 
-  const range = encodeURIComponent(`${sheetName}!A:O`)
+  const range = encodeURIComponent(`'${sheetName}'!A:O`)
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`
 
   const res = await fetch(url, {
@@ -63,12 +63,21 @@ function parseSheetDate(dateStr: string): string | null {
   if (!dateStr || !dateStr.trim()) return null
   const trimmed = dateStr.trim()
 
-  // Try DD/MM/YYYY or D/M/YYYY
   const parts = trimmed.split('/')
-  if (parts.length === 3) {
+  if (parts.length === 2 || parts.length === 3) {
     const day = parseInt(parts[0], 10)
     const month = parseInt(parts[1], 10)
-    const year = parseInt(parts[2], 10)
+    let year: number
+
+    if (parts.length === 3) {
+      year = parseInt(parts[2], 10)
+      // Handle 2-digit year (e.g., "26" → 2026)
+      if (year < 100) year += 2000
+    } else {
+      // D/M format without year — assume current year
+      year = new Date().getFullYear()
+    }
+
     if (day > 0 && day <= 31 && month > 0 && month <= 12 && year >= 2024) {
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     }
