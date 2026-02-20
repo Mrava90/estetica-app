@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound } from 'lucide-react'
 
 const ADMIN_EMAIL = 'ravamartin@gmail.com'
 
@@ -34,6 +34,11 @@ export default function ConfiguracionPage() {
   const [newPassword, setNewPassword] = useState('')
   const [creatingUser, setCreatingUser] = useState(false)
   const [showNewUser, setShowNewUser] = useState(false)
+  const [changePasswordId, setChangePasswordId] = useState<string | null>(null)
+  const [changePasswordValue, setChangePasswordValue] = useState('')
+  const [myPassword, setMyPassword] = useState('')
+  const [myPasswordConfirm, setMyPasswordConfirm] = useState('')
+  const [changingMyPassword, setChangingMyPassword] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -124,6 +129,50 @@ export default function ConfiguracionPage() {
       toast.error(err instanceof Error ? err.message : 'Error al crear usuario')
     } finally {
       setCreatingUser(false)
+    }
+  }
+
+  async function handleChangeMyPassword() {
+    if (!myPassword || myPassword.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    if (myPassword !== myPasswordConfirm) {
+      toast.error('Las contraseñas no coinciden')
+      return
+    }
+    setChangingMyPassword(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: myPassword })
+      if (error) throw error
+      toast.success('Contraseña actualizada')
+      setMyPassword('')
+      setMyPasswordConfirm('')
+    } catch {
+      toast.error('Error al cambiar la contraseña')
+    } finally {
+      setChangingMyPassword(false)
+    }
+  }
+
+  async function handleChangeUserPassword(userId: string) {
+    if (!changePasswordValue || changePasswordValue.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, password: changePasswordValue }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success('Contraseña actualizada')
+      setChangePasswordId(null)
+      setChangePasswordValue('')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cambiar contraseña')
     }
   }
 
@@ -252,6 +301,41 @@ export default function ConfiguracionPage() {
         {loading ? 'Guardando...' : 'Guardar configuración'}
       </Button>
 
+      {/* Change own password */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5" />
+            Cambiar mi contraseña
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Nueva contraseña</Label>
+              <Input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={myPassword}
+                onChange={(e) => setMyPassword(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirmar contraseña</Label>
+              <Input
+                type="password"
+                placeholder="Repetí la contraseña"
+                value={myPasswordConfirm}
+                onChange={(e) => setMyPasswordConfirm(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button size="sm" onClick={handleChangeMyPassword} disabled={changingMyPassword}>
+            {changingMyPassword ? 'Cambiando...' : 'Cambiar contraseña'}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* User management - admin only */}
       {isAdmin && (
         <>
@@ -333,15 +417,39 @@ export default function ConfiguracionPage() {
                         {u.last_sign_in_at ? formatFechaCorta(u.last_sign_in_at) : 'Nunca'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {u.email !== ADMIN_EMAIL && (
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteUser(u.id, u.email || '')}
+                            title="Cambiar contraseña"
+                            onClick={() => { setChangePasswordId(changePasswordId === u.id ? null : u.id); setChangePasswordValue('') }}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <KeyRound className="h-4 w-4" />
                           </Button>
+                          {u.email !== ADMIN_EMAIL && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleDeleteUser(u.id, u.email || '')}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                        {changePasswordId === u.id && (
+                          <div className="mt-2 flex gap-2">
+                            <Input
+                              type="text"
+                              placeholder="Nueva contraseña"
+                              value={changePasswordValue}
+                              onChange={(e) => setChangePasswordValue(e.target.value)}
+                              className="h-8 text-sm"
+                            />
+                            <Button size="sm" className="h-8 shrink-0" onClick={() => handleChangeUserPassword(u.id)}>
+                              Guardar
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
