@@ -99,7 +99,14 @@ function parseAmount(raw: string): number {
   if (cleaned.includes('.') && cleaned.includes(',')) {
     cleaned = cleaned.replace(/\./g, '').replace(',', '.')
   } else if (cleaned.includes(',') && !cleaned.includes('.')) {
-    cleaned = cleaned.replace(',', '.')
+    // "30,000" (3 digits after comma) = thousands separator → 30000
+    // "30,50" (1-2 digits after comma) = decimal separator → 30.50
+    const afterComma = cleaned.split(',')[1]
+    if (afterComma && afterComma.length === 3) {
+      cleaned = cleaned.replace(',', '')
+    } else {
+      cleaned = cleaned.replace(',', '.')
+    }
   }
 
   const num = parseFloat(cleaned)
