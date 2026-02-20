@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,27 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+
+    // Listen for PASSWORD_RECOVERY event (handles hash fragment flow)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setReady(true)
+      }
+    })
+
+    // Also check if we already have a session (from server-side code exchange)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setReady(true)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   async function handleUpdatePassword() {
     if (password.length < 6) {
@@ -59,6 +80,25 @@ export default function ResetPasswordPage() {
             Tu contraseña fue cambiada exitosamente. Redirigiendo...
           </CardDescription>
         </CardHeader>
+      </Card>
+    )
+  }
+
+  if (!ready) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Scissors className="h-6 w-6" />
+          </div>
+          <CardTitle className="text-2xl">Verificando...</CardTitle>
+          <CardDescription>Estamos verificando tu enlace de recuperación</CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <Button variant="link" onClick={() => router.push('/login')}>
+            Volver al login
+          </Button>
+        </CardContent>
       </Card>
     )
   }
