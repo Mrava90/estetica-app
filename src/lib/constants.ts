@@ -7,13 +7,17 @@ import {
   Settings,
   BarChart3,
   Wallet,
+  Calculator,
   type LucideIcon,
 } from 'lucide-react'
+
+export const ADMIN_EMAIL = 'ravamartin@gmail.com'
 
 export interface NavItem {
   label: string
   href: string
   icon: LucideIcon
+  adminOnly?: boolean
 }
 
 export const NAV_ITEMS: NavItem[] = [
@@ -24,6 +28,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Equipo', href: '/equipo', icon: UserCircle },
   { label: 'Caja Diaria', href: '/caja', icon: Wallet },
   { label: 'Informes', href: '/informes', icon: BarChart3 },
+  { label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true },
   { label: 'Configuración', href: '/configuracion', icon: Settings },
 ]
 

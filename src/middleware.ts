@@ -49,6 +49,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Admin-only routes
+  if (pathname.startsWith('/contabilidad') && user.email !== 'ravamartin@gmail.com') {
+    const url = request.nextUrl.clone()
+    url.pathname = '/dashboard'
+    return NextResponse.redirect(url)
+  }
+
   return response
 }
 

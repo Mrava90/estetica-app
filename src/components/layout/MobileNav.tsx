@@ -1,13 +1,26 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { NAV_ITEMS } from '@/lib/constants'
+import { NAV_ITEMS, ADMIN_EMAIL } from '@/lib/constants'
 import { Scissors } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 export function MobileNav() {
   const pathname = usePathname()
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+
+  useEffect(() => {
+    createClient().auth.getUser().then(({ data }) => {
+      setUserEmail(data.user?.email ?? null)
+    })
+  }, [])
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.adminOnly || userEmail === ADMIN_EMAIL
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -16,7 +29,7 @@ export function MobileNav() {
         <span className="text-lg font-semibold">Estética SR</span>
       </div>
       <nav className="flex-1 space-y-1 p-4">
-        {NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const isActive = pathname.startsWith(item.href)
           return (
             <Link
