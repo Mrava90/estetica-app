@@ -3,27 +3,63 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Configuracion } from '@/types/database'
+import { formatFechaCorta } from '@/lib/dates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Separator } from '@/components/ui/separator'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Copy, Check } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield } from 'lucide-react'
+
+const ADMIN_EMAIL = 'ravamartin@gmail.com'
+
+interface AppUser {
+  id: string
+  email: string
+  created_at: string
+  last_sign_in_at: string | null
+}
 
 export default function ConfiguracionPage() {
   const [config, setConfig] = useState<Configuracion | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [users, setUsers] = useState<AppUser[]>([])
+  const [newEmail, setNewEmail] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [creatingUser, setCreatingUser] = useState(false)
+  const [showNewUser, setShowNewUser] = useState(false)
   const supabase = createClient()
 
   useEffect(() => {
     fetchConfig()
+    checkAdmin()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchConfig() {
     const { data } = await supabase.from('configuracion').select('*').single()
     if (data) setConfig(data)
+  }
+
+  async function checkAdmin() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user?.email === ADMIN_EMAIL) {
+      setIsAdmin(true)
+      fetchUsers()
+    }
+  }
+
+  async function fetchUsers() {
+    const res = await fetch('/api/users')
+    if (res.ok) {
+      const data = await res.json()
+      setUsers(data.users)
+    }
   }
 
   async function handleSave() {
@@ -59,6 +95,49 @@ export default function ConfiguracionPage() {
     setCopied(true)
     toast.success('Enlace copiado')
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function handleCreateUser() {
+    if (!newEmail || !newPassword) {
+      toast.error('Completá email y contraseña')
+      return
+    }
+    if (newPassword.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    setCreatingUser(true)
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail, password: newPassword }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success('Usuario creado')
+      setNewEmail('')
+      setNewPassword('')
+      setShowNewUser(false)
+      fetchUsers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al crear usuario')
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
+  async function handleDeleteUser(userId: string, email: string) {
+    if (!confirm(`¿Eliminar al usuario ${email}?`)) return
+    try {
+      const res = await fetch(`/api/users?id=${userId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success('Usuario eliminado')
+      fetchUsers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar')
+    }
   }
 
   if (!config) return <div className="flex items-center justify-center py-12 text-muted-foreground">Cargando...</div>
@@ -172,6 +251,107 @@ export default function ConfiguracionPage() {
       <Button onClick={handleSave} disabled={loading} size="lg">
         {loading ? 'Guardando...' : 'Guardar configuración'}
       </Button>
+
+      {/* User management - admin only */}
+      {isAdmin && (
+        <>
+          <Separator />
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Gestión de usuarios
+                  </CardTitle>
+                  <CardDescription>Solo visible para el administrador</CardDescription>
+                </div>
+                <Button size="sm" className="gap-2" onClick={() => setShowNewUser(!showNewUser)}>
+                  <Plus className="h-4 w-4" />
+                  Nuevo usuario
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {showNewUser && (
+                <div className="rounded-lg border p-4 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Email</Label>
+                      <Input
+                        type="email"
+                        placeholder="usuario@ejemplo.com"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Contraseña</Label>
+                      <Input
+                        type="text"
+                        placeholder="Mínimo 6 caracteres"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={handleCreateUser} disabled={creatingUser}>
+                      {creatingUser ? 'Creando...' : 'Crear usuario'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setShowNewUser(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Creado</TableHead>
+                    <TableHead>Último acceso</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {users.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {u.email}
+                          {u.email === ADMIN_EMAIL && (
+                            <Badge variant="secondary" className="text-[10px]">Admin</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatFechaCorta(u.created_at)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {u.last_sign_in_at ? formatFechaCorta(u.last_sign_in_at) : 'Nunca'}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {u.email !== ADMIN_EMAIL && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteUser(u.id, u.email || '')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   )
 }
