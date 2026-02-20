@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS, ADMIN_EMAIL } from '@/lib/constants'
 import { Scissors } from 'lucide-react'
-import { ThemeToggle } from '@/components/theme-toggle'
 import { createClient } from '@/lib/supabase/client'
 
 export function Sidebar() {
@@ -26,12 +25,11 @@ export function Sidebar() {
   return (
     <aside className="hidden w-64 flex-shrink-0 border-r bg-card lg:block">
       <div className="flex h-full flex-col">
-        <div className="flex h-16 items-center justify-between border-b px-6">
+        <div className="flex h-16 items-center border-b px-6">
           <div className="flex items-center gap-2">
             <Scissors className="h-6 w-6 text-primary" />
-            <span className="text-lg font-semibold">Estética SR</span>
+            <span className="text-lg font-semibold">Estetica SR</span>
           </div>
-          <ThemeToggle />
         </div>
         <nav className="flex-1 space-y-1 p-4">
           {visibleItems.map((item) => {
