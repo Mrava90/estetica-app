@@ -116,7 +116,7 @@ export default function ServiciosPage() {
                 <TableHead>Nombre</TableHead>
                 <TableHead>Duración</TableHead>
                 <TableHead>Efectivo</TableHead>
-                <TableHead>Mercadopago</TableHead>
+                <TableHead>P. Lista</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -207,7 +207,7 @@ export default function ServiciosPage() {
               <div className="space-y-2">
                 <Label className="flex items-center gap-1">
                   <Smartphone className="h-3.5 w-3.5 text-blue-600" />
-                  Precio Mercadopago
+                  Precio de Lista
                 </Label>
                 <Input type="number" step="0.01" {...register('precio_mercadopago', { valueAsNumber: true })} />
                 {errors.precio_mercadopago && <p className="text-sm text-destructive">{errors.precio_mercadopago.message}</p>}
