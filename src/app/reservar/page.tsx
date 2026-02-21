@@ -76,7 +76,11 @@ export default function ReservarPage() {
                   </span>
                   <span className="flex items-center gap-1 text-xs text-gray-500">
                     <Banknote className="h-3 w-3" />
-                    {formatPrecio(s.precio_efectivo)}
+                    Efectivo {formatPrecio(s.precio_efectivo)}
+                  </span>
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
+                    <Banknote className="h-3 w-3" />
+                    P. Lista {formatPrecio(s.precio_mercadopago)}
                   </span>
                 </div>
               </div>
