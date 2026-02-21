@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { format, addDays, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
-import type { CitaConRelaciones, Profesional } from '@/types/database'
+import type { CitaConRelaciones, Profesional, Horario } from '@/types/database'
 import { CalendarioResourceDayView } from './CalendarioResourceDayView'
 import { CitaDialog } from './CitaDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Clock, ChevronDown } from 'lucide-react'
+import { DIAS_SEMANA } from '@/lib/constants'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 
@@ -23,6 +24,8 @@ export function CalendarioView() {
   const [selectedDate, setSelectedDate] = useState<{ start: Date; end: Date } | null>(null)
   const [selectedProfesionalId, setSelectedProfesionalId] = useState<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [horariosOpen, setHorariosOpen] = useState(false)
+  const [horarios, setHorarios] = useState<Record<string, Horario[]>>({})
 
   const supabase = createClient()
 
@@ -41,6 +44,21 @@ export function CalendarioView() {
       setProfesionales(profRes.data)
       if (filtrosProfesional.length === 0) {
         setFiltrosProfesional(profRes.data.map((p) => p.id))
+      }
+      // Fetch horarios for all professionals
+      const { data: horariosData } = await supabase
+        .from('horarios')
+        .select('*')
+        .in('profesional_id', profRes.data.map((p) => p.id))
+        .eq('activo', true)
+        .order('dia_semana')
+      if (horariosData) {
+        const grouped: Record<string, Horario[]> = {}
+        for (const h of horariosData) {
+          if (!grouped[h.profesional_id]) grouped[h.profesional_id] = []
+          grouped[h.profesional_id].push(h)
+        }
+        setHorarios(grouped)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -91,7 +109,7 @@ export function CalendarioView() {
 
   return (
     <div className="space-y-3">
-      {/* Date navigation + filters */}
+      {/* Date navigation + availability + filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-1">
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setFecha(subDays(fecha, 1))}>
@@ -120,6 +138,16 @@ export function CalendarioView() {
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setFecha(addDays(fecha, 1))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
+          <Button
+            variant={horariosOpen ? 'default' : 'outline'}
+            size="sm"
+            className="ml-1 gap-1.5 text-xs"
+            onClick={() => setHorariosOpen(!horariosOpen)}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            Horarios
+            <ChevronDown className={`h-3 w-3 transition-transform ${horariosOpen ? 'rotate-180' : ''}`} />
+          </Button>
           {!isToday && (
             <Button variant="ghost" size="sm" className="ml-1 text-xs" onClick={() => setFecha(new Date())}>
               Hoy
@@ -133,6 +161,38 @@ export function CalendarioView() {
           onChange={setFiltrosProfesional}
         />
       </div>
+
+      {/* Availability panel */}
+      {horariosOpen && (
+        <div className="rounded-lg border bg-card p-3 animate-in slide-in-from-top-2 fade-in-0 duration-200">
+          <div className="flex flex-wrap gap-4">
+            {profesionales.map((prof) => {
+              const profHorarios = horarios[prof.id] || []
+              const diaSemana = fecha.getDay()
+              const horarioHoy = profHorarios.find((h) => h.dia_semana === diaSemana)
+
+              return (
+                <div key={prof.id} className="flex items-center gap-2 min-w-[140px]">
+                  <div
+                    className="h-3 w-3 rounded-full shrink-0"
+                    style={{ backgroundColor: prof.color }}
+                  />
+                  <div className="text-sm">
+                    <span className="font-medium">{prof.nombre}</span>
+                    {horarioHoy ? (
+                      <span className="ml-1.5 text-muted-foreground">
+                        {horarioHoy.hora_inicio.slice(0, 5)} - {horarioHoy.hora_fin.slice(0, 5)}
+                      </span>
+                    ) : (
+                      <span className="ml-1.5 text-muted-foreground/60 italic">Libre</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Resource day view */}
       {filteredProfesionales.length > 0 ? (
