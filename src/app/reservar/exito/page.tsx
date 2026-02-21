@@ -4,8 +4,6 @@ import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { formatFechaHora } from '@/lib/dates'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { CheckCircle } from 'lucide-react'
 
 function ExitoContent() {
@@ -19,36 +17,37 @@ function ExitoContent() {
       </div>
 
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold">¡Turno confirmado!</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-bold text-gray-900">¡Turno confirmado!</h1>
+        <p className="text-gray-500">
           Tu turno ha sido reservado exitosamente
         </p>
       </div>
 
       {fecha && (
-        <Card>
-          <CardContent className="p-6 text-center">
-            <p className="text-sm text-muted-foreground">Fecha del turno</p>
-            <p className="text-lg font-semibold">{formatFechaHora(fecha)}</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <p className="text-sm text-gray-500">Fecha del turno</p>
+          <p className="text-lg font-semibold text-gray-900 mt-1">{formatFechaHora(fecha)}</p>
+        </div>
       )}
 
-      <p className="text-sm text-muted-foreground text-center max-w-sm">
+      <p className="text-sm text-gray-500 text-center max-w-sm">
         Te enviaremos un recordatorio por WhatsApp antes de tu cita.
         Si necesitás cancelar o cambiar el turno, contactanos.
       </p>
 
-      <Button asChild>
-        <Link href="/reservar">Reservar otro turno</Link>
-      </Button>
+      <Link
+        href="/reservar"
+        className="rounded-xl bg-[#1C1C2E] px-8 py-3 text-sm font-semibold text-white transition-all hover:bg-[#2a2a42] shadow-lg"
+      >
+        Reservar otro turno
+      </Link>
     </div>
   )
 }
 
 export default function ExitoPage() {
   return (
-    <Suspense fallback={<div className="text-center text-muted-foreground py-12">Cargando...</div>}>
+    <Suspense fallback={<div className="text-center text-gray-400 py-12">Cargando...</div>}>
       <ExitoContent />
     </Suspense>
   )

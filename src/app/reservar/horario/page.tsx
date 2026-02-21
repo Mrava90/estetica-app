@@ -7,8 +7,7 @@ import { calcularSlotsDisponibles, type SlotDisponible } from '@/lib/disponibili
 import { formatHora } from '@/lib/dates'
 import type { Servicio, Profesional } from '@/types/database'
 import { addDays, startOfDay, format } from 'date-fns'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { es } from 'date-fns/locale'
 import { ArrowLeft } from 'lucide-react'
 
 function HorarioContent() {
@@ -112,88 +111,102 @@ function HorarioContent() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" size="sm" onClick={() => router.back()} className="gap-1">
+      <button
+        onClick={() => router.back()}
+        className="flex items-center gap-1 text-sm text-gray-500 hover:text-fuchsia-600 transition-colors"
+      >
         <ArrowLeft className="h-4 w-4" />
         Volver
-      </Button>
+      </button>
 
       <div>
-        <h1 className="text-2xl font-bold">Elegí fecha y horario</h1>
-        {servicio && <p className="text-muted-foreground">{servicio.nombre} - {servicio.duracion_minutos} min</p>}
+        <h1 className="text-2xl font-bold text-gray-900">Elegí fecha y horario</h1>
+        {servicio && (
+          <p className="text-sm text-gray-500 mt-1">{servicio.nombre} - {servicio.duracion_minutos} min</p>
+        )}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {dates.map((date) => (
-          <button
-            key={date.toISOString()}
-            onClick={() => {
-              setSelectedDate(date)
-              setSelectedSlot(null)
-            }}
-            className={`flex flex-col items-center rounded-lg border px-4 py-2 text-sm transition-colors shrink-0 ${
-              selectedDate.toDateString() === date.toDateString()
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'hover:bg-muted'
-            }`}
-          >
-            <span className="text-xs uppercase">
-              {format(date, 'EEE')}
-            </span>
-            <span className="text-lg font-bold">{format(date, 'd')}</span>
-            <span className="text-xs">{format(date, 'MMM')}</span>
-          </button>
-        ))}
+      {/* Date selector */}
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+        {dates.map((date) => {
+          const isSelected = selectedDate.toDateString() === date.toDateString()
+          return (
+            <button
+              key={date.toISOString()}
+              onClick={() => {
+                setSelectedDate(date)
+                setSelectedSlot(null)
+              }}
+              className={`flex flex-col items-center rounded-xl border px-4 py-2.5 text-sm transition-all shrink-0 ${
+                isSelected
+                  ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-fuchsia-300'
+              }`}
+            >
+              <span className="text-xs uppercase font-medium">
+                {format(date, 'EEE', { locale: es })}
+              </span>
+              <span className="text-lg font-bold">{format(date, 'd')}</span>
+              <span className="text-xs">{format(date, 'MMM', { locale: es })}</span>
+            </button>
+          )
+        })}
       </div>
 
+      {/* Time slots per professional */}
       <div className="space-y-4">
         {Object.keys(slots).length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">No hay horarios disponibles para este día</p>
+          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+            <p className="text-gray-500">No hay horarios disponibles para este día</p>
+          </div>
         ) : (
           profesionales
             .filter((p) => slots[p.id])
             .map((prof) => (
-              <Card key={prof.id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="h-6 w-6 rounded-full" style={{ backgroundColor: prof.color }} />
-                    <h3 className="font-medium">{prof.nombre}</h3>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {slots[prof.id]?.map((slot, i) => (
+              <div key={prof.id} className="rounded-xl border border-gray-200 bg-white p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-6 w-6 rounded-full" style={{ backgroundColor: prof.color }} />
+                  <h3 className="font-semibold text-gray-900">{prof.nombre}</h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {slots[prof.id]?.map((slot, i) => {
+                    const isSelected =
+                      selectedSlot?.profId === prof.id &&
+                      selectedSlot?.slot.inicio.getTime() === slot.inicio.getTime()
+                    return (
                       <button
                         key={i}
                         onClick={() => handleSelectSlot(prof.id, slot)}
-                        className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
-                          selectedSlot?.profId === prof.id && selectedSlot?.slot.inicio.getTime() === slot.inicio.getTime()
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'hover:bg-muted'
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
+                          isSelected
+                            ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
+                            : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-fuchsia-300'
                         }`}
                       >
                         {formatHora(slot.inicio)}
                       </button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                    )
+                  })}
+                </div>
+              </div>
             ))
         )}
       </div>
 
-      <Button
+      <button
         onClick={handleContinue}
         disabled={!selectedSlot}
-        size="lg"
-        className="w-full"
+        className="w-full rounded-xl bg-[#1C1C2E] py-4 text-center text-base font-semibold text-white transition-all hover:bg-[#2a2a42] disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
       >
         Continuar
-      </Button>
+      </button>
     </div>
   )
 }
 
 export default function HorarioPage() {
   return (
-    <Suspense fallback={<div className="text-center text-muted-foreground py-12">Cargando...</div>}>
+    <Suspense fallback={<div className="text-center text-gray-400 py-12">Cargando...</div>}>
       <HorarioContent />
     </Suspense>
   )

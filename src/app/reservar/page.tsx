@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Servicio, Profesional } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Clock, Banknote, Smartphone } from 'lucide-react'
+import { NailIcon } from '@/components/reservar/ReservarHeader'
+import { Clock, Banknote, Smartphone, ChevronRight } from 'lucide-react'
 
 export default function ReservarPage() {
   const router = useRouter()
@@ -38,87 +37,101 @@ export default function ReservarPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Reservar turno</h1>
-        <p className="text-muted-foreground">Elegí el servicio y profesional</p>
+      {/* Title */}
+      <div className="text-center">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-fuchsia-100 mb-3">
+          <NailIcon className="h-6 w-6 text-fuchsia-600" />
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900">Elegir servicio</h1>
+        <p className="text-sm text-gray-500 mt-1">Seleccioná el servicio que querés</p>
       </div>
 
-      {/* Service selection */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Servicio</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {servicios.map((s) => (
-            <Card
-              key={s.id}
-              className={`cursor-pointer transition-all ${
-                selectedServicio === s.id ? 'ring-2 ring-primary' : 'hover:shadow-md'
-              }`}
-              onClick={() => setSelectedServicio(s.id)}
-            >
-              <CardContent className="p-4">
-                <h3 className="font-medium">{s.nombre}</h3>
-                {s.descripcion && <p className="text-sm text-muted-foreground mt-1">{s.descripcion}</p>}
-                <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
+      {/* Service list */}
+      <div className="space-y-2">
+        {servicios.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => setSelectedServicio(s.id)}
+            className={`w-full rounded-xl border bg-white p-4 text-left transition-all ${
+              selectedServicio === s.id
+                ? 'border-fuchsia-500 ring-2 ring-fuchsia-500/20 shadow-md'
+                : 'border-gray-200 hover:border-fuchsia-300 hover:shadow-sm'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                selectedServicio === s.id ? 'bg-fuchsia-500 text-white' : 'bg-fuchsia-100 text-fuchsia-600'
+              }`}>
+                <NailIcon className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-gray-900 truncate">{s.nombre}</h3>
+                {s.descripcion && (
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{s.descripcion}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-3 mt-1.5">
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
                     <Clock className="h-3 w-3" />
                     {s.duracion_minutos} min
                   </span>
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 text-xs text-gray-500">
                     <Banknote className="h-3 w-3" />
                     {formatPrecio(s.precio_efectivo)}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <Smartphone className="h-3 w-3" />
-                    {formatPrecio(s.precio_mercadopago)}
-                  </span>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              </div>
+              <ChevronRight className={`h-5 w-5 shrink-0 ${
+                selectedServicio === s.id ? 'text-fuchsia-500' : 'text-gray-300'
+              }`} />
+            </div>
+          </button>
+        ))}
       </div>
 
       {/* Professional selection */}
       {selectedServicio && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Profesional (opcional)</h2>
-          <div className="flex flex-wrap gap-3">
-            <Card
-              className={`cursor-pointer transition-all ${
-                !selectedProfesional ? 'ring-2 ring-primary' : 'hover:shadow-md'
-              }`}
+        <div className="space-y-3 animate-in slide-in-from-bottom-2 fade-in-0 duration-300">
+          <h2 className="text-lg font-semibold text-gray-900">Profesional (opcional)</h2>
+          <div className="flex flex-wrap gap-2">
+            <button
               onClick={() => setSelectedProfesional(null)}
+              className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                !selectedProfesional
+                  ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
+                  : 'border-gray-200 bg-white text-gray-700 hover:border-fuchsia-300'
+              }`}
             >
-              <CardContent className="p-4">
-                <p className="font-medium">Sin preferencia</p>
-              </CardContent>
-            </Card>
+              Sin preferencia
+            </button>
             {profesionales.map((p) => (
-              <Card
+              <button
                 key={p.id}
-                className={`cursor-pointer transition-all ${
-                  selectedProfesional === p.id ? 'ring-2 ring-primary' : 'hover:shadow-md'
-                }`}
                 onClick={() => setSelectedProfesional(p.id)}
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                  selectedProfesional === p.id
+                    ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-fuchsia-300'
+                }`}
               >
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full" style={{ backgroundColor: p.color }} />
-                  <p className="font-medium">{p.nombre}</p>
-                </CardContent>
-              </Card>
+                <div
+                  className="h-4 w-4 rounded-full border border-white/50"
+                  style={{ backgroundColor: p.color }}
+                />
+                {p.nombre}
+              </button>
             ))}
           </div>
         </div>
       )}
 
-      <Button
+      {/* Continue button */}
+      <button
         onClick={handleContinue}
         disabled={!selectedServicio}
-        size="lg"
-        className="w-full"
+        className="w-full rounded-xl bg-[#1C1C2E] py-4 text-center text-base font-semibold text-white transition-all hover:bg-[#2a2a42] disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
       >
         Continuar
-      </Button>
+      </button>
     </div>
   )
 }
