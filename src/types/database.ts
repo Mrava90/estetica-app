@@ -95,6 +95,15 @@ export interface MovimientoCaja {
   created_at: string
 }
 
+export interface Bloqueo {
+  id: string
+  profesional_id: string
+  fecha_inicio: string
+  fecha_fin: string
+  motivo: string
+  created_at: string
+}
+
 export interface Configuracion {
   id: number
   nombre_salon: string

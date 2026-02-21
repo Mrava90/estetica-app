@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useEffect, useRef } from 'react'
-import type { CitaConRelaciones, Profesional } from '@/types/database'
+import type { CitaConRelaciones, Profesional, Bloqueo } from '@/types/database'
 import { STATUS_COLORS } from '@/lib/constants'
 
 const HORA_INICIO = 8
@@ -13,16 +13,20 @@ interface Props {
   fecha: Date
   citas: CitaConRelaciones[]
   profesionales: Profesional[]
+  bloqueos?: Bloqueo[]
   onSlotClick: (profesionalId: string, start: Date, end: Date) => void
   onCitaClick: (cita: CitaConRelaciones) => void
+  onBloqueoClick?: (bloqueo: Bloqueo) => void
 }
 
 export function CalendarioResourceDayView({
   fecha,
   citas,
   profesionales,
+  bloqueos = [],
   onSlotClick,
   onCitaClick,
+  onBloqueoClick,
 }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
   const nowRef = useRef<HTMLDivElement>(null)
@@ -52,6 +56,24 @@ export function CalendarioResourceDayView({
     })
     return map
   }, [citas, profesionales, fecha])
+
+  const bloqueosPorProfesional = useMemo(() => {
+    const map = new Map<string, Bloqueo[]>()
+    profesionales.forEach((p) => map.set(p.id, []))
+    bloqueos.forEach((b) => {
+      if (map.has(b.profesional_id)) {
+        const bDate = new Date(b.fecha_inicio)
+        if (
+          bDate.getFullYear() === fecha.getFullYear() &&
+          bDate.getMonth() === fecha.getMonth() &&
+          bDate.getDate() === fecha.getDate()
+        ) {
+          map.get(b.profesional_id)!.push(b)
+        }
+      }
+    })
+    return map
+  }, [bloqueos, profesionales, fecha])
 
   // Scroll to current time or 9:00 on load
   useEffect(() => {
@@ -187,6 +209,44 @@ export function CalendarioResourceDayView({
                   style={{ top: (hour - HORA_INICIO) * HORA_HEIGHT + HORA_HEIGHT / 2 }}
                 />
               ))}
+
+              {/* Bloqueos */}
+              {bloqueosPorProfesional.get(prof.id)?.map((bloqueo) => {
+                const start = new Date(bloqueo.fecha_inicio)
+                const end = new Date(bloqueo.fecha_fin)
+                const startMinutes = start.getHours() * 60 + start.getMinutes()
+                const endMinutes = end.getHours() * 60 + end.getMinutes()
+                const top = ((startMinutes - HORA_INICIO * 60) / 60) * HORA_HEIGHT
+                const height = Math.max(((endMinutes - startMinutes) / 60) * HORA_HEIGHT, 24)
+                const isSmall = height < 40
+                return (
+                  <div
+                    key={bloqueo.id}
+                    data-cita
+                    className="absolute left-1 right-1 rounded-md border border-dashed border-gray-400 dark:border-gray-600 bg-gray-200/60 dark:bg-gray-800/60 px-1.5 py-0.5 overflow-hidden cursor-pointer transition-colors z-[1]"
+                    style={{ top: `${top}px`, height: `${height}px` }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onBloqueoClick?.(bloqueo)
+                    }}
+                  >
+                    {isSmall ? (
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate leading-snug">
+                        Bloqueado
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
+                          {formatTime(start)} - {formatTime(end)}
+                        </p>
+                        <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate leading-tight mt-0.5">
+                          {bloqueo.motivo || 'Bloqueado'}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
 
               {/* Citas */}
               {citasPorProfesional.get(prof.id)?.map((cita) => {

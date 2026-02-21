@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from 'react'
 import { format, addDays, subDays, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
-import type { CitaConRelaciones, Profesional, Horario } from '@/types/database'
+import type { CitaConRelaciones, Profesional, Horario, Bloqueo } from '@/types/database'
 import { CalendarioResourceDayView } from './CalendarioResourceDayView'
 import { CitaDialog } from './CitaDialog'
+import { BloqueoDialog } from './BloqueoDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, CalendarDays, Clock, ChevronDown } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Clock, ChevronDown, Ban } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 
@@ -25,6 +26,12 @@ export function CalendarioView() {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [horariosOpen, setHorariosOpen] = useState(false)
   const [horarios, setHorarios] = useState<Record<string, Horario[]>>({})
+  const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
+  const [modoBloqueo, setModoBloqueo] = useState(false)
+  const [bloqueoDialogOpen, setBloqueoDialogOpen] = useState(false)
+  const [selectedBloqueo, setSelectedBloqueo] = useState<Bloqueo | null>(null)
+  const [bloqueoDefaultStart, setBloqueoDefaultStart] = useState<string | undefined>()
+  const [bloqueoDefaultEnd, setBloqueoDefaultEnd] = useState<string | undefined>()
 
   const supabase = createClient()
 
@@ -60,14 +67,24 @@ export function CalendarioView() {
         setHorarios(grouped)
       }
     }
+
+    // Fetch bloqueos
+    const { data: bloqueosData } = await supabase
+      .from('bloqueos')
+      .select('*')
+      .order('fecha_inicio')
+    if (bloqueosData) setBloqueos(bloqueosData)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchData()
 
     const channel = supabase
-      .channel('citas-changes')
+      .channel('citas-bloqueos-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'citas' }, () => {
+        fetchData()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bloqueos' }, () => {
         fetchData()
       })
       .subscribe()
@@ -80,10 +97,19 @@ export function CalendarioView() {
   const filteredProfesionales = profesionales.filter((p) => filtrosProfesional.includes(p.id))
 
   function handleSlotClick(profesionalId: string, start: Date, end: Date) {
-    setSelectedCita(null)
-    setSelectedDate({ start, end })
-    setSelectedProfesionalId(profesionalId)
-    setDialogOpen(true)
+    if (modoBloqueo) {
+      // Open bloqueo dialog
+      setSelectedBloqueo(null)
+      setSelectedProfesionalId(profesionalId)
+      setBloqueoDefaultStart(`${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`)
+      setBloqueoDefaultEnd(`${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`)
+      setBloqueoDialogOpen(true)
+    } else {
+      setSelectedCita(null)
+      setSelectedDate({ start, end })
+      setSelectedProfesionalId(profesionalId)
+      setDialogOpen(true)
+    }
   }
 
   function handleCitaClick(cita: CitaConRelaciones) {
@@ -91,6 +117,12 @@ export function CalendarioView() {
     setSelectedDate(null)
     setSelectedProfesionalId(null)
     setDialogOpen(true)
+  }
+
+  function handleBloqueoClick(bloqueo: Bloqueo) {
+    setSelectedBloqueo(bloqueo)
+    setSelectedProfesionalId(bloqueo.profesional_id)
+    setBloqueoDialogOpen(true)
   }
 
   function handleDialogClose() {
@@ -101,10 +133,26 @@ export function CalendarioView() {
     fetchData()
   }
 
+  function handleBloqueoDialogClose() {
+    setBloqueoDialogOpen(false)
+    setSelectedBloqueo(null)
+    setSelectedProfesionalId(null)
+    fetchData()
+  }
+
   const isToday =
     fecha.toDateString() === new Date().toDateString()
 
   const fechaLabel = format(fecha, "EEEE d/MM/yy", { locale: es })
+
+  const profNombre = profesionales.find((p) => p.id === selectedProfesionalId)?.nombre || ''
+
+  // Availability panel helpers
+  const toMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number)
+    return h * 60 + m
+  }
+  const fromMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
   return (
     <div className="space-y-3">
@@ -147,6 +195,15 @@ export function CalendarioView() {
             Horarios
             <ChevronDown className={`h-3 w-3 transition-transform ${horariosOpen ? 'rotate-180' : ''}`} />
           </Button>
+          <Button
+            variant={modoBloqueo ? 'destructive' : 'outline'}
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={() => setModoBloqueo(!modoBloqueo)}
+          >
+            <Ban className="h-3.5 w-3.5" />
+            Bloquear
+          </Button>
           {!isToday && (
             <Button variant="ghost" size="sm" className="ml-1 text-xs" onClick={() => setFecha(new Date())}>
               Hoy
@@ -160,6 +217,12 @@ export function CalendarioView() {
           onChange={setFiltrosProfesional}
         />
       </div>
+
+      {modoBloqueo && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          Modo bloqueo activo: hacé click en un horario vacío para bloquearlo. Click en &quot;Bloquear&quot; para desactivar.
+        </div>
+      )}
 
       {/* Availability panel - free slots */}
       {horariosOpen && (
@@ -182,34 +245,35 @@ export function CalendarioView() {
                 )
               }
 
-              // Get this prof's citas for the selected day
+              // Get this prof's citas + bloqueos for the selected day
               const fechaStr = format(fecha, 'yyyy-MM-dd')
               const profCitas = citas
                 .filter((c) => c.profesional_id === prof.id && c.fecha_inicio.startsWith(fechaStr))
                 .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
-
-              // Calculate free slots
-              const toMin = (t: string) => {
-                const [h, m] = t.split(':').map(Number)
-                return h * 60 + m
-              }
-              const fromMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+              const profBloqueos = bloqueos
+                .filter((b) => b.profesional_id === prof.id && b.fecha_inicio.startsWith(fechaStr))
 
               const workStart = toMin(horarioHoy.hora_inicio)
               const workEnd = toMin(horarioHoy.hora_fin)
 
-              // Build occupied ranges from citas
-              const occupied: { start: number; end: number }[] = profCitas.map((c) => {
-                const s = parseISO(c.fecha_inicio)
-                const e = parseISO(c.fecha_fin)
-                return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
-              })
+              // Build occupied ranges from citas + bloqueos
+              const occupied: { start: number; end: number }[] = [
+                ...profCitas.map((c) => {
+                  const s = parseISO(c.fecha_inicio)
+                  const e = parseISO(c.fecha_fin)
+                  return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
+                }),
+                ...profBloqueos.map((b) => {
+                  const s = parseISO(b.fecha_inicio)
+                  const e = parseISO(b.fecha_fin)
+                  return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
+                }),
+              ].sort((a, b) => a.start - b.start)
 
               // Find free gaps
               const freeSlots: { start: number; end: number }[] = []
               let cursor = workStart
 
-              // If today, start from current time (rounded up to next 30min)
               if (isToday) {
                 const now = new Date()
                 const nowMin = now.getHours() * 60 + now.getMinutes()
@@ -227,7 +291,6 @@ export function CalendarioView() {
                 freeSlots.push({ start: cursor, end: workEnd })
               }
 
-              // Filter slots >= 30 min
               const validSlots = freeSlots.filter((s) => s.end - s.start >= 30)
 
               return (
@@ -260,8 +323,10 @@ export function CalendarioView() {
           fecha={fecha}
           citas={citas}
           profesionales={filteredProfesionales}
+          bloqueos={bloqueos}
           onSlotClick={handleSlotClick}
           onCitaClick={handleCitaClick}
+          onBloqueoClick={handleBloqueoClick}
         />
       ) : (
         <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
@@ -276,6 +341,17 @@ export function CalendarioView() {
         selectedDate={selectedDate}
         selectedProfesionalId={selectedProfesionalId}
         profesionales={profesionales}
+      />
+
+      <BloqueoDialog
+        open={bloqueoDialogOpen}
+        onClose={handleBloqueoDialogClose}
+        bloqueo={selectedBloqueo}
+        profesionalId={selectedProfesionalId}
+        profesionalNombre={profNombre}
+        fecha={fecha}
+        defaultStart={bloqueoDefaultStart}
+        defaultEnd={bloqueoDefaultEnd}
       />
     </div>
   )

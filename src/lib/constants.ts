@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   Users,
+  UserCog,
   Scissors,
   LayoutDashboard,
   Settings,
@@ -25,6 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Caja Diaria', href: '/caja', icon: Wallet },
   { label: 'Clientes', href: '/clientes', icon: Users },
   { label: 'Servicios', href: '/servicios', icon: Scissors },
+  { label: 'Personal', href: '/personal', icon: UserCog },
   { label: 'Informes', href: '/informes', icon: BarChart3 },
   { label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true },
   { label: 'Configuración', href: '/configuracion', icon: Settings },

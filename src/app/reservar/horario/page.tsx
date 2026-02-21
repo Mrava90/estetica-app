@@ -79,31 +79,47 @@ function HorarioContent() {
     const newSlots: Record<string, SlotDisponible[]> = {}
 
     for (const prof of profesionales) {
-      const { data: horarioData } = await supabase
-        .from('horarios')
-        .select('*')
-        .eq('profesional_id', prof.id)
-        .eq('dia_semana', diaSemana)
-        .eq('activo', true)
-        .single()
+      const [{ data: horariosData }, { data: citasData }, { data: bloqueosData }] = await Promise.all([
+        supabase
+          .from('horarios')
+          .select('*')
+          .eq('profesional_id', prof.id)
+          .eq('dia_semana', diaSemana)
+          .eq('activo', true)
+          .order('hora_inicio'),
+        supabase
+          .from('citas')
+          .select('fecha_inicio, fecha_fin')
+          .eq('profesional_id', prof.id)
+          .in('status', ['pendiente', 'confirmada'])
+          .gte('fecha_inicio', `${dateStr}T00:00:00`)
+          .lt('fecha_inicio', `${dateStr}T23:59:59`),
+        supabase
+          .from('bloqueos')
+          .select('fecha_inicio, fecha_fin')
+          .eq('profesional_id', prof.id)
+          .gte('fecha_inicio', `${dateStr}T00:00:00`)
+          .lt('fecha_inicio', `${dateStr}T23:59:59`),
+      ])
 
-      const { data: citasData } = await supabase
-        .from('citas')
-        .select('fecha_inicio, fecha_fin')
-        .eq('profesional_id', prof.id)
-        .in('status', ['pendiente', 'confirmada'])
-        .gte('fecha_inicio', `${dateStr}T00:00:00`)
-        .lt('fecha_inicio', `${dateStr}T23:59:59`)
+      // Support multiple schedule blocks per day (split shifts)
+      const allAvailable: SlotDisponible[] = []
+      if (horariosData && horariosData.length > 0) {
+        for (const horario of horariosData) {
+          const available = calcularSlotsDisponibles(
+            selectedDate,
+            { hora_inicio: horario.hora_inicio, hora_fin: horario.hora_fin },
+            citasData || [],
+            servicio.duracion_minutos,
+            30,
+            bloqueosData || []
+          )
+          allAvailable.push(...available)
+        }
+      }
 
-      const available = calcularSlotsDisponibles(
-        selectedDate,
-        horarioData ? { hora_inicio: horarioData.hora_inicio, hora_fin: horarioData.hora_fin } : null,
-        citasData || [],
-        servicio.duracion_minutos
-      )
-
-      if (available.length > 0) {
-        newSlots[prof.id] = available
+      if (allAvailable.length > 0) {
+        newSlots[prof.id] = allAvailable
       }
     }
 
