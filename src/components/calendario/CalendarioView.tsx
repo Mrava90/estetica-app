@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { format, addDays, subDays } from 'date-fns'
+import { format, addDays, subDays, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
 import type { CitaConRelaciones, Profesional, Horario } from '@/types/database'
@@ -10,7 +10,6 @@ import { CitaDialog } from './CitaDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, CalendarDays, Clock, ChevronDown } from 'lucide-react'
-import { DIAS_SEMANA } from '@/lib/constants'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 
@@ -162,29 +161,90 @@ export function CalendarioView() {
         />
       </div>
 
-      {/* Availability panel */}
+      {/* Availability panel - free slots */}
       {horariosOpen && (
         <div className="rounded-lg border bg-card p-3 animate-in slide-in-from-top-2 fade-in-0 duration-200">
-          <div className="flex flex-wrap gap-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {profesionales.map((prof) => {
               const profHorarios = horarios[prof.id] || []
               const diaSemana = fecha.getDay()
               const horarioHoy = profHorarios.find((h) => h.dia_semana === diaSemana)
 
+              if (!horarioHoy) {
+                return (
+                  <div key={prof.id} className="flex items-start gap-2">
+                    <div className="h-3 w-3 rounded-full shrink-0 mt-1" style={{ backgroundColor: prof.color }} />
+                    <div className="text-sm">
+                      <span className="font-medium">{prof.nombre}</span>
+                      <span className="ml-1.5 text-muted-foreground/60 italic">No trabaja</span>
+                    </div>
+                  </div>
+                )
+              }
+
+              // Get this prof's citas for the selected day
+              const fechaStr = format(fecha, 'yyyy-MM-dd')
+              const profCitas = citas
+                .filter((c) => c.profesional_id === prof.id && c.fecha_inicio.startsWith(fechaStr))
+                .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
+
+              // Calculate free slots
+              const toMin = (t: string) => {
+                const [h, m] = t.split(':').map(Number)
+                return h * 60 + m
+              }
+              const fromMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+
+              const workStart = toMin(horarioHoy.hora_inicio)
+              const workEnd = toMin(horarioHoy.hora_fin)
+
+              // Build occupied ranges from citas
+              const occupied: { start: number; end: number }[] = profCitas.map((c) => {
+                const s = parseISO(c.fecha_inicio)
+                const e = parseISO(c.fecha_fin)
+                return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
+              })
+
+              // Find free gaps
+              const freeSlots: { start: number; end: number }[] = []
+              let cursor = workStart
+
+              // If today, start from current time (rounded up to next 30min)
+              if (isToday) {
+                const now = new Date()
+                const nowMin = now.getHours() * 60 + now.getMinutes()
+                const rounded = Math.ceil(nowMin / 30) * 30
+                if (rounded > cursor) cursor = rounded
+              }
+
+              for (const occ of occupied) {
+                if (occ.start > cursor) {
+                  freeSlots.push({ start: cursor, end: occ.start })
+                }
+                if (occ.end > cursor) cursor = occ.end
+              }
+              if (cursor < workEnd) {
+                freeSlots.push({ start: cursor, end: workEnd })
+              }
+
+              // Filter slots >= 30 min
+              const validSlots = freeSlots.filter((s) => s.end - s.start >= 30)
+
               return (
-                <div key={prof.id} className="flex items-center gap-2 min-w-[140px]">
-                  <div
-                    className="h-3 w-3 rounded-full shrink-0"
-                    style={{ backgroundColor: prof.color }}
-                  />
+                <div key={prof.id} className="flex items-start gap-2">
+                  <div className="h-3 w-3 rounded-full shrink-0 mt-1" style={{ backgroundColor: prof.color }} />
                   <div className="text-sm">
                     <span className="font-medium">{prof.nombre}</span>
-                    {horarioHoy ? (
-                      <span className="ml-1.5 text-muted-foreground">
-                        {horarioHoy.hora_inicio.slice(0, 5)} - {horarioHoy.hora_fin.slice(0, 5)}
-                      </span>
+                    {validSlots.length === 0 ? (
+                      <span className="ml-1.5 text-red-500 text-xs">Sin disponibilidad</span>
                     ) : (
-                      <span className="ml-1.5 text-muted-foreground/60 italic">Libre</span>
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+                        {validSlots.map((s, i) => (
+                          <span key={i} className="text-xs text-green-600 dark:text-green-400">
+                            {fromMin(s.start)}-{fromMin(s.end)}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
