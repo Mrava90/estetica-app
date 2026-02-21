@@ -31,6 +31,7 @@ interface Props {
 export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesionalId, profesionales }: Props) {
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [profServMap, setProfServMap] = useState<Record<string, string[]>>({})
   const [clienteSearch, setClienteSearch] = useState('')
   const [showNewCliente, setShowNewCliente] = useState(false)
   const [newClienteNombre, setNewClienteNombre] = useState('')
@@ -55,9 +56,15 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   const selectedMetodoPago = watch('metodo_pago') || 'efectivo'
   const selectedServicio = servicios.find((s) => s.id === selectedServicioId)
 
+  // Filter professionals by selected service
+  const filteredProfesionales = selectedServicioId && profServMap[selectedServicioId]
+    ? profesionales.filter((p) => profServMap[selectedServicioId].includes(p.id))
+    : profesionales
+
   useEffect(() => {
     if (open) {
       fetchServicios()
+      fetchProfServMap()
       fetchClientes('')
       if (cita) {
         reset({
@@ -84,6 +91,18 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   async function fetchServicios() {
     const { data } = await supabase.from('servicios').select('*').eq('activo', true).order('nombre')
     if (data) setServicios(data)
+  }
+
+  async function fetchProfServMap() {
+    const { data } = await supabase.from('profesional_servicios').select('profesional_id, servicio_id')
+    if (data) {
+      const map: Record<string, string[]> = {}
+      for (const row of data) {
+        if (!map[row.servicio_id]) map[row.servicio_id] = []
+        map[row.servicio_id].push(row.profesional_id)
+      }
+      setProfServMap(map)
+    }
   }
 
   async function fetchClientes(search: string) {
@@ -325,7 +344,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                 <SelectValue placeholder="Seleccionar profesional" />
               </SelectTrigger>
               <SelectContent>
-                {profesionales.map((p) => (
+                {filteredProfesionales.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     <div className="flex items-center gap-2">
                       <span

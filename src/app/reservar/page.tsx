@@ -14,6 +14,7 @@ export default function ReservarPage() {
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [selectedServicio, setSelectedServicio] = useState<string | null>(null)
   const [selectedProfesional, setSelectedProfesional] = useState<string | null>(null)
+  const [filteredProfs, setFilteredProfs] = useState<Profesional[]>([])
   const supabase = createClient()
 
   useEffect(() => {
@@ -27,6 +28,28 @@ export default function ReservarPage() {
     }
     fetchData()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedServicio) {
+      setFilteredProfs([])
+      return
+    }
+    async function fetchProfsForService() {
+      const { data } = await supabase
+        .from('profesional_servicios')
+        .select('profesional_id')
+        .eq('servicio_id', selectedServicio)
+      if (data && data.length > 0) {
+        const ids = data.map((d) => d.profesional_id)
+        setFilteredProfs(profesionales.filter((p) => ids.includes(p.id)))
+      } else {
+        // No records = all professionals can do it (backwards compatible)
+        setFilteredProfs(profesionales)
+      }
+    }
+    fetchProfsForService()
+    setSelectedProfesional(null)
+  }, [selectedServicio, profesionales]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleContinue() {
     if (!selectedServicio) return
@@ -107,7 +130,7 @@ export default function ReservarPage() {
             >
               Sin preferencia
             </button>
-            {profesionales.map((p) => (
+            {filteredProfs.map((p) => (
               <button
                 key={p.id}
                 onClick={() => setSelectedProfesional(p.id)}

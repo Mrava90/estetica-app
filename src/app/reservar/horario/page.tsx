@@ -48,8 +48,26 @@ function HorarioContent() {
       const { data } = await supabase.from('profesionales').select('*').eq('id', profesionalId).single()
       if (data) setProfesionales([data])
     } else {
-      const { data } = await supabase.from('profesionales').select('*').eq('activo', true).order('nombre')
-      if (data) setProfesionales(data)
+      // Filter by service relationship
+      const { data: profServData } = await supabase
+        .from('profesional_servicios')
+        .select('profesional_id')
+        .eq('servicio_id', servicioId!)
+
+      if (profServData && profServData.length > 0) {
+        const ids = profServData.map((d) => d.profesional_id)
+        const { data } = await supabase
+          .from('profesionales')
+          .select('*')
+          .eq('activo', true)
+          .in('id', ids)
+          .order('nombre')
+        if (data) setProfesionales(data)
+      } else {
+        // No records = all professionals (backwards compatible)
+        const { data } = await supabase.from('profesionales').select('*').eq('activo', true).order('nombre')
+        if (data) setProfesionales(data)
+      }
     }
   }
 

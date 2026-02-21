@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient } from '@/lib/supabase/client'
 import { servicioSchema, type ServicioInput } from '@/lib/validators'
-import type { Servicio } from '@/types/database'
+import type { Servicio, Profesional } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,9 +20,11 @@ import { Plus, Pencil, Banknote, Smartphone } from 'lucide-react'
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([])
+  const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [selectedProfs, setSelectedProfs] = useState<string[]>([])
   const supabase = createClient()
 
   const {
@@ -36,6 +38,7 @@ export default function ServiciosPage() {
 
   useEffect(() => {
     fetchServicios()
+    fetchProfesionales()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchServicios() {
@@ -43,9 +46,28 @@ export default function ServiciosPage() {
     if (data) setServicios(data)
   }
 
+  async function fetchProfesionales() {
+    const { data } = await supabase.from('profesionales').select('*').eq('activo', true).order('nombre')
+    if (data) setProfesionales(data)
+  }
+
+  async function fetchProfServicio(servicioId: string) {
+    const { data } = await supabase
+      .from('profesional_servicios')
+      .select('profesional_id')
+      .eq('servicio_id', servicioId)
+    if (data && data.length > 0) {
+      setSelectedProfs(data.map((d) => d.profesional_id))
+    } else {
+      // If no records, default all checked
+      setSelectedProfs(profesionales.map((p) => p.id))
+    }
+  }
+
   function openNew() {
     setEditingId(null)
     reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_mercadopago: 0 })
+    setSelectedProfs(profesionales.map((p) => p.id))
     setDialogOpen(true)
   }
 
@@ -58,24 +80,48 @@ export default function ServiciosPage() {
       precio_efectivo: servicio.precio_efectivo,
       precio_mercadopago: servicio.precio_mercadopago,
     })
+    fetchProfServicio(servicio.id)
     setDialogOpen(true)
+  }
+
+  function toggleProf(profId: string) {
+    setSelectedProfs((prev) =>
+      prev.includes(profId) ? prev.filter((id) => id !== profId) : [...prev, profId]
+    )
   }
 
   async function onSubmit(data: ServicioInput) {
     setLoading(true)
     try {
+      let servicioId = editingId
+
       if (editingId) {
         const { error } = await supabase
           .from('servicios')
           .update({ ...data, updated_at: new Date().toISOString() })
           .eq('id', editingId)
         if (error) throw error
-        toast.success('Servicio actualizado')
       } else {
-        const { error } = await supabase.from('servicios').insert(data)
+        const { data: newServ, error } = await supabase
+          .from('servicios')
+          .insert(data)
+          .select('id')
+          .single()
         if (error) throw error
-        toast.success('Servicio creado')
+        servicioId = newServ.id
       }
+
+      // Update profesional_servicios
+      if (servicioId) {
+        await supabase.from('profesional_servicios').delete().eq('servicio_id', servicioId)
+        if (selectedProfs.length > 0) {
+          await supabase.from('profesional_servicios').insert(
+            selectedProfs.map((profId) => ({ profesional_id: profId, servicio_id: servicioId }))
+          )
+        }
+      }
+
+      toast.success(editingId ? 'Servicio actualizado' : 'Servicio creado')
       setDialogOpen(false)
       fetchServicios()
     } catch {
@@ -213,6 +259,30 @@ export default function ServiciosPage() {
                 {errors.precio_mercadopago && <p className="text-sm text-destructive">{errors.precio_mercadopago.message}</p>}
               </div>
             </div>
+
+            {/* Profesionales que realizan este servicio */}
+            {profesionales.length > 0 && (
+              <div className="space-y-2">
+                <Label>Profesionales que lo realizan</Label>
+                <div className="flex flex-wrap gap-2">
+                  {profesionales.map((p) => (
+                    <Badge
+                      key={p.id}
+                      variant={selectedProfs.includes(p.id) ? 'default' : 'outline'}
+                      className="cursor-pointer gap-1.5"
+                      onClick={() => toggleProf(p.id)}
+                    >
+                      <span
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ backgroundColor: p.color }}
+                      />
+                      {p.nombre}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Guardando...' : editingId ? 'Actualizar' : 'Crear'}
             </Button>
