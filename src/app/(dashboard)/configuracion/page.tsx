@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Configuracion, Profesional } from '@/types/database'
+import type { Configuracion, Profesional, Horario } from '@/types/database'
 import { formatFechaCorta } from '@/lib/dates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +15,8 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock } from 'lucide-react'
+import { DIAS_SEMANA } from '@/lib/constants'
 
 const ADMIN_EMAIL = 'ravamartin@gmail.com'
 const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
@@ -49,6 +50,11 @@ export default function ConfiguracionPage() {
   const [editingEmp, setEditingEmp] = useState<Profesional | null>(null)
   const [empForm, setEmpForm] = useState({ nombre: '', telefono: '', email: '', color: COLORES_DEFAULT[0], comision_porcentaje: 0 })
   const [empLoading, setEmpLoading] = useState(false)
+
+  // Horarios state
+  const [horarioDialogOpen, setHorarioDialogOpen] = useState(false)
+  const [selectedProfId, setSelectedProfId] = useState<string | null>(null)
+  const [horarios, setHorarios] = useState<Horario[]>([])
 
   const supabase = createClient()
 
@@ -284,6 +290,49 @@ export default function ConfiguracionPage() {
     if (!error) {
       toast.success(prof.activo ? 'Empleado desactivado' : 'Empleado activado')
       fetchProfesionales()
+    }
+  }
+
+  // --- Horarios handlers ---
+  async function fetchHorarios(profId: string) {
+    const { data } = await supabase.from('horarios').select('*').eq('profesional_id', profId).order('dia_semana')
+    if (data) setHorarios(data)
+  }
+
+  function openHorarios(prof: Profesional) {
+    setSelectedProfId(prof.id)
+    fetchHorarios(prof.id)
+    setHorarioDialogOpen(true)
+  }
+
+  async function saveHorario(diaSemana: number, horaInicio: string, horaFin: string) {
+    if (!selectedProfId) return
+    try {
+      const existing = horarios.find((h) => h.dia_semana === diaSemana)
+      if (existing) {
+        await supabase.from('horarios').update({ hora_inicio: horaInicio, hora_fin: horaFin, activo: true }).eq('id', existing.id)
+      } else {
+        await supabase.from('horarios').insert({
+          profesional_id: selectedProfId,
+          dia_semana: diaSemana,
+          hora_inicio: horaInicio,
+          hora_fin: horaFin,
+        })
+      }
+      toast.success('Horario guardado')
+      fetchHorarios(selectedProfId)
+    } catch {
+      toast.error('Error al guardar horario')
+    }
+  }
+
+  async function removeHorario(diaSemana: number) {
+    if (!selectedProfId) return
+    const existing = horarios.find((h) => h.dia_semana === diaSemana)
+    if (existing) {
+      await supabase.from('horarios').update({ activo: false }).eq('id', existing.id)
+      toast.success('Día libre configurado')
+      fetchHorarios(selectedProfId)
     }
   }
 
@@ -647,6 +696,14 @@ export default function ConfiguracionPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => openHorarios(prof)}
+                              title="Horarios"
+                            >
+                              <Clock className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="text-destructive hover:text-destructive"
                               onClick={() => handleDeleteEmpleado(prof)}
                               title="Eliminar"
@@ -664,6 +721,54 @@ export default function ConfiguracionPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Dialog horarios */}
+      <Dialog open={horarioDialogOpen} onOpenChange={setHorarioDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Horarios - {profesionales.find((p) => p.id === selectedProfId)?.nombre}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5, 6, 0].map((dia) => {
+              const horario = horarios.find((h) => h.dia_semana === dia && h.activo)
+              return (
+                <div key={dia} className="flex items-center gap-3">
+                  <span className="w-24 text-sm font-medium">{DIAS_SEMANA[dia]}</span>
+                  {horario ? (
+                    <>
+                      <Input
+                        type="time"
+                        className="w-28"
+                        defaultValue={horario.hora_inicio}
+                        onBlur={(e) => saveHorario(dia, e.target.value, horario.hora_fin)}
+                      />
+                      <span className="text-muted-foreground">a</span>
+                      <Input
+                        type="time"
+                        className="w-28"
+                        defaultValue={horario.hora_fin}
+                        onBlur={(e) => saveHorario(dia, horario.hora_inicio, e.target.value)}
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => removeHorario(dia)} className="text-destructive text-xs">
+                        Libre
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-sm text-muted-foreground flex-1">Libre</span>
+                      <Button variant="outline" size="sm" onClick={() => saveHorario(dia, '09:00', '18:00')}>
+                        Agregar
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog crear/editar empleado */}
       <Dialog open={empDialogOpen} onOpenChange={setEmpDialogOpen}>
