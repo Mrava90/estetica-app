@@ -23,10 +23,10 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Calendario', href: '/calendario', icon: CalendarDays },
+  { label: 'Caja Diaria', href: '/caja', icon: Wallet },
   { label: 'Clientes', href: '/clientes', icon: Users },
   { label: 'Servicios', href: '/servicios', icon: Scissors },
   { label: 'Equipo', href: '/equipo', icon: UserCircle },
-  { label: 'Caja Diaria', href: '/caja', icon: Wallet },
   { label: 'Informes', href: '/informes', icon: BarChart3 },
   { label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true },
   { label: 'Configuración', href: '/configuracion', icon: Settings },
