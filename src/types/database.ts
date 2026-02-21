@@ -8,6 +8,7 @@ export interface Profesional {
   telefono: string | null
   email: string | null
   color: string
+  comision_porcentaje: number
   activo: boolean
   created_at: string
   updated_at: string

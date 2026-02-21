@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Configuracion } from '@/types/database'
+import type { Configuracion, Profesional } from '@/types/database'
 import { formatFechaCorta } from '@/lib/dates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,10 +12,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users } from 'lucide-react'
 
 const ADMIN_EMAIL = 'ravamartin@gmail.com'
+const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
 
 interface AppUser {
   id: string
@@ -39,11 +42,20 @@ export default function ConfiguracionPage() {
   const [myPassword, setMyPassword] = useState('')
   const [myPasswordConfirm, setMyPasswordConfirm] = useState('')
   const [changingMyPassword, setChangingMyPassword] = useState(false)
+
+  // Empleados state
+  const [profesionales, setProfesionales] = useState<Profesional[]>([])
+  const [empDialogOpen, setEmpDialogOpen] = useState(false)
+  const [editingEmp, setEditingEmp] = useState<Profesional | null>(null)
+  const [empForm, setEmpForm] = useState({ nombre: '', telefono: '', email: '', color: COLORES_DEFAULT[0], comision_porcentaje: 0 })
+  const [empLoading, setEmpLoading] = useState(false)
+
   const supabase = createClient()
 
   useEffect(() => {
     fetchConfig()
     checkAdmin()
+    fetchProfesionales()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchConfig() {
@@ -65,6 +77,11 @@ export default function ConfiguracionPage() {
       const data = await res.json()
       setUsers(data.users)
     }
+  }
+
+  async function fetchProfesionales() {
+    const { data } = await supabase.from('profesionales').select('*').order('nombre')
+    if (data) setProfesionales(data)
   }
 
   async function handleSave() {
@@ -189,277 +206,533 @@ export default function ConfiguracionPage() {
     }
   }
 
+  // --- Empleados handlers ---
+  function openNewEmpleado() {
+    setEditingEmp(null)
+    setEmpForm({
+      nombre: '',
+      telefono: '',
+      email: '',
+      color: COLORES_DEFAULT[profesionales.length % COLORES_DEFAULT.length],
+      comision_porcentaje: 0,
+    })
+    setEmpDialogOpen(true)
+  }
+
+  function openEditEmpleado(prof: Profesional) {
+    setEditingEmp(prof)
+    setEmpForm({
+      nombre: prof.nombre,
+      telefono: prof.telefono || '',
+      email: prof.email || '',
+      color: prof.color,
+      comision_porcentaje: prof.comision_porcentaje ?? 0,
+    })
+    setEmpDialogOpen(true)
+  }
+
+  async function handleSaveEmpleado() {
+    if (!empForm.nombre.trim()) {
+      toast.error('El nombre es requerido')
+      return
+    }
+    setEmpLoading(true)
+    try {
+      const payload = {
+        nombre: empForm.nombre.trim(),
+        telefono: empForm.telefono || null,
+        email: empForm.email || null,
+        color: empForm.color,
+        comision_porcentaje: empForm.comision_porcentaje,
+        updated_at: new Date().toISOString(),
+      }
+
+      if (editingEmp) {
+        const { error } = await supabase.from('profesionales').update(payload).eq('id', editingEmp.id)
+        if (error) throw error
+        toast.success('Empleado actualizado')
+      } else {
+        const { error } = await supabase.from('profesionales').insert(payload)
+        if (error) throw error
+        toast.success('Empleado creado')
+      }
+      setEmpDialogOpen(false)
+      fetchProfesionales()
+    } catch {
+      toast.error('Error al guardar empleado')
+    } finally {
+      setEmpLoading(false)
+    }
+  }
+
+  async function handleDeleteEmpleado(prof: Profesional) {
+    if (!confirm(`¿Eliminar a "${prof.nombre}"? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('profesionales').delete().eq('id', prof.id)
+    if (error) {
+      toast.error('Error al eliminar: ' + error.message)
+    } else {
+      toast.success(`"${prof.nombre}" eliminado`)
+      fetchProfesionales()
+    }
+  }
+
+  async function toggleActivo(prof: Profesional) {
+    const { error } = await supabase
+      .from('profesionales')
+      .update({ activo: !prof.activo, updated_at: new Date().toISOString() })
+      .eq('id', prof.id)
+    if (!error) {
+      toast.success(prof.activo ? 'Empleado desactivado' : 'Empleado activado')
+      fetchProfesionales()
+    }
+  }
+
   if (!config) return <div className="flex items-center justify-center py-12 text-muted-foreground">Cargando...</div>
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Configuración</h1>
 
-      {/* Booking link */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Enlace de reserva online</CardTitle>
-          <CardDescription>Compartí este enlace con tus clientes para que reserven online</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Input value={`${typeof window !== 'undefined' ? window.location.origin : ''}/reservar`} readOnly />
-            <Button variant="outline" onClick={copyBookingLink} className="gap-2 shrink-0">
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copiado' : 'Copiar'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="general">
+        <TabsList variant="line">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="empleados" className="gap-1.5">
+            <Users className="h-4 w-4" />
+            Empleados
+          </TabsTrigger>
+        </TabsList>
 
-      {/* General settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Datos del salón</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Nombre del salón</Label>
-              <Input
-                value={config.nombre_salon}
-                onChange={(e) => setConfig({ ...config, nombre_salon: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Teléfono</Label>
-              <Input
-                value={config.telefono || ''}
-                onChange={(e) => setConfig({ ...config, telefono: e.target.value })}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Dirección</Label>
-            <Input
-              value={config.direccion || ''}
-              onChange={(e) => setConfig({ ...config, direccion: e.target.value })}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Zona horaria</Label>
-              <Input
-                value={config.zona_horaria}
-                onChange={(e) => setConfig({ ...config, zona_horaria: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Intervalo de citas (min)</Label>
-              <Input
-                type="number"
-                value={config.intervalo_citas_minutos}
-                onChange={(e) => setConfig({ ...config, intervalo_citas_minutos: parseInt(e.target.value) || 30 })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Días de anticipación</Label>
-              <Input
-                type="number"
-                value={config.dias_anticipacion_reserva}
-                onChange={(e) => setConfig({ ...config, dias_anticipacion_reserva: parseInt(e.target.value) || 30 })}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        {/* ========== TAB GENERAL ========== */}
+        <TabsContent value="general" className="space-y-6 mt-6">
+          {/* Booking link */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Enlace de reserva online</CardTitle>
+              <CardDescription>Compartí este enlace con tus clientes para que reserven online</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <Input value={`${typeof window !== 'undefined' ? window.location.origin : ''}/reservar`} readOnly />
+                <Button variant="outline" onClick={copyBookingLink} className="gap-2 shrink-0">
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? 'Copiado' : 'Copiar'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Message templates */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Plantillas de mensajes WhatsApp</CardTitle>
-          <CardDescription>
-            Variables disponibles: {'{cliente}'}, {'{servicio}'}, {'{profesional}'}, {'{fecha}'}, {'{hora}'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Mensaje de confirmación</Label>
-            <Textarea
-              rows={3}
-              value={config.mensaje_confirmacion || ''}
-              onChange={(e) => setConfig({ ...config, mensaje_confirmacion: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Mensaje de recordatorio (24h antes)</Label>
-            <Textarea
-              rows={3}
-              value={config.mensaje_recordatorio || ''}
-              onChange={(e) => setConfig({ ...config, mensaje_recordatorio: e.target.value })}
-            />
-          </div>
-        </CardContent>
-      </Card>
+          {/* General settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Datos del salón</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Nombre del salón</Label>
+                  <Input
+                    value={config.nombre_salon}
+                    onChange={(e) => setConfig({ ...config, nombre_salon: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Teléfono</Label>
+                  <Input
+                    value={config.telefono || ''}
+                    onChange={(e) => setConfig({ ...config, telefono: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Dirección</Label>
+                <Input
+                  value={config.direccion || ''}
+                  onChange={(e) => setConfig({ ...config, direccion: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Zona horaria</Label>
+                  <Input
+                    value={config.zona_horaria}
+                    onChange={(e) => setConfig({ ...config, zona_horaria: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Intervalo de citas (min)</Label>
+                  <Input
+                    type="number"
+                    value={config.intervalo_citas_minutos}
+                    onChange={(e) => setConfig({ ...config, intervalo_citas_minutos: parseInt(e.target.value) || 30 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Días de anticipación</Label>
+                  <Input
+                    type="number"
+                    value={config.dias_anticipacion_reserva}
+                    onChange={(e) => setConfig({ ...config, dias_anticipacion_reserva: parseInt(e.target.value) || 30 })}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-      <Button onClick={handleSave} disabled={loading} size="lg">
-        {loading ? 'Guardando...' : 'Guardar configuración'}
-      </Button>
+          {/* Message templates */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Plantillas de mensajes WhatsApp</CardTitle>
+              <CardDescription>
+                Variables disponibles: {'{cliente}'}, {'{servicio}'}, {'{profesional}'}, {'{fecha}'}, {'{hora}'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Mensaje de confirmación</Label>
+                <Textarea
+                  rows={3}
+                  value={config.mensaje_confirmacion || ''}
+                  onChange={(e) => setConfig({ ...config, mensaje_confirmacion: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Mensaje de recordatorio (24h antes)</Label>
+                <Textarea
+                  rows={3}
+                  value={config.mensaje_recordatorio || ''}
+                  onChange={(e) => setConfig({ ...config, mensaje_recordatorio: e.target.value })}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Change own password */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <KeyRound className="h-5 w-5" />
-            Cambiar mi contraseña
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Nueva contraseña</Label>
-              <Input
-                type="password"
-                placeholder="Mínimo 6 caracteres"
-                value={myPassword}
-                onChange={(e) => setMyPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Confirmar contraseña</Label>
-              <Input
-                type="password"
-                placeholder="Repetí la contraseña"
-                value={myPasswordConfirm}
-                onChange={(e) => setMyPasswordConfirm(e.target.value)}
-              />
-            </div>
-          </div>
-          <Button size="sm" onClick={handleChangeMyPassword} disabled={changingMyPassword}>
-            {changingMyPassword ? 'Cambiando...' : 'Cambiar contraseña'}
+          <Button onClick={handleSave} disabled={loading} size="lg">
+            {loading ? 'Guardando...' : 'Guardar configuración'}
           </Button>
-        </CardContent>
-      </Card>
 
-      {/* User management - admin only */}
-      {isAdmin && (
-        <>
-          <Separator />
+          {/* Change own password */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="h-5 w-5" />
+                Cambiar mi contraseña
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Nueva contraseña</Label>
+                  <Input
+                    type="password"
+                    placeholder="Mínimo 6 caracteres"
+                    value={myPassword}
+                    onChange={(e) => setMyPassword(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirmar contraseña</Label>
+                  <Input
+                    type="password"
+                    placeholder="Repetí la contraseña"
+                    value={myPasswordConfirm}
+                    onChange={(e) => setMyPasswordConfirm(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button size="sm" onClick={handleChangeMyPassword} disabled={changingMyPassword}>
+                {changingMyPassword ? 'Cambiando...' : 'Cambiar contraseña'}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* User management - admin only */}
+          {isAdmin && (
+            <>
+              <Separator />
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Shield className="h-5 w-5" />
+                        Gestión de usuarios
+                      </CardTitle>
+                      <CardDescription>Solo visible para el administrador</CardDescription>
+                    </div>
+                    <Button size="sm" className="gap-2" onClick={() => setShowNewUser(!showNewUser)}>
+                      <Plus className="h-4 w-4" />
+                      Nuevo usuario
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {showNewUser && (
+                    <div className="rounded-lg border p-4 space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label>Email</Label>
+                          <Input
+                            type="email"
+                            placeholder="usuario@ejemplo.com"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Contraseña</Label>
+                          <Input
+                            type="text"
+                            placeholder="Mínimo 6 caracteres"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleCreateUser} disabled={creatingUser}>
+                          {creatingUser ? 'Creando...' : 'Crear usuario'}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setShowNewUser(false)}>
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Creado</TableHead>
+                        <TableHead>Último acceso</TableHead>
+                        <TableHead className="text-right">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((u) => (
+                        <TableRow key={u.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              {u.email}
+                              {u.email === ADMIN_EMAIL && (
+                                <Badge variant="secondary" className="text-[10px]">Admin</Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatFechaCorta(u.created_at)}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {u.last_sign_in_at ? formatFechaCorta(u.last_sign_in_at) : 'Nunca'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Cambiar contraseña"
+                                onClick={() => { setChangePasswordId(changePasswordId === u.id ? null : u.id); setChangePasswordValue('') }}
+                              >
+                                <KeyRound className="h-4 w-4" />
+                              </Button>
+                              {u.email !== ADMIN_EMAIL && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive hover:text-destructive"
+                                  onClick={() => handleDeleteUser(u.id, u.email || '')}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                            {changePasswordId === u.id && (
+                              <div className="mt-2 flex gap-2">
+                                <Input
+                                  type="text"
+                                  placeholder="Nueva contraseña"
+                                  value={changePasswordValue}
+                                  onChange={(e) => setChangePasswordValue(e.target.value)}
+                                  className="h-8 text-sm"
+                                />
+                                <Button size="sm" className="h-8 shrink-0" onClick={() => handleChangeUserPassword(u.id)}>
+                                  Guardar
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* ========== TAB EMPLEADOS ========== */}
+        <TabsContent value="empleados" className="space-y-6 mt-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Shield className="h-5 w-5" />
-                    Gestión de usuarios
-                  </CardTitle>
-                  <CardDescription>Solo visible para el administrador</CardDescription>
+                  <CardTitle>Empleados</CardTitle>
+                  <CardDescription>Gestioná tu equipo y sus porcentajes de comisión</CardDescription>
                 </div>
-                <Button size="sm" className="gap-2" onClick={() => setShowNewUser(!showNewUser)}>
+                <Button size="sm" className="gap-2" onClick={openNewEmpleado}>
                   <Plus className="h-4 w-4" />
-                  Nuevo usuario
+                  Agregar empleado
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {showNewUser && (
-                <div className="rounded-lg border p-4 space-y-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Email</Label>
-                      <Input
-                        type="email"
-                        placeholder="usuario@ejemplo.com"
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Contraseña</Label>
-                      <Input
-                        type="text"
-                        placeholder="Mínimo 6 caracteres"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={handleCreateUser} disabled={creatingUser}>
-                      {creatingUser ? 'Creando...' : 'Crear usuario'}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowNewUser(false)}>
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Creado</TableHead>
-                    <TableHead>Último acceso</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {u.email}
-                          {u.email === ADMIN_EMAIL && (
-                            <Badge variant="secondary" className="text-[10px]">Admin</Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatFechaCorta(u.created_at)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {u.last_sign_in_at ? formatFechaCorta(u.last_sign_in_at) : 'Nunca'}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Cambiar contraseña"
-                            onClick={() => { setChangePasswordId(changePasswordId === u.id ? null : u.id); setChangePasswordValue('') }}
+            <CardContent>
+              {profesionales.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No hay empleados registrados
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Empleado</TableHead>
+                      <TableHead>Teléfono</TableHead>
+                      <TableHead className="text-center">Comisión %</TableHead>
+                      <TableHead className="text-center">Estado</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {profesionales.map((prof) => (
+                      <TableRow key={prof.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="h-8 w-8 rounded-full shrink-0"
+                              style={{ backgroundColor: prof.color }}
+                            />
+                            <div>
+                              <p className="font-medium">{prof.nombre}</p>
+                              {prof.email && (
+                                <p className="text-xs text-muted-foreground">{prof.email}</p>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {prof.telefono || '-'}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="font-semibold">{prof.comision_porcentaje ?? 0}%</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            variant={prof.activo ? 'default' : 'secondary'}
+                            className="cursor-pointer"
+                            onClick={() => toggleActivo(prof)}
                           >
-                            <KeyRound className="h-4 w-4" />
-                          </Button>
-                          {u.email !== ADMIN_EMAIL && (
+                            {prof.activo ? 'Activo' : 'Inactivo'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditEmpleado(prof)}
+                              title="Editar"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="text-destructive hover:text-destructive"
-                              onClick={() => handleDeleteUser(u.id, u.email || '')}
+                              onClick={() => handleDeleteEmpleado(prof)}
+                              title="Eliminar"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
-                          )}
-                        </div>
-                        {changePasswordId === u.id && (
-                          <div className="mt-2 flex gap-2">
-                            <Input
-                              type="text"
-                              placeholder="Nueva contraseña"
-                              value={changePasswordValue}
-                              onChange={(e) => setChangePasswordValue(e.target.value)}
-                              className="h-8 text-sm"
-                            />
-                            <Button size="sm" className="h-8 shrink-0" onClick={() => handleChangeUserPassword(u.id)}>
-                              Guardar
-                            </Button>
                           </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
-        </>
-      )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Dialog crear/editar empleado */}
+      <Dialog open={empDialogOpen} onOpenChange={setEmpDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingEmp ? 'Editar empleado' : 'Nuevo empleado'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nombre *</Label>
+              <Input
+                value={empForm.nombre}
+                onChange={(e) => setEmpForm({ ...empForm, nombre: e.target.value })}
+                placeholder="Nombre del empleado"
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Teléfono</Label>
+                <Input
+                  value={empForm.telefono}
+                  onChange={(e) => setEmpForm({ ...empForm, telefono: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={empForm.email}
+                  onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex gap-2">
+                {COLORES_DEFAULT.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`h-8 w-8 rounded-full border-2 transition-all ${
+                      empForm.color === color ? 'border-foreground scale-110' : 'border-transparent'
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setEmpForm({ ...empForm, color })}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Comisión sobre venta (%)</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className="w-24"
+                  value={empForm.comision_porcentaje}
+                  onChange={(e) => setEmpForm({ ...empForm, comision_porcentaje: Number(e.target.value) || 0 })}
+                />
+                <span className="text-sm text-muted-foreground">% sobre precio efectivo del servicio</span>
+              </div>
+            </div>
+            <Button onClick={handleSaveEmpleado} className="w-full" disabled={empLoading}>
+              {empLoading ? 'Guardando...' : editingEmp ? 'Actualizar' : 'Crear empleado'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -25,6 +25,7 @@ export const profesionalSchema = z.object({
   telefono: z.string().optional(),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   color: z.string().min(4, 'Color requerido'),
+  comision_porcentaje: z.number().min(0, 'Mínimo 0%').max(100, 'Máximo 100%').optional(),
 })
 
 export const citaSchema = z.object({
