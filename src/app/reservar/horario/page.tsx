@@ -174,7 +174,7 @@ function HorarioContent() {
               className={`flex flex-col items-center rounded-xl border px-4 py-2.5 text-sm transition-all shrink-0 ${
                 isSelected
                   ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-fuchsia-300'
+                  : 'border-gray-900 bg-white text-gray-700 hover:border-fuchsia-500'
               }`}
             >
               <span className="text-xs uppercase font-medium">
@@ -190,14 +190,14 @@ function HorarioContent() {
       {/* Time slots per professional */}
       <div className="space-y-4">
         {Object.keys(slots).length === 0 ? (
-          <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
+          <div className="rounded-xl border border-gray-900 bg-white p-8 text-center">
             <p className="text-gray-500">No hay horarios disponibles para este día</p>
           </div>
         ) : (
           profesionales
             .filter((p) => slots[p.id])
             .map((prof) => (
-              <div key={prof.id} className="rounded-xl border border-gray-200 bg-white p-4">
+              <div key={prof.id} className="rounded-xl border border-gray-900 bg-white p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="h-6 w-6 rounded-full" style={{ backgroundColor: prof.color }} />
                   <h3 className="font-semibold text-gray-900">{prof.nombre}</h3>
@@ -214,7 +214,7 @@ function HorarioContent() {
                         className={`rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
                           isSelected
                             ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
-                            : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-fuchsia-300'
+                            : 'border-gray-900 bg-white text-gray-700 hover:border-fuchsia-500'
                         }`}
                       >
                         {formatHora(slot.inicio)}

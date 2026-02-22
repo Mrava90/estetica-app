@@ -120,7 +120,7 @@ function ConfirmarContent() {
       </div>
 
       {/* Summary */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+      <div className="rounded-xl border border-gray-900 bg-white p-5 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Resumen del turno</h2>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
@@ -150,7 +150,7 @@ function ConfirmarContent() {
       </div>
 
       {/* Client info form */}
-      <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4">
+      <div className="rounded-xl border border-gray-900 bg-white p-5 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Tus datos</h2>
         <div className="space-y-4">
           <div className="space-y-1.5">

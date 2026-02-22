@@ -24,7 +24,7 @@ function ExitoContent() {
       </div>
 
       {fecha && (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+        <div className="rounded-xl border border-gray-900 bg-white p-6 text-center shadow-sm">
           <p className="text-sm text-gray-500">Fecha del turno</p>
           <p className="text-lg font-semibold text-gray-900 mt-1">{formatFechaHora(fecha)}</p>
         </div>

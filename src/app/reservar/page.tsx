@@ -83,7 +83,7 @@ export default function ReservarPage() {
             className={`w-full rounded-xl border bg-white p-4 text-left transition-all ${
               selectedServicio === s.id
                 ? 'border-fuchsia-500 ring-2 ring-fuchsia-500/20 shadow-md'
-                : 'border-gray-200 hover:border-fuchsia-300 hover:shadow-sm'
+                : 'border-gray-900 hover:border-fuchsia-500 hover:shadow-sm'
             }`}
           >
             <div className="flex items-center gap-3">
@@ -130,7 +130,7 @@ export default function ReservarPage() {
               className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
                 !selectedProfesional
                   ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-fuchsia-300'
+                  : 'border-gray-900 bg-white text-gray-700 hover:border-fuchsia-500'
               }`}
             >
               Sin preferencia
@@ -142,7 +142,7 @@ export default function ReservarPage() {
                 className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
                   selectedProfesional === p.id
                     ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
-                    : 'border-gray-200 bg-white text-gray-700 hover:border-fuchsia-300'
+                    : 'border-gray-900 bg-white text-gray-700 hover:border-fuchsia-500'
                 }`}
               >
                 <div
