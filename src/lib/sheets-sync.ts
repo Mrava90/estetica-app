@@ -30,7 +30,7 @@ export interface SyncResult {
 }
 
 // ── Google Sheets API ───────────────────────────────────────
-async function fetchSheetData(spreadsheetId: string, sheetName: string): Promise<string[][]> {
+export async function fetchSheetData(spreadsheetId: string, sheetName: string): Promise<string[][]> {
   const auth = new GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -214,10 +214,10 @@ function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
       const parsedDate = parseSheetDate(dateVal)
       if (parsedDate) lastDate = parsedDate
 
-      if (lastDate && desc && amount > 0) {
+      if (lastDate && desc && amount !== 0) {
         movs.push({
           fecha: lastDate,
-          monto: -amount,
+          monto: -amount, // negate: positive sheet amount = expense (negative), negative = credit (positive)
           tipo: mapMetodoPagoForMov(method),
           descripcion: `${section.prefix}: ${desc}`,
           origen: 'sheets',

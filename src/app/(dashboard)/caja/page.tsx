@@ -81,10 +81,11 @@ export default function CajaDiariaPage() {
 
     for (const cita of citas) {
       const monto = cita.precio_cobrado || 0
-      if (cita.metodo_pago === 'efectivo') {
-        efectivoCitas += monto
-      } else {
+      if (cita.metodo_pago === 'mercadopago') {
         mercadopagoCitas += monto
+      } else {
+        // efectivo + transferencia both count as efectivo
+        efectivoCitas += monto
       }
     }
 
