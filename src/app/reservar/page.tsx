@@ -7,6 +7,7 @@ import type { Servicio, Profesional } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
 import { NailIcon } from '@/components/reservar/ReservarHeader'
 import { Clock, Banknote, Smartphone, ChevronRight } from 'lucide-react'
+import Image from 'next/image'
 
 export default function ReservarPage() {
   const router = useRouter()
@@ -62,9 +63,13 @@ export default function ReservarPage() {
     <div className="space-y-6">
       {/* Title */}
       <div className="text-center">
-        <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-fuchsia-100 mb-3">
-          <NailIcon className="h-6 w-6 text-fuchsia-600" />
-        </div>
+        <Image
+          src="/logo-kawirth.png"
+          alt="Ka Wirth"
+          width={48}
+          height={48}
+          className="inline-block h-12 w-12 rounded-full object-cover mb-3"
+        />
         <h1 className="text-2xl font-bold text-gray-900">Elegir servicio</h1>
         <p className="text-sm text-gray-500 mt-1">Seleccioná el servicio que querés</p>
       </div>

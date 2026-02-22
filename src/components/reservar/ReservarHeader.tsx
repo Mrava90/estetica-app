@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import Image from 'next/image'
 
 function NailIcon({ className }: { className?: string }) {
   return (
@@ -14,12 +15,10 @@ function NailIcon({ className }: { className?: string }) {
       strokeLinejoin="round"
       className={className}
     >
-      {/* Hand with painted nails */}
       <path d="M18 11V6a2 2 0 0 0-4 0v1" />
       <path d="M14 10V4a2 2 0 0 0-4 0v2" />
       <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
       <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8H12a8 8 0 0 1-6-2.7" />
-      {/* Nail polish accent */}
       <circle cx="12" cy="4" r="0.5" fill="currentColor" />
       <circle cx="16" cy="6" r="0.5" fill="currentColor" />
       <circle cx="20" cy="8" r="0.5" fill="currentColor" />
@@ -30,7 +29,7 @@ function NailIcon({ className }: { className?: string }) {
 export { NailIcon }
 
 export function ReservarHeader() {
-  const [nombreSalon, setNombreSalon] = useState('Estética SR')
+  const [nombreSalon, setNombreSalon] = useState('Ka Wirth Ballester')
 
   useEffect(() => {
     async function fetchConfig() {
@@ -44,9 +43,13 @@ export function ReservarHeader() {
   return (
     <header className="bg-[#1C1C2E]">
       <div className="mx-auto max-w-2xl px-4 py-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 to-pink-500">
-          <NailIcon className="h-5 w-5 text-white" />
-        </div>
+        <Image
+          src="/logo-kawirth.png"
+          alt="Ka Wirth"
+          width={44}
+          height={44}
+          className="h-11 w-11 rounded-full object-cover"
+        />
         <div>
           <span className="text-lg font-bold text-white">{nombreSalon}</span>
           <p className="text-xs font-semibold tracking-wider text-fuchsia-400 uppercase">Nuevo turno</p>
