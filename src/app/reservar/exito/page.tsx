@@ -37,7 +37,7 @@ function ExitoContent() {
 
       <Link
         href="/reservar"
-        className="rounded-xl bg-[#1C1C2E] px-8 py-3 text-sm font-semibold text-white transition-all hover:bg-[#2a2a42] shadow-lg"
+        className="rounded-xl bg-black px-8 py-3 text-sm font-semibold text-white transition-all hover:bg-gray-900 shadow-lg"
       >
         Reservar otro turno
       </Link>

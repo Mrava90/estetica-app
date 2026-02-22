@@ -193,7 +193,7 @@ function ConfirmarContent() {
       <button
         onClick={handleConfirm}
         disabled={loading || !nombre.trim() || !telefono.trim()}
-        className="w-full rounded-xl bg-[#1C1C2E] py-4 text-center text-base font-semibold text-white transition-all hover:bg-[#2a2a42] disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
+        className="w-full rounded-xl bg-black py-4 text-center text-base font-semibold text-white transition-all hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
       >
         {loading ? 'Confirmando...' : 'Confirmar turno'}
       </button>
