@@ -145,8 +145,9 @@ function parseAppointmentSheet(
   rows: string[][],
   sheetName: 'SSR' | 'KW',
   profMap: Record<string, string>,
-): CitaInsert[] {
+): { citas: CitaInsert[]; comisiones: MovimientoInsert[] } {
   const citas: CitaInsert[] = []
+  const comisiones: MovimientoInsert[] = []
   let currentDate: string | null = null
   const dailyCount: Record<string, number> = {}
 
@@ -158,9 +159,10 @@ function parseAppointmentSheet(
     const dateVal = row[0] || ''
     const clientName = row[1]?.trim()
     const serviceName = row[2]?.trim()
-    const entryAmount = parseAmount(row[4] || '') // ENTRADA column
+    const entryAmount = parseAmount(row[4] || '') // ENTRADA column (E)
     const paymentMethod = row[5]?.trim()
     const professional = row[6]?.trim()
+    const comisionAmount = parseAmount(row[8] || '') // Comisión $ column (I)
 
     const parsedDate = parseSheetDate(dateVal)
     if (parsedDate) currentDate = parsedDate
@@ -185,9 +187,20 @@ function parseAppointmentSheet(
       origen: 'sheets',
       cliente_id: null,
     })
+
+    // Commission per appointment (col I = Comisión $)
+    if (comisionAmount > 0) {
+      comisiones.push({
+        fecha: currentDate,
+        monto: -comisionAmount, // negative = expense
+        tipo: 'efectivo',
+        descripcion: `Comisión: ${professional || 'Sin asignar'} - ${clientName}`,
+        origen: 'sheets',
+      })
+    }
   }
 
-  return citas
+  return { citas, comisiones }
 }
 
 function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
@@ -254,10 +267,14 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   }
 
   // 3. Parse sheets
-  const citasSSR = parseAppointmentSheet(ssrRows, 'SSR', profMap)
-  const citasKW = parseAppointmentSheet(kwRows, 'KW', profMap)
-  const allCitas = [...citasSSR, ...citasKW]
-  const allMovimientos = parseGastosSheet(gastosRows)
+  const ssrResult = parseAppointmentSheet(ssrRows, 'SSR', profMap)
+  const kwResult = parseAppointmentSheet(kwRows, 'KW', profMap)
+  const allCitas = [...ssrResult.citas, ...kwResult.citas]
+  const allMovimientos = [
+    ...parseGastosSheet(gastosRows),
+    ...ssrResult.comisiones,
+    ...kwResult.comisiones,
+  ]
 
   // 5. Delete old sheet-synced data
   const { error: delCitasErr } = await supabase.from('citas').delete().eq('origen', 'sheets')

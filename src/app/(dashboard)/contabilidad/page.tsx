@@ -93,7 +93,7 @@ export default function ContabilidadPage() {
       })
 
       const comisiones = monthMovs
-        .filter((m) => m.descripcion.startsWith('Adelanto comision:'))
+        .filter((m) => m.descripcion.startsWith('Comisión:') || m.descripcion.startsWith('Adelanto comision:'))
         .reduce((sum, m) => sum + m.monto, 0)
 
       const gastosLocal = monthMovs
