@@ -17,8 +17,8 @@ function ExitoContent() {
       </div>
 
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-gray-900">¡Turno confirmado!</h1>
-        <p className="text-gray-500">
+        <h1 className="text-2xl font-bold text-white drop-shadow-md">¡Turno confirmado!</h1>
+        <p className="text-white/80">
           Tu turno ha sido reservado exitosamente
         </p>
       </div>
@@ -30,7 +30,7 @@ function ExitoContent() {
         </div>
       )}
 
-      <p className="text-sm text-gray-500 text-center max-w-sm">
+      <p className="text-sm text-white/70 text-center max-w-sm">
         Te enviaremos un recordatorio por WhatsApp antes de tu cita.
         Si necesitás cancelar o cambiar el turno, contactanos.
       </p>

@@ -147,16 +147,16 @@ function HorarioContent() {
     <div className="space-y-6">
       <button
         onClick={() => router.back()}
-        className="flex items-center gap-1 text-sm text-gray-500 hover:text-fuchsia-600 transition-colors"
+        className="flex items-center gap-1 text-sm text-white/80 hover:text-white transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
         Volver
       </button>
 
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Elegí fecha y horario</h1>
+        <h1 className="text-2xl font-bold text-white drop-shadow-md">Elegí fecha y horario</h1>
         {servicio && (
-          <p className="text-sm text-gray-500 mt-1">{servicio.nombre} - {servicio.duracion_minutos} min</p>
+          <p className="text-sm text-white/80 mt-1">{servicio.nombre} - {servicio.duracion_minutos} min</p>
         )}
       </div>
 

@@ -70,8 +70,8 @@ export default function ReservarPage() {
           height={48}
           className="inline-block h-12 w-12 rounded-full object-cover mb-3"
         />
-        <h1 className="text-2xl font-bold text-gray-900">Elegir servicio</h1>
-        <p className="text-sm text-gray-500 mt-1">Seleccioná el servicio que querés</p>
+        <h1 className="text-2xl font-bold text-white drop-shadow-md">Elegir servicio</h1>
+        <p className="text-sm text-white/80 mt-1">Seleccioná el servicio que querés</p>
       </div>
 
       {/* Service list */}
@@ -123,7 +123,7 @@ export default function ReservarPage() {
       {/* Professional selection */}
       {selectedServicio && (
         <div className="space-y-3 animate-in slide-in-from-bottom-2 fade-in-0 duration-300">
-          <h2 className="text-lg font-semibold text-gray-900">Profesional (opcional)</h2>
+          <h2 className="text-lg font-semibold text-white drop-shadow-md">Profesional (opcional)</h2>
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedProfesional(null)}
