@@ -210,17 +210,17 @@ export default function CajaDiariaPage() {
       ) : (
         <>
           {/* KPI Cards */}
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Efectivo</CardTitle>
-                <Banknote className="h-4 w-4 text-green-600" />
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Card className="py-2">
+              <CardHeader className="flex flex-row items-center justify-between px-4 py-1">
+                <CardTitle className="text-xs font-medium">Efectivo</CardTitle>
+                <Banknote className="h-3.5 w-3.5 text-green-600" />
               </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${totals.totalEfectivo < 0 ? 'text-destructive' : ''}`}>
+              <CardContent className="px-4 py-1">
+                <div className={`text-lg font-bold ${totals.totalEfectivo < 0 ? 'text-destructive' : ''}`}>
                   {formatPrecio(totals.totalEfectivo)}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Cobros: {formatPrecio(totals.efectivoCitas)}
                   {totals.efectivoMovimientos !== 0 && (
                     <> | Movs: {formatPrecio(totals.efectivoMovimientos)}</>
@@ -228,16 +228,16 @@ export default function CajaDiariaPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Mercadopago</CardTitle>
-                <Smartphone className="h-4 w-4 text-blue-600" />
+            <Card className="py-2">
+              <CardHeader className="flex flex-row items-center justify-between px-4 py-1">
+                <CardTitle className="text-xs font-medium">Mercadopago</CardTitle>
+                <Smartphone className="h-3.5 w-3.5 text-blue-600" />
               </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${totals.totalMercadopago < 0 ? 'text-destructive' : ''}`}>
+              <CardContent className="px-4 py-1">
+                <div className={`text-lg font-bold ${totals.totalMercadopago < 0 ? 'text-destructive' : ''}`}>
                   {formatPrecio(totals.totalMercadopago)}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Cobros: {formatPrecio(totals.mercadopagoCitas)}
                   {totals.mercadopagoMovimientos !== 0 && (
                     <> | Movs: {formatPrecio(totals.mercadopagoMovimientos)}</>
@@ -245,17 +245,17 @@ export default function CajaDiariaPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Total</CardTitle>
-                <Wallet className="h-4 w-4 text-muted-foreground" />
+            <Card className="py-2">
+              <CardHeader className="flex flex-row items-center justify-between px-4 py-1">
+                <CardTitle className="text-xs font-medium">Total</CardTitle>
+                <Wallet className="h-3.5 w-3.5 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
-                <div className={`text-2xl font-bold ${totals.grandTotal < 0 ? 'text-destructive' : ''}`}>
+              <CardContent className="px-4 py-1">
+                <div className={`text-lg font-bold ${totals.grandTotal < 0 ? 'text-destructive' : ''}`}>
                   {formatPrecio(totals.grandTotal)}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {citas.length} cobro{citas.length !== 1 ? 's' : ''} + {movimientos.length} movimiento{movimientos.length !== 1 ? 's' : ''}
+                <p className="text-[11px] text-muted-foreground">
+                  {citas.length} cobro{citas.length !== 1 ? 's' : ''} + {movimientos.length} mov{movimientos.length !== 1 ? 's' : ''}
                 </p>
               </CardContent>
             </Card>
