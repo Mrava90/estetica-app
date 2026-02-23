@@ -266,9 +266,9 @@ export default function CajaDiariaPage() {
             <CardHeader>
               <CardTitle className="text-base">Cobros del día</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 max-h-[45vh] overflow-y-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead>Hora</TableHead>
                     <TableHead>Cliente</TableHead>
