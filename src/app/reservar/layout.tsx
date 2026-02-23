@@ -12,7 +12,7 @@ export default function ReservarLayout({ children }: { children: React.ReactNode
         style={{ backgroundImage: "url('/foto-salon.jpg')" }}
       />
       {/* Overlay for readability */}
-      <div className="fixed inset-0 bg-gradient-to-b from-fuchsia-200/85 via-pink-50/90 to-white/95" />
+      <div className="fixed inset-0 bg-gradient-to-b from-black/40 via-black/30 to-white/80" />
 
       {/* Content */}
       <div className="relative z-10">
