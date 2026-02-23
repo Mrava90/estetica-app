@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
         citas: result.citasCount,
         movimientos: result.movimientosCount,
       },
+      skipped: {
+        citas: result.citasSkipped,
+        movimientos: result.movimientosSkipped,
+      },
       errors: result.errors.length > 0 ? result.errors : undefined,
       timestamp: new Date().toISOString(),
     })

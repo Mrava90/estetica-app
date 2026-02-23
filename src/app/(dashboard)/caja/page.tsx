@@ -128,6 +128,7 @@ export default function CajaDiariaPage() {
       monto,
       tipo: newTipo,
       descripcion: newDescripcion.trim(),
+      origen: 'manual',
     })
 
     if (error) {

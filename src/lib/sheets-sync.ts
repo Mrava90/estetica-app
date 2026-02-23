@@ -26,6 +26,8 @@ interface MovimientoInsert {
 export interface SyncResult {
   citasCount: number
   movimientosCount: number
+  citasSkipped: number
+  movimientosSkipped: number
   errors: string[]
 }
 
@@ -276,6 +278,41 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     ...kwResult.comisiones,
   ]
 
+  // 4. Deduplication: fetch existing non-sheets data to avoid duplicates
+  const [existingCitasRes, existingMovsRes] = await Promise.all([
+    supabase
+      .from('citas')
+      .select('fecha_inicio, profesional_id, precio_cobrado')
+      .neq('origen', 'sheets')
+      .eq('status', 'completada'),
+    supabase
+      .from('movimientos_caja')
+      .select('fecha, monto, tipo')
+      .neq('origen', 'sheets'),
+  ])
+  const existingCitas = existingCitasRes.data || []
+  const existingMovs = existingMovsRes.data || []
+
+  // Filter out sheet records that already exist as manual/online entries
+  const dedupedCitas = allCitas.filter((cita) => {
+    const citaDate = cita.fecha_inicio.slice(0, 10)
+    return !existingCitas.some((e) => {
+      const eDate = e.fecha_inicio.slice(0, 10)
+      const eMonto = e.precio_cobrado || 0
+      const tolerance = cita.precio_cobrado > 0 ? Math.abs(eMonto - cita.precio_cobrado) / cita.precio_cobrado : 0
+      return eDate === citaDate && e.profesional_id === cita.profesional_id && tolerance < 0.05
+    })
+  })
+
+  const dedupedMovs = allMovimientos.filter((mov) => {
+    return !existingMovs.some((e) =>
+      e.fecha === mov.fecha && e.monto === mov.monto && e.tipo === mov.tipo
+    )
+  })
+
+  const citasSkipped = allCitas.length - dedupedCitas.length
+  const movsSkipped = allMovimientos.length - dedupedMovs.length
+
   // 5. Delete old sheet-synced data
   const { error: delCitasErr } = await supabase.from('citas').delete().eq('origen', 'sheets')
   if (delCitasErr) errors.push(`Error deleting citas: ${delCitasErr.message}`)
@@ -283,12 +320,12 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   const { error: delMovsErr } = await supabase.from('movimientos_caja').delete().eq('origen', 'sheets')
   if (delMovsErr) errors.push(`Error deleting movimientos: ${delMovsErr.message}`)
 
-  // 6. Insert new data in batches
+  // 6. Insert deduplicated data in batches
   let citasInserted = 0
   let movsInserted = 0
 
-  for (let i = 0; i < allCitas.length; i += 500) {
-    const chunk = allCitas.slice(i, i + 500)
+  for (let i = 0; i < dedupedCitas.length; i += 500) {
+    const chunk = dedupedCitas.slice(i, i + 500)
     const { error } = await supabase.from('citas').insert(chunk)
     if (error) {
       errors.push(`Error inserting citas batch ${i}: ${error.message}`)
@@ -297,8 +334,8 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     }
   }
 
-  for (let i = 0; i < allMovimientos.length; i += 500) {
-    const chunk = allMovimientos.slice(i, i + 500)
+  for (let i = 0; i < dedupedMovs.length; i += 500) {
+    const chunk = dedupedMovs.slice(i, i + 500)
     const { error } = await supabase.from('movimientos_caja').insert(chunk)
     if (error) {
       errors.push(`Error inserting movimientos batch ${i}: ${error.message}`)
@@ -310,6 +347,8 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   return {
     citasCount: citasInserted,
     movimientosCount: movsInserted,
+    citasSkipped,
+    movimientosSkipped: movsSkipped,
     errors,
   }
 }
