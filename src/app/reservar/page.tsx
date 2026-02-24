@@ -156,14 +156,21 @@ export default function ReservarPage() {
         </div>
       )}
 
-      {/* Continue button */}
-      <button
-        onClick={handleContinue}
-        disabled={!selectedServicio}
-        className="w-full rounded-xl bg-black py-4 text-center text-base font-semibold text-white transition-all hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
-      >
-        Continuar
-      </button>
+      {/* Spacer for sticky button */}
+      <div className="h-20" />
+
+      {/* Sticky continue button */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/60 to-transparent px-4 pb-5 pt-8">
+        <div className="mx-auto max-w-2xl">
+          <button
+            onClick={handleContinue}
+            disabled={!selectedServicio}
+            className="w-full rounded-xl bg-black py-4 text-center text-base font-semibold text-white transition-all hover:bg-gray-900 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg"
+          >
+            Continuar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
