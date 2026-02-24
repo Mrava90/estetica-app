@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Servicio, Profesional } from '@/types/database'
@@ -16,7 +16,6 @@ export default function ReservarPage() {
   const [selectedServicio, setSelectedServicio] = useState<string | null>(null)
   const [selectedProfesional, setSelectedProfesional] = useState<string | null>(null)
   const [filteredProfs, setFilteredProfs] = useState<Profesional[]>([])
-  const profSectionRef = useRef<HTMLDivElement>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -80,10 +79,7 @@ export default function ReservarPage() {
         {servicios.map((s) => (
           <button
             key={s.id}
-            onClick={() => {
-              setSelectedServicio(s.id)
-              setTimeout(() => profSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
-            }}
+            onClick={() => setSelectedServicio(s.id)}
             className={`w-full rounded-xl border bg-white p-4 text-left transition-all ${
               selectedServicio === s.id
                 ? 'border-fuchsia-500 ring-2 ring-fuchsia-500/20 shadow-md'
@@ -126,7 +122,7 @@ export default function ReservarPage() {
 
       {/* Professional selection */}
       {selectedServicio && (
-        <div ref={profSectionRef} className="space-y-3 animate-in slide-in-from-bottom-2 fade-in-0 duration-300">
+        <div className="space-y-3 animate-in slide-in-from-bottom-2 fade-in-0 duration-300">
           <h2 className="text-lg font-semibold text-white drop-shadow-md">Profesional (opcional)</h2>
           <div className="flex flex-wrap gap-2">
             <button
