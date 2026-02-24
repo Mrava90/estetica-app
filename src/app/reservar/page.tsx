@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Servicio, Profesional } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
 import { NailIcon } from '@/components/reservar/ReservarHeader'
-import { Clock, Banknote, ChevronRight, ArrowLeft } from 'lucide-react'
+import { Clock, Banknote, ChevronRight, ArrowLeft, Search } from 'lucide-react'
 import Image from 'next/image'
 
 export default function ReservarPage() {
@@ -17,6 +17,7 @@ export default function ReservarPage() {
   const [selectedProfesional, setSelectedProfesional] = useState<string | null>(null)
   const [filteredProfs, setFilteredProfs] = useState<Profesional[]>([])
   const [categoria, setCategoria] = useState<string>('todos')
+  const [busqueda, setBusqueda] = useState('')
   const supabase = createClient()
 
   const categorias = [
@@ -36,9 +37,11 @@ export default function ReservarPage() {
     return 'otros'
   }
 
-  const filteredServicios = categoria === 'todos'
-    ? servicios
-    : servicios.filter((s) => getCategoria(s.nombre) === categoria)
+  const filteredServicios = servicios.filter((s) => {
+    if (categoria !== 'todos' && getCategoria(s.nombre) !== categoria) return false
+    if (busqueda && !s.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+    return true
+  })
 
   useEffect(() => {
     async function fetchData() {
@@ -120,6 +123,18 @@ export default function ReservarPage() {
                 {c.label}
               </button>
             ))}
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar servicio..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full rounded-xl border border-white/30 bg-white/90 backdrop-blur-sm py-2.5 pl-10 pr-4 text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20"
+            />
           </div>
 
           {/* Service cards */}
