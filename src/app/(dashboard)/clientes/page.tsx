@@ -107,6 +107,7 @@ export default function ClientesPage() {
               <TableRow>
                 <TableHead>Nombre</TableHead>
                 <TableHead>Teléfono</TableHead>
+                <TableHead>DNI</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Desde</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -115,7 +116,7 @@ export default function ClientesPage() {
             <TableBody>
               {clientes.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {search ? 'No se encontraron clientes' : 'No hay clientes registrados'}
                   </TableCell>
                 </TableRow>
@@ -124,6 +125,7 @@ export default function ClientesPage() {
                 <TableRow key={c.id}>
                   <TableCell className="font-medium">{c.nombre}</TableCell>
                   <TableCell>{c.telefono}</TableCell>
+                  <TableCell>{c.dni || '-'}</TableCell>
                   <TableCell>{c.email || '-'}</TableCell>
                   <TableCell>{formatFechaCorta(c.created_at)}</TableCell>
                   <TableCell className="text-right">

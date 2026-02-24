@@ -8,6 +8,7 @@ export const loginSchema = z.object({
 export const clienteSchema = z.object({
   nombre: z.string().min(2, 'Nombre requerido'),
   telefono: z.string().min(8, 'Teléfono inválido'),
+  dni: z.string().optional().or(z.literal('')),
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   notas: z.string().optional(),
 })

@@ -37,6 +37,7 @@ export interface Cliente {
   id: string
   nombre: string
   telefono: string
+  dni: string | null
   email: string | null
   notas: string | null
   created_at: string

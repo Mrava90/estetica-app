@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Plus, Pencil, Banknote, Smartphone } from 'lucide-react'
+import { Plus, Pencil, Banknote, Smartphone, Upload, Download } from 'lucide-react'
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([])
@@ -25,6 +25,7 @@ export default function ServiciosPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [selectedProfs, setSelectedProfs] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
   const supabase = createClient()
 
   const {
@@ -144,14 +145,70 @@ export default function ServiciosPage() {
     }
   }
 
+  async function handleDownload() {
+    const a = document.createElement('a')
+    a.href = '/api/servicios'
+    a.download = 'Servicios.xlsx'
+    a.click()
+  }
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res = await fetch('/api/servicios', { method: 'POST', body: form })
+      const result = await res.json()
+      if (!res.ok) {
+        toast.error(result.error || 'Error al subir archivo')
+        return
+      }
+      const msgs: string[] = []
+      if (result.created > 0) msgs.push(`${result.created} creados`)
+      if (result.updated > 0) msgs.push(`${result.updated} actualizados`)
+      if (result.skipped > 0) msgs.push(`${result.skipped} omitidos`)
+      toast.success(msgs.join(', ') || 'Sin cambios')
+      if (result.errors?.length > 0) {
+        result.errors.forEach((err: string) => toast.error(err))
+      }
+      fetchServicios()
+    } catch {
+      toast.error('Error al procesar archivo')
+    } finally {
+      setUploading(false)
+      e.target.value = ''
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Servicios</h1>
-        <Button onClick={openNew} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nuevo servicio
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleDownload} className="gap-1.5">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Descargar</span>
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5 relative" disabled={uploading} asChild>
+            <label>
+              <Upload className="h-4 w-4" />
+              <span className="hidden sm:inline">{uploading ? 'Subiendo...' : 'Subir Excel'}</span>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={handleUpload}
+                disabled={uploading}
+              />
+            </label>
+          </Button>
+          <Button onClick={openNew} className="gap-2">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Nuevo servicio</span>
+          </Button>
+        </div>
       </div>
 
       <Card>

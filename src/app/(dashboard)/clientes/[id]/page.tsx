@@ -43,6 +43,7 @@ export default function ClienteDetailPage() {
       reset({
         nombre: data.nombre,
         telefono: data.telefono,
+        dni: data.dni || '',
         email: data.email || '',
         notas: data.notas || '',
       })
@@ -64,7 +65,7 @@ export default function ClienteDetailPage() {
     try {
       const { error } = await supabase
         .from('clientes')
-        .update({ ...data, email: data.email || null, notas: data.notas || null, updated_at: new Date().toISOString() })
+        .update({ ...data, dni: data.dni || null, email: data.email || null, notas: data.notas || null, updated_at: new Date().toISOString() })
         .eq('id', params.id)
       if (error) throw error
       toast.success('Cliente actualizado')
@@ -104,6 +105,10 @@ export default function ClienteDetailPage() {
                 <Label>Teléfono</Label>
                 <Input {...register('telefono')} type="tel" />
                 {errors.telefono && <p className="text-sm text-destructive">{errors.telefono.message}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <Label>DNI</Label>
+                <Input {...register('dni')} placeholder="Opcional" />
               </div>
               <div className="space-y-1.5">
                 <Label>Email</Label>
