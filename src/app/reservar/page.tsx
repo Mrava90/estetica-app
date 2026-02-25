@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { Servicio, Profesional } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
-import { NailIcon } from '@/components/reservar/ReservarHeader'
 import { Clock, Banknote, ChevronRight, ArrowLeft, Search } from 'lucide-react'
 import Image from 'next/image'
 
@@ -35,6 +34,13 @@ export default function ReservarPage() {
     if (n.includes('pies') || n.includes('belleza de pie')) return 'pies'
     if (n.includes('manos') || n.includes('kapping') || n.includes('semi') || n.includes('esmaltado') || n.includes('remocion') || n.includes('acrilico') || n.includes('gel')) return 'manos'
     return 'otros'
+  }
+
+  const categoriaIcon: Record<string, string> = {
+    manos: '/icons/mano.jpg',
+    pies: '/icons/pies.jpg',
+    pestanas: '/icons/pestana.jpg',
+    cejas: '/icons/ceja.jpg',
   }
 
   const filteredServicios = servicios.filter((s) => {
@@ -146,8 +152,14 @@ export default function ReservarPage() {
               className="w-full rounded-xl border border-gray-900 bg-white p-4 text-left transition-all hover:border-fuchsia-500 hover:shadow-sm"
             >
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-100 text-fuchsia-600">
-                  <NailIcon className="h-5 w-5" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-50 overflow-hidden">
+                  <Image
+                    src={categoriaIcon[getCategoria(s.nombre)] || '/icons/mano.jpg'}
+                    alt={getCategoria(s.nombre)}
+                    width={32}
+                    height={32}
+                    className="h-8 w-8 object-contain"
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 truncate">{s.nombre}</h3>
@@ -186,8 +198,14 @@ export default function ReservarPage() {
             className="flex items-center gap-3 w-full rounded-xl border border-fuchsia-500 bg-white p-4 text-left ring-2 ring-fuchsia-500/20 shadow-md"
           >
             <ArrowLeft className="h-4 w-4 shrink-0 text-fuchsia-500" />
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-500 text-white">
-              <NailIcon className="h-5 w-5" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-100 overflow-hidden">
+              <Image
+                src={categoriaIcon[getCategoria(selectedServ?.nombre || '')] || '/icons/mano.jpg'}
+                alt={getCategoria(selectedServ?.nombre || '')}
+                width={32}
+                height={32}
+                className="h-8 w-8 object-contain"
+              />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-gray-900 truncate">{selectedServ?.nombre}</h3>
