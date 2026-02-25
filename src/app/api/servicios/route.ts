@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // GET = download servicios as Excel
 export async function GET() {
+  const supabase = getSupabase()
   const { data: servicios, error } = await supabase
     .from('servicios')
     .select('*')
@@ -54,6 +57,7 @@ export async function GET() {
 
 // POST = upload Excel to upsert servicios
 export async function POST(req: NextRequest) {
+  const supabase = getSupabase()
   const formData = await req.formData()
   const file = formData.get('file') as File | null
 
