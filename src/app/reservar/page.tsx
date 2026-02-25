@@ -109,7 +109,7 @@ export default function ReservarPage() {
       {!selectedServicio && (
         <div className="space-y-4">
           {/* Category filter */}
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="flex flex-wrap justify-center gap-2">
             {categorias.map((c) => (
               <button
                 key={c.key}
