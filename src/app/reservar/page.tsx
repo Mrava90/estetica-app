@@ -43,11 +43,17 @@ export default function ReservarPage() {
     cejas: '/icons/ceja.jpg',
   }
 
-  const filteredServicios = servicios.filter((s) => {
-    if (categoria !== 'todos' && getCategoria(s.nombre) !== categoria) return false
-    if (busqueda && !s.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
-    return true
-  })
+  const filteredServicios = servicios
+    .filter((s) => {
+      if (categoria !== 'todos' && getCategoria(s.nombre) !== categoria) return false
+      if (busqueda && !s.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+      return true
+    })
+    .sort((a, b) => {
+      const aStart = /^[23]d\b/i.test(a.nombre) ? 1 : 0
+      const bStart = /^[23]d\b/i.test(b.nombre) ? 1 : 0
+      return aStart - bStart
+    })
 
   useEffect(() => {
     async function fetchData() {
