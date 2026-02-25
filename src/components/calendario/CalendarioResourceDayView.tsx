@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useEffect, useRef, useState } from 'react'
-import type { CitaConRelaciones, Profesional, Bloqueo } from '@/types/database'
+import type { CitaConRelaciones, Profesional, Bloqueo, Horario } from '@/types/database'
 import { STATUS_COLORS } from '@/lib/constants'
 
 const HORA_INICIO = 8
@@ -14,6 +14,7 @@ interface Props {
   citas: CitaConRelaciones[]
   profesionales: Profesional[]
   bloqueos?: Bloqueo[]
+  horarios?: Record<string, Horario[]>
   onSlotClick: (profesionalId: string, start: Date, end: Date) => void
   onCitaClick: (cita: CitaConRelaciones) => void
   onBloqueoClick?: (bloqueo: Bloqueo) => void
@@ -25,6 +26,7 @@ export function CalendarioResourceDayView({
   citas,
   profesionales,
   bloqueos = [],
+  horarios = {},
   onSlotClick,
   onCitaClick,
   onBloqueoClick,
@@ -195,6 +197,59 @@ export function CalendarioResourceDayView({
 
   const totalHeight = (HORA_FIN - HORA_INICIO) * HORA_HEIGHT
 
+  // Availability helpers
+  const toMin = (t: string) => {
+    const [h, m] = t.split(':').map(Number)
+    return h * 60 + m
+  }
+  const fromMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+
+  function getAvailability(profId: string) {
+    const profHorarios = horarios[profId] || []
+    const diaSemana = fecha.getDay()
+    const horarioHoy = profHorarios.find((h) => h.dia_semana === diaSemana)
+    if (!horarioHoy) return null
+
+    const profCitas = citasPorProfesional.get(profId) || []
+    const profBloqs = bloqueosPorProfesional.get(profId) || []
+
+    const workStart = toMin(horarioHoy.hora_inicio)
+    const workEnd = toMin(horarioHoy.hora_fin)
+
+    const occupied = [
+      ...profCitas.map((c) => {
+        const s = new Date(c.fecha_inicio)
+        const e = new Date(c.fecha_fin)
+        return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
+      }),
+      ...profBloqs.map((b) => {
+        const s = new Date(b.fecha_inicio)
+        const e = new Date(b.fecha_fin)
+        return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
+      }),
+    ].sort((a, b) => a.start - b.start)
+
+    const freeSlots: { start: number; end: number }[] = []
+    let cursor = workStart
+
+    if (isToday) {
+      const nowRounded = Math.ceil(nowMinutes / 30) * 30
+      if (nowRounded > cursor) cursor = nowRounded
+    }
+
+    for (const occ of occupied) {
+      if (occ.start > cursor) freeSlots.push({ start: cursor, end: occ.start })
+      if (occ.end > cursor) cursor = occ.end
+    }
+    if (cursor < workEnd) freeSlots.push({ start: cursor, end: workEnd })
+
+    return {
+      workStart,
+      workEnd,
+      freeSlots: freeSlots.filter((s) => s.end - s.start >= 30),
+    }
+  }
+
   return (
     <div className="rounded-lg border bg-card overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 200px)' }}>
       {/* Header with professional columns */}
@@ -202,11 +257,32 @@ export function CalendarioResourceDayView({
         <div className="w-14 shrink-0 border-r" />
         {profesionales.map((prof) => {
           const count = citasPorProfesional.get(prof.id)?.length || 0
+          const avail = getAvailability(prof.id)
           return (
             <div
               key={prof.id}
-              className="flex-1 min-w-[140px] px-2 py-2.5 text-center border-r last:border-r-0"
+              className="flex-1 min-w-[140px] px-2 py-1.5 text-center border-r last:border-r-0"
             >
+              {/* Availability line */}
+              <div className="flex items-center justify-center gap-1 mb-0.5">
+                {avail ? (
+                  <>
+                    <span className="text-[10px] text-muted-foreground">{fromMin(avail.workStart)}-{fromMin(avail.workEnd)}</span>
+                    {avail.freeSlots.length === 0 ? (
+                      <span className="text-[10px] text-red-500">Sin disp.</span>
+                    ) : (
+                      avail.freeSlots.map((s, i) => (
+                        <span key={i} className="text-[10px] text-green-600 dark:text-green-400">
+                          {fromMin(s.start)}-{fromMin(s.end)}
+                        </span>
+                      ))
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground/60 italic">No trabaja</span>
+                )}
+              </div>
+              {/* Name + count */}
               <div className="flex items-center justify-center gap-1.5">
                 <span
                   className="inline-block h-6 w-6 rounded-full shrink-0"

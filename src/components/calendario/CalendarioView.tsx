@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { format, addDays, subDays, parseISO } from 'date-fns'
+import { format, addDays, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
 import type { CitaConRelaciones, Profesional, Horario, Bloqueo } from '@/types/database'
@@ -11,7 +11,7 @@ import { BloqueoDialog } from './BloqueoDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, CalendarDays, Clock, ChevronDown, Ban } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Ban } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 
@@ -25,7 +25,6 @@ export function CalendarioView() {
   const [selectedDate, setSelectedDate] = useState<{ start: Date; end: Date } | null>(null)
   const [selectedProfesionalId, setSelectedProfesionalId] = useState<string | null>(null)
   const [calendarOpen, setCalendarOpen] = useState(false)
-  const [horariosOpen, setHorariosOpen] = useState(false)
   const [horarios, setHorarios] = useState<Record<string, Horario[]>>({})
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
   const [modoBloqueo, setModoBloqueo] = useState(false)
@@ -165,13 +164,6 @@ export function CalendarioView() {
 
   const profNombre = profesionales.find((p) => p.id === selectedProfesionalId)?.nombre || ''
 
-  // Availability panel helpers
-  const toMin = (t: string) => {
-    const [h, m] = t.split(':').map(Number)
-    return h * 60 + m
-  }
-  const fromMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-
   return (
     <div className="space-y-3">
       {/* Date navigation + availability + filters */}
@@ -204,16 +196,6 @@ export function CalendarioView() {
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
-            variant={horariosOpen ? 'default' : 'outline'}
-            size="sm"
-            className="ml-1 gap-1.5 text-xs"
-            onClick={() => setHorariosOpen(!horariosOpen)}
-          >
-            <Clock className="h-3.5 w-3.5" />
-            Horarios
-            <ChevronDown className={`h-3 w-3 transition-transform ${horariosOpen ? 'rotate-180' : ''}`} />
-          </Button>
-          <Button
             variant={modoBloqueo ? 'destructive' : 'outline'}
             size="sm"
             className="gap-1.5 text-xs"
@@ -242,99 +224,6 @@ export function CalendarioView() {
         </div>
       )}
 
-      {/* Availability panel - free slots */}
-      {horariosOpen && (
-        <div className="rounded-lg border bg-card p-3 animate-in slide-in-from-top-2 fade-in-0 duration-200">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {profesionales.map((prof) => {
-              const profHorarios = horarios[prof.id] || []
-              const diaSemana = fecha.getDay()
-              const horarioHoy = profHorarios.find((h) => h.dia_semana === diaSemana)
-
-              if (!horarioHoy) {
-                return (
-                  <div key={prof.id} className="flex items-start gap-2">
-                    <div className="h-3 w-3 rounded-full shrink-0 mt-1" style={{ backgroundColor: prof.color }} />
-                    <div className="text-sm">
-                      <span className="font-medium">{prof.nombre}</span>
-                      <span className="ml-1.5 text-muted-foreground/60 italic">No trabaja</span>
-                    </div>
-                  </div>
-                )
-              }
-
-              // Get this prof's citas + bloqueos for the selected day
-              const fechaStr = format(fecha, 'yyyy-MM-dd')
-              const profCitas = citas
-                .filter((c) => c.profesional_id === prof.id && c.fecha_inicio.startsWith(fechaStr))
-                .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
-              const profBloqueos = bloqueos
-                .filter((b) => b.profesional_id === prof.id && b.fecha_inicio.startsWith(fechaStr))
-
-              const workStart = toMin(horarioHoy.hora_inicio)
-              const workEnd = toMin(horarioHoy.hora_fin)
-
-              // Build occupied ranges from citas + bloqueos
-              const occupied: { start: number; end: number }[] = [
-                ...profCitas.map((c) => {
-                  const s = parseISO(c.fecha_inicio)
-                  const e = parseISO(c.fecha_fin)
-                  return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
-                }),
-                ...profBloqueos.map((b) => {
-                  const s = parseISO(b.fecha_inicio)
-                  const e = parseISO(b.fecha_fin)
-                  return { start: s.getHours() * 60 + s.getMinutes(), end: e.getHours() * 60 + e.getMinutes() }
-                }),
-              ].sort((a, b) => a.start - b.start)
-
-              // Find free gaps
-              const freeSlots: { start: number; end: number }[] = []
-              let cursor = workStart
-
-              if (isToday) {
-                const now = new Date()
-                const nowMin = now.getHours() * 60 + now.getMinutes()
-                const rounded = Math.ceil(nowMin / 30) * 30
-                if (rounded > cursor) cursor = rounded
-              }
-
-              for (const occ of occupied) {
-                if (occ.start > cursor) {
-                  freeSlots.push({ start: cursor, end: occ.start })
-                }
-                if (occ.end > cursor) cursor = occ.end
-              }
-              if (cursor < workEnd) {
-                freeSlots.push({ start: cursor, end: workEnd })
-              }
-
-              const validSlots = freeSlots.filter((s) => s.end - s.start >= 30)
-
-              return (
-                <div key={prof.id} className="flex items-start gap-2">
-                  <div className="h-3 w-3 rounded-full shrink-0 mt-1" style={{ backgroundColor: prof.color }} />
-                  <div className="text-sm">
-                    <span className="font-medium">{prof.nombre}</span>
-                    {validSlots.length === 0 ? (
-                      <span className="ml-1.5 text-red-500 text-xs">Sin disponibilidad</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
-                        {validSlots.map((s, i) => (
-                          <span key={i} className="text-xs text-green-600 dark:text-green-400">
-                            {fromMin(s.start)}-{fromMin(s.end)}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Resource day view */}
       {filteredProfesionales.length > 0 ? (
         <CalendarioResourceDayView
@@ -342,6 +231,7 @@ export function CalendarioView() {
           citas={citas}
           profesionales={filteredProfesionales}
           bloqueos={bloqueos}
+          horarios={horarios}
           onSlotClick={handleSlotClick}
           onCitaClick={handleCitaClick}
           onBloqueoClick={handleBloqueoClick}
