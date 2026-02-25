@@ -267,7 +267,7 @@ export function CalendarioResourceDayView({
               <div className="flex items-center justify-center gap-1 mb-0.5">
                 {avail ? (
                   <>
-                    <span className="text-[10px] text-muted-foreground">{fromMin(avail.workStart)}-{fromMin(avail.workEnd)}</span>
+                    <span className="text-[10px] text-muted-foreground">Disponible:</span>
                     {avail.freeSlots.length === 0 ? (
                       <span className="text-[10px] text-red-500">Sin disp.</span>
                     ) : (
