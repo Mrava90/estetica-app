@@ -57,7 +57,7 @@ export default function CajaDiariaPage() {
         .select('*, clientes(*), profesionales(*), servicios(*)')
         .gte('fecha_inicio', dayStart)
         .lt('fecha_inicio', dayEnd)
-        .eq('status', 'completada')
+        .in('status', ['confirmada', 'completada'])
         .order('fecha_inicio'),
       supabase
         .from('movimientos_caja')

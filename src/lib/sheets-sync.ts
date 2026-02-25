@@ -284,7 +284,7 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
       .from('citas')
       .select('fecha_inicio, profesional_id, precio_cobrado')
       .neq('origen', 'sheets')
-      .eq('status', 'completada'),
+      .in('status', ['confirmada', 'completada']),
     supabase
       .from('movimientos_caja')
       .select('fecha, monto, tipo')

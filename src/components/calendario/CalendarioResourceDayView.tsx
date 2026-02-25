@@ -288,7 +288,7 @@ export function CalendarioResourceDayView({
                   className="inline-block h-6 w-6 rounded-full shrink-0"
                   style={{ backgroundColor: prof.color }}
                 />
-                <span className="text-sm font-medium truncate">{prof.nombre}</span>
+                <span className="text-base font-semibold truncate">{prof.nombre}</span>
                 {count > 0 && (
                   <span
                     className="inline-flex items-center justify-center h-5 min-w-[20px] rounded-full text-[10px] font-bold text-white px-1 shrink-0"
