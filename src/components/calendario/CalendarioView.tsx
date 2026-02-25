@@ -10,6 +10,7 @@ import { CitaDialog } from './CitaDialog'
 import { BloqueoDialog } from './BloqueoDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import { ChevronLeft, ChevronRight, CalendarDays, Clock, ChevronDown, Ban } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
@@ -123,6 +124,23 @@ export function CalendarioView() {
     setSelectedBloqueo(bloqueo)
     setSelectedProfesionalId(bloqueo.profesional_id)
     setBloqueoDialogOpen(true)
+  }
+
+  async function handleCitaDrop(citaId: string, newStart: Date, newEnd: Date) {
+    const { error } = await supabase
+      .from('citas')
+      .update({
+        fecha_inicio: newStart.toISOString(),
+        fecha_fin: newEnd.toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', citaId)
+    if (error) {
+      toast.error('Error al mover la cita')
+    } else {
+      toast.success('Cita movida')
+      fetchData()
+    }
   }
 
   function handleDialogClose() {
@@ -327,6 +345,7 @@ export function CalendarioView() {
           onSlotClick={handleSlotClick}
           onCitaClick={handleCitaClick}
           onBloqueoClick={handleBloqueoClick}
+          onCitaDrop={handleCitaDrop}
         />
       ) : (
         <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
