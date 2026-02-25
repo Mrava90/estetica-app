@@ -109,12 +109,12 @@ export default function ReservarPage() {
       {!selectedServicio && (
         <div className="space-y-4">
           {/* Category filter */}
-          <div className="flex flex-wrap justify-center gap-2">
+          <div className="flex justify-center gap-1.5">
             {categorias.map((c) => (
               <button
                 key={c.key}
                 onClick={() => setCategoria(c.key)}
-                className={`shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-all ${
                   categoria === c.key
                     ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-lg scale-105'
                     : 'border-white/50 bg-white/80 text-gray-700 shadow-sm hover:bg-white'
