@@ -147,9 +147,8 @@ function parseAppointmentSheet(
   rows: string[][],
   sheetName: 'SSR' | 'KW',
   profMap: Record<string, string>,
-): { citas: CitaInsert[]; comisiones: MovimientoInsert[] } {
+): { citas: CitaInsert[] } {
   const citas: CitaInsert[] = []
-  const comisiones: MovimientoInsert[] = []
   let currentDate: string | null = null
   const dailyCount: Record<string, number> = {}
 
@@ -159,17 +158,16 @@ function parseAppointmentSheet(
     if (!row || row.length < 6) continue
 
     const dateVal = row[0] || ''
-    const clientName = row[1]?.trim()
-    const serviceName = row[2]?.trim()
+    const clientName = row[1]?.trim() || ''
+    const serviceName = row[2]?.trim() || ''
     const entryAmount = parseAmount(row[4] || '') // ENTRADA column (E)
     const paymentMethod = row[5]?.trim()
     const professional = row[6]?.trim()
-    const comisionAmount = parseAmount(row[8] || '') // Comisión $ column (I)
 
     const parsedDate = parseSheetDate(dateVal)
     if (parsedDate) currentDate = parsedDate
 
-    if (!currentDate || !clientName || entryAmount <= 0) continue
+    if (!currentDate || entryAmount <= 0) continue
 
     if (!dailyCount[currentDate]) dailyCount[currentDate] = 0
     dailyCount[currentDate]++
@@ -189,20 +187,9 @@ function parseAppointmentSheet(
       origen: 'sheets',
       cliente_id: null,
     })
-
-    // Commission per appointment (col I = Comisión $)
-    if (comisionAmount > 0) {
-      comisiones.push({
-        fecha: currentDate,
-        monto: -comisionAmount, // negative = expense
-        tipo: 'efectivo',
-        descripcion: `Comisión: ${professional || 'Sin asignar'} - ${clientName}`,
-        origen: 'sheets',
-      })
-    }
   }
 
-  return { citas, comisiones }
+  return { citas }
 }
 
 function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
@@ -272,11 +259,7 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   const ssrResult = parseAppointmentSheet(ssrRows, 'SSR', profMap)
   const kwResult = parseAppointmentSheet(kwRows, 'KW', profMap)
   const allCitas = [...ssrResult.citas, ...kwResult.citas]
-  const allMovimientos = [
-    ...parseGastosSheet(gastosRows),
-    ...ssrResult.comisiones,
-    ...kwResult.comisiones,
-  ]
+  const allMovimientos = parseGastosSheet(gastosRows)
 
   // 4. Deduplication: fetch existing non-sheets data to avoid duplicates
   const [existingCitasRes, existingMovsRes] = await Promise.all([
