@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 
@@ -29,6 +30,7 @@ function NailIcon({ className }: { className?: string }) {
 export { NailIcon }
 
 export function ReservarHeader() {
+  const router = useRouter()
   const [nombreSalon, setNombreSalon] = useState('Ka Wirth Ballester')
 
   useEffect(() => {
@@ -42,7 +44,10 @@ export function ReservarHeader() {
 
   return (
     <header className="bg-[#1C1C2E]">
-      <div className="mx-auto max-w-2xl px-4 py-4 flex items-center gap-3">
+      <div
+        className="mx-auto max-w-2xl px-4 py-4 flex items-center gap-3 cursor-pointer"
+        onClick={() => router.push('/reservar')}
+      >
         <Image
           src="/logo-kawirth.png"
           alt="Ka Wirth"
