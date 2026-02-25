@@ -92,19 +92,17 @@ export default function ContabilidadPage() {
         return d === `${year}-${monthStr}`
       })
 
-      const comisiones = monthMovs
-        .filter((m) => m.descripcion.startsWith('Comisión:') || m.descripcion.startsWith('Adelanto comision:'))
-        .reduce((sum, m) => sum + m.monto, 0)
-
+      // Only "Gasto local" counts for contabilidad
+      // "Adelanto comisión" = affects caja only (commissions are monthly)
+      // "Gasto personal" = affects caja only (owner withdrawals, returned at month end)
       const gastosLocal = monthMovs
         .filter((m) => m.descripcion.startsWith('Gasto local:'))
         .reduce((sum, m) => sum + m.monto, 0)
 
-      const gastosPersonal = monthMovs
-        .filter((m) => m.descripcion.startsWith('Gasto personal:'))
-        .reduce((sum, m) => sum + m.monto, 0)
+      const comisiones = 0 // TODO: calculate from liquidación sheet data
+      const gastosPersonal = 0 // excluded from contabilidad
 
-      const resultado = ventasBrutas + comisiones + gastosLocal + gastosPersonal
+      const resultado = ventasBrutas + gastosLocal
       const margen = ventasBrutas > 0 ? (resultado / ventasBrutas) * 100 : 0
 
       return {
