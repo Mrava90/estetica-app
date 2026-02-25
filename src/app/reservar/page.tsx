@@ -107,7 +107,8 @@ export default function ReservarPage() {
           alt="Ka Wirth"
           width={48}
           height={48}
-          className="inline-block h-12 w-12 rounded-full object-cover mb-3"
+          onClick={() => { setSelectedServicio(null); setSelectedProfesional(null); setCategoria('todos'); setBusqueda('') }}
+          className="inline-block h-12 w-12 rounded-full object-cover mb-3 cursor-pointer"
         />
         <h1 className="text-2xl font-bold text-white drop-shadow-md">
           {selectedServicio ? 'Elegir profesional' : 'Elegir servicio'}
