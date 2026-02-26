@@ -102,11 +102,11 @@ export default function CajaDiariaPage() {
 
       for (const mov of (movsRes.data || [])) {
         if (mov.descripcion.startsWith('Comisión:')) continue
-        if (mov.monto >= 0) continue // solo gastos (negativos)
+        // monto < 0: gasto (resta), monto > 0: crédito/conversión (suma)
         if (mov.tipo === 'mercadopago') {
-          gastosMercadopago += Math.abs(mov.monto)
+          gastosMercadopago -= mov.monto  // resta gasto o suma crédito
         } else {
-          gastosEfectivo += Math.abs(mov.monto)
+          gastosEfectivo -= mov.monto
         }
       }
 
