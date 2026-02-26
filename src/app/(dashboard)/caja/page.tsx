@@ -61,7 +61,7 @@ export default function CajaDiariaPage() {
 
   const supabase = createClient()
 
-  // Fetch admin check + monthly available balance (acumulado del mes)
+  // Fetch admin check + monthly balance from Resumen caja diaria sheet
   useEffect(() => {
     async function fetchAdminStats() {
       const { data: userData } = await supabase.auth.getUser()
@@ -69,51 +69,12 @@ export default function CajaDiariaPage() {
       setIsAdmin(true)
 
       const now = new Date()
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
-
-      const [citasRes, movsRes] = await Promise.all([
-        supabase
-          .from('citas')
-          .select('precio_cobrado, metodo_pago')
-          .eq('status', 'completada')
-          .gt('precio_cobrado', 0)
-          .gte('fecha_inicio', `${monthStart}T00:00:00`)
-          .lt('fecha_inicio', monthEnd),
-        supabase
-          .from('movimientos_caja')
-          .select('monto, tipo, descripcion')
-          .gte('fecha', monthStart),
-      ])
-
-      let ingresosEfectivo = 0
-      let ingresosMercadopago = 0
-      let gastosEfectivo = 0
-      let gastosMercadopago = 0
-
-      for (const cita of (citasRes.data || [])) {
-        // transferencia va junto con mercadopago (igual que en la columna C del Sheet)
-        if (cita.metodo_pago === 'mercadopago' || cita.metodo_pago === 'transferencia') {
-          ingresosMercadopago += cita.precio_cobrado || 0
-        } else {
-          ingresosEfectivo += cita.precio_cobrado || 0
-        }
+      const mes = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      const res = await fetch(`/api/resumen-caja?mes=${mes}`)
+      if (res.ok) {
+        const data = await res.json()
+        setMonthlyStats({ efectivo: data.efectivo, mercadopago: data.mercadopago })
       }
-
-      for (const mov of (movsRes.data || [])) {
-        if (mov.descripcion.startsWith('Comisión:')) continue
-        // monto < 0: gasto (resta), monto > 0: crédito/conversión (suma)
-        if (mov.tipo === 'mercadopago') {
-          gastosMercadopago -= mov.monto  // resta gasto o suma crédito
-        } else {
-          gastosEfectivo -= mov.monto
-        }
-      }
-
-      setMonthlyStats({
-        efectivo: ingresosEfectivo - gastosEfectivo,
-        mercadopago: ingresosMercadopago - gastosMercadopago,
-      })
     }
     fetchAdminStats()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
