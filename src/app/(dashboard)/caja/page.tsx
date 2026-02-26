@@ -33,10 +33,6 @@ import { ADMIN_EMAIL } from '@/lib/constants'
 interface MonthlyStats {
   efectivo: number
   mercadopago: number
-  ingresosEfectivo: number
-  ingresosMercadopago: number
-  gastosEfectivo: number
-  gastosMercadopago: number
 }
 
 export default function CajaDiariaPage() {
@@ -80,7 +76,7 @@ export default function CajaDiariaPage() {
         supabase
           .from('citas')
           .select('precio_cobrado, metodo_pago')
-          .in('status', ['completada', 'confirmada'])
+          .eq('status', 'completada')
           .gt('precio_cobrado', 0)
           .gte('fecha_inicio', `${monthStart}T00:00:00`)
           .lt('fecha_inicio', monthEnd),
@@ -96,7 +92,8 @@ export default function CajaDiariaPage() {
       let gastosMercadopago = 0
 
       for (const cita of (citasRes.data || [])) {
-        if (cita.metodo_pago === 'mercadopago') {
+        // transferencia va junto con mercadopago (igual que en la columna C del Sheet)
+        if (cita.metodo_pago === 'mercadopago' || cita.metodo_pago === 'transferencia') {
           ingresosMercadopago += cita.precio_cobrado || 0
         } else {
           ingresosEfectivo += cita.precio_cobrado || 0
@@ -116,10 +113,6 @@ export default function CajaDiariaPage() {
       setMonthlyStats({
         efectivo: ingresosEfectivo - gastosEfectivo,
         mercadopago: ingresosMercadopago - gastosMercadopago,
-        ingresosEfectivo,
-        ingresosMercadopago,
-        gastosEfectivo,
-        gastosMercadopago,
       })
     }
     fetchAdminStats()
@@ -264,33 +257,20 @@ export default function CajaDiariaPage() {
         {/* Admin: disponible del mes */}
         {isAdmin && monthlyStats && (
           <div className="flex-1 flex justify-center">
-            <div className="border rounded-md px-3 py-2 bg-background shadow-sm text-xs min-w-[300px]">
-              <div className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5 text-center">
-                Caja al día — {new Date().toLocaleString('es-AR', { month: 'long' })}
+            <div className="border rounded-md px-4 py-2 bg-background shadow-sm text-xs">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1 text-center">
+                Disponible — {new Date().toLocaleString('es-AR', { month: 'long' })}
               </div>
-              {/* Headers */}
-              <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground mb-0.5">
-                <span></span>
-                <span className="text-center">Efectivo</span>
-                <span className="text-center">Mercadopago</span>
-              </div>
-              {/* Ingresos */}
-              <div className="grid grid-cols-3 gap-2 items-center">
-                <span className="text-muted-foreground">Ingresos</span>
-                <span className="text-right text-green-700">{formatPrecio(monthlyStats.ingresosEfectivo)}</span>
-                <span className="text-right text-blue-700">{formatPrecio(monthlyStats.ingresosMercadopago)}</span>
-              </div>
-              {/* Gastos */}
-              <div className="grid grid-cols-3 gap-2 items-center">
-                <span className="text-muted-foreground">Gastos</span>
-                <span className="text-right text-destructive">-{formatPrecio(monthlyStats.gastosEfectivo)}</span>
-                <span className="text-right text-destructive">-{formatPrecio(monthlyStats.gastosMercadopago)}</span>
-              </div>
-              {/* Disponible */}
-              <div className="border-t mt-1.5 pt-1 grid grid-cols-3 gap-2 items-center">
-                <span className="font-semibold text-amber-700 text-[10px] uppercase">Disponible</span>
-                <span className="text-right font-bold text-amber-700">{formatPrecio(monthlyStats.efectivo)}</span>
-                <span className="text-right font-bold text-blue-700">{formatPrecio(monthlyStats.mercadopago)}</span>
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <div className="text-[10px] text-muted-foreground mb-0.5">Efectivo</div>
+                  <div className="font-bold text-amber-700 text-sm">{formatPrecio(monthlyStats.efectivo)}</div>
+                </div>
+                <div className="w-px h-8 bg-border" />
+                <div className="text-center">
+                  <div className="text-[10px] text-muted-foreground mb-0.5">Mercadopago</div>
+                  <div className="font-bold text-blue-700 text-sm">{formatPrecio(monthlyStats.mercadopago)}</div>
+                </div>
               </div>
             </div>
           </div>
