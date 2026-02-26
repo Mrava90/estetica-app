@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
@@ -42,6 +43,7 @@ import {
   UserX,
   CalendarIcon,
 } from 'lucide-react'
+import { ADMIN_EMAIL } from '@/lib/constants'
 
 const CHART_COLORS = [
   'hsl(var(--chart-1))',
@@ -59,6 +61,7 @@ const TOOLTIP_STYLE = {
 }
 
 export default function InformesPage() {
+  const router = useRouter()
   const [rangoFecha, setRangoFecha] = useState({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
@@ -68,12 +71,23 @@ export default function InformesPage() {
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [loading, setLoading] = useState(true)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [authorized, setAuthorized] = useState<boolean | null>(null)
 
   const supabase = createClient()
 
   useEffect(() => {
-    fetchData()
-  }, [rangoFecha]) // eslint-disable-line react-hooks/exhaustive-deps
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.email === ADMIN_EMAIL) {
+        setAuthorized(true)
+      } else {
+        router.replace('/calendario')
+      }
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (authorized) fetchData()
+  }, [rangoFecha, authorized]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchData() {
     setLoading(true)
@@ -142,6 +156,10 @@ export default function InformesPage() {
   }
 
   const rangoLabel = `${format(rangoFecha.from, 'dd/MM', { locale: es })} - ${format(rangoFecha.to, 'dd/MM/yy', { locale: es })}`
+
+  if (authorized === null) {
+    return <div className="py-12 text-center text-muted-foreground">Cargando...</div>
+  }
 
   return (
     <div className="space-y-4">
