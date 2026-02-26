@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { CitaConRelaciones } from '@/types/database'
@@ -28,19 +29,22 @@ interface AdminStats {
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [stats, setStats] = useState<Stats>({ citasHoy: 0, citasSemana: 0, clientesNuevos: 0, facturacionMes: 0 })
   const [citasHoy, setCitasHoy] = useState<CitaConRelaciones[]>([])
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
   const [adminStats, setAdminStats] = useState<AdminStats>({ efectivo: 0, mercadopago: 0 })
   const supabase = createClient()
 
   useEffect(() => {
-    fetchStats()
-    fetchCitasHoy()
     supabase.auth.getUser().then(({ data }) => {
       if (data.user?.email === ADMIN_EMAIL) {
         setIsAdmin(true)
+        fetchStats()
+        fetchCitasHoy()
         fetchAdminStats()
+      } else {
+        router.replace('/calendario')
       }
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -128,6 +132,10 @@ export default function DashboardPage() {
       .order('fecha_inicio')
 
     if (data) setCitasHoy(data)
+  }
+
+  if (isAdmin === null) {
+    return <div className="py-12 text-center text-muted-foreground">Cargando...</div>
   }
 
   return (
