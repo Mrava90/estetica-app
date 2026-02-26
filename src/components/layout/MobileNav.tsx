@@ -11,16 +11,28 @@ import { createClient } from '@/lib/supabase/client'
 export function MobileNav() {
   const pathname = usePathname()
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [permisos, setPermisos] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data }) => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
       setUserEmail(data.user?.email ?? null)
+    })
+    supabase.from('nav_permisos').select('href, visible_no_admin').then(({ data }) => {
+      if (data) {
+        const map: Record<string, boolean> = {}
+        data.forEach(p => { map[p.href] = p.visible_no_admin })
+        setPermisos(map)
+      }
     })
   }, [])
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => !item.adminOnly || userEmail === ADMIN_EMAIL
-  )
+  const isAdmin = userEmail === ADMIN_EMAIL
+  const visibleItems = NAV_ITEMS.filter(item => {
+    if (isAdmin) return true
+    if (item.adminOnly) return false
+    return permisos[item.href] !== false
+  })
 
   return (
     <div className="flex h-full flex-col">

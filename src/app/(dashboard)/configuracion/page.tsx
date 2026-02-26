@@ -15,8 +15,9 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
+import { NAV_ITEMS } from '@/lib/constants'
 import { DIAS_SEMANA } from '@/lib/constants'
 
 const ADMIN_EMAIL = 'ravamartin@gmail.com'
@@ -57,12 +58,16 @@ export default function ConfiguracionPage() {
   const [selectedProfId, setSelectedProfId] = useState<string | null>(null)
   const [horarios, setHorarios] = useState<Horario[]>([])
 
+  // Nav permisos state
+  const [navPermisos, setNavPermisos] = useState<Record<string, boolean>>({})
+
   const supabase = createClient()
 
   useEffect(() => {
     fetchConfig()
     checkAdmin()
     fetchProfesionales()
+    fetchNavPermisos()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchConfig() {
@@ -89,6 +94,26 @@ export default function ConfiguracionPage() {
   async function fetchProfesionales() {
     const { data } = await supabase.from('profesionales').select('*').order('nombre')
     if (data) setProfesionales(data)
+  }
+
+  async function fetchNavPermisos() {
+    const { data } = await supabase.from('nav_permisos').select('href, visible_no_admin')
+    if (data) {
+      const map: Record<string, boolean> = {}
+      data.forEach(p => { map[p.href] = p.visible_no_admin })
+      setNavPermisos(map)
+    }
+  }
+
+  async function toggleNavPermiso(href: string, value: boolean) {
+    setNavPermisos(prev => ({ ...prev, [href]: value }))
+    const { error } = await supabase
+      .from('nav_permisos')
+      .upsert({ href, visible_no_admin: value, updated_at: new Date().toISOString() })
+    if (error) {
+      toast.error('Error al actualizar permiso')
+      setNavPermisos(prev => ({ ...prev, [href]: !value }))
+    }
   }
 
   async function handleSave() {
@@ -742,6 +767,37 @@ export default function ConfiguracionPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Permisos de menú para no-admins */}
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Menu className="h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <CardTitle>Menú para no administradores</CardTitle>
+                    <CardDescription>Activá o desactivá qué páginas pueden ver los usuarios que no son admin</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1">
+                  {NAV_ITEMS.filter(item => !item.adminOnly).map(item => (
+                    <div key={item.href} className="flex items-center justify-between py-2.5 border-b last:border-0">
+                      <div className="flex items-center gap-3">
+                        <item.icon className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{item.label}</span>
+                      </div>
+                      <Switch
+                        checked={navPermisos[item.href] !== false}
+                        onCheckedChange={(v) => toggleNavPermiso(item.href, v)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 
