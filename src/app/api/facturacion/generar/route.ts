@@ -277,24 +277,22 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { cita_id, receptor_nombre, receptor_dni, monto, fecha, descripcion } = body
+  const { cita_id, afip_row_key, receptor_nombre, receptor_dni, monto, fecha, descripcion } = body
 
-  if (!cita_id || !monto || !fecha) {
+  if ((!cita_id && !afip_row_key) || !monto || !fecha) {
     return NextResponse.json({ error: 'Faltan campos requeridos.' }, { status: 400 })
   }
 
   const supabase = getSupabase()
 
   // Verificar que no tenga ya una factura emitida
-  const { data: existing } = await supabase
-    .from('facturas')
-    .select('id, estado')
-    .eq('cita_id', cita_id)
-    .eq('estado', 'emitida')
-    .maybeSingle()
+  const query = supabase.from('facturas').select('id, estado').eq('estado', 'emitida')
+  if (afip_row_key) query.eq('afip_row_key', afip_row_key)
+  else              query.eq('cita_id', cita_id)
+  const { data: existing } = await query.maybeSingle()
 
   if (existing) {
-    return NextResponse.json({ error: 'Esta cita ya tiene una factura emitida.' }, { status: 409 })
+    return NextResponse.json({ error: 'Ya existe una factura emitida para este ítem.' }, { status: 409 })
   }
 
   const cuit = process.env.AFIP_CUIT!
@@ -332,7 +330,8 @@ export async function POST(request: Request) {
       : null
 
     const { error: insertErr } = await supabase.from('facturas').insert({
-      cita_id,
+      ...(cita_id     ? { cita_id }     : {}),
+      ...(afip_row_key ? { afip_row_key } : {}),
       fecha,
       monto: parseFloat(monto),
       descripcion,
@@ -358,8 +357,10 @@ export async function POST(request: Request) {
     console.error('Error generando factura ARCA:', err)
 
     // Guardar el error en la tabla para trazabilidad
+    const conflictCol = afip_row_key ? 'afip_row_key' : 'cita_id'
     await supabase.from('facturas').upsert({
-      cita_id,
+      ...(cita_id      ? { cita_id }      : {}),
+      ...(afip_row_key ? { afip_row_key } : {}),
       fecha,
       monto: parseFloat(monto),
       descripcion,
@@ -369,7 +370,7 @@ export async function POST(request: Request) {
       punto_venta: ptoVta,
       estado: 'error',
       error_msg: err?.message || String(err),
-    }, { onConflict: 'cita_id' })
+    }, { onConflict: conflictCol })
 
     return NextResponse.json(
       { error: err?.message || 'Error al comunicarse con ARCA' },

@@ -6,473 +6,594 @@ import { formatPrecio } from '@/lib/dates'
 import {
   Receipt,
   CheckCircle2,
-  Clock,
+  XCircle,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  FileText,
-  Settings2,
-  Info,
-  ExternalLink,
   Loader2,
   Building2,
+  Settings2,
+  ExternalLink,
+  Info,
+  RotateCcw,
+  ChevronDown,
 } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface FilaFacturacion {
-  cita_id: string
+type EstadoFactura = 'pendiente' | 'excluida' | 'emitida' | 'error'
+type RowMode = 'idle' | 'confirming' | 'loading'
+
+interface ItemFacturacion {
+  afip_row_key: string
   fecha: string
-  cliente_nombre: string | null
+  cliente_nombre: string
   cliente_dni: string | null
-  servicio_nombre: string | null
+  servicio_nombre: string
   monto: number
-  notas: string | null
   factura_id: string | null
+  factura_estado: EstadoFactura | null
   factura_cae: string | null
   factura_numero: string | null
-  factura_estado: 'pendiente' | 'emitida' | 'error' | null
   factura_vencimiento: string | null
+  factura_error: string | null
 }
-
-type TabType = 'transacciones' | 'configuracion'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function mesLabel(fecha: Date): string {
-  return fecha.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+function mesLabel(d: Date) {
+  return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
-function isoToDisplay(iso: string): string {
+function isoToDisplay(iso: string) {
   const [y, m, d] = iso.split('-')
   return `${d}/${m}/${y}`
 }
 
-function badgeEstado(estado: string | null) {
-  if (!estado || estado === 'pendiente') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
-        <Clock className="h-3 w-3" /> Pendiente
-      </span>
-    )
-  }
-  if (estado === 'emitida') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-        <CheckCircle2 className="h-3 w-3" /> Emitida
-      </span>
-    )
-  }
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
-      <AlertCircle className="h-3 w-3" /> Error
-    </span>
-  )
+function initials(nombre: string) {
+  const parts = nombre.trim().split(' ')
+  return parts.length >= 2
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : parts[0].slice(0, 2).toUpperCase()
+}
+
+const AVATAR_COLORS = [
+  'bg-fuchsia-100 text-fuchsia-700',
+  'bg-blue-100 text-blue-700',
+  'bg-amber-100 text-amber-700',
+  'bg-green-100 text-green-700',
+  'bg-rose-100 text-rose-700',
+  'bg-violet-100 text-violet-700',
+]
+function avatarColor(nombre: string) {
+  return AVATAR_COLORS[nombre.charCodeAt(0) % AVATAR_COLORS.length]
 }
 
 // ── Componente principal ─────────────────────────────────────────────────────
 
 export default function FacturacionPage() {
   const supabase = createClient()
-  const [tab, setTab] = useState<TabType>('transacciones')
-  const [filas, setFilas] = useState<FilaFacturacion[]>([])
+
+  const [tab, setTab] = useState<'lista' | 'configuracion'>('lista')
+  const [items, setItems] = useState<ItemFacturacion[]>([])
   const [loading, setLoading] = useState(true)
-  const [generando, setGenerando] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [rowMode, setRowMode] = useState<Record<string, RowMode>>({})
+  const [rowError, setRowError] = useState<Record<string, string>>({})
+  const [mostrarExcluidas, setMostrarExcluidas] = useState(false)
 
-  // Selector de mes
   const [mesBase, setMesBase] = useState(() => {
-    const now = new Date()
-    return new Date(now.getFullYear(), now.getMonth(), 1)
+    const n = new Date()
+    return new Date(n.getFullYear(), n.getMonth(), 1)
   })
-
-  const mesAnterior = () => setMesBase(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
+  const mesAnterior  = () => setMesBase(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
   const mesSiguiente = () => setMesBase(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
 
-  // ── Fetch de datos ────────────────────────────────────────────────────────
+  // ── Fetch ─────────────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    setError(null)
-    const year = mesBase.getFullYear()
-    const month = mesBase.getMonth() + 1
-    const desde = `${year}-${String(month).padStart(2, '0')}-01`
-    const hasta = new Date(year, month, 0).toISOString().slice(0, 10)
+    setFetchError(null)
+    const y = mesBase.getFullYear()
+    const m = mesBase.getMonth() + 1
+    const mes = `${y}-${String(m).padStart(2, '0')}`
 
-    // Citas mercadopago del mes
-    const { data: citas, error: citasErr } = await supabase
-      .from('citas')
-      .select(`
-        id,
-        fecha_inicio,
-        precio_cobrado,
-        metodo_pago,
-        notas,
-        cliente:clientes(nombre, dni),
-        servicio:servicios(nombre),
-        factura:facturas(id, cae, numero_cbte, estado, cae_vencimiento)
-      `)
-      .in('metodo_pago', ['mercadopago', 'transferencia'])
-      .eq('status', 'completada')
-      .gte('fecha_inicio', `${desde}T00:00:00`)
-      .lte('fecha_inicio', `${hasta}T23:59:59`)
-      .order('fecha_inicio', { ascending: false })
-
-    if (citasErr) {
-      setError('Error al cargar las transacciones.')
+    const res = await fetch(`/api/facturacion/sheet?mes=${mes}`)
+    if (!res.ok) {
+      setFetchError('Error al cargar la hoja Afip del Google Sheet.')
       setLoading(false)
       return
     }
-
-    const rows: FilaFacturacion[] = (citas || []).map((c: any) => {
-      const factura = Array.isArray(c.factura) ? c.factura[0] : c.factura
-      const cliente = Array.isArray(c.cliente) ? c.cliente[0] : c.cliente
-      const servicio = Array.isArray(c.servicio) ? c.servicio[0] : c.servicio
-      return {
-        cita_id: c.id,
-        fecha: c.fecha_inicio?.slice(0, 10) ?? '',
-        cliente_nombre: cliente?.nombre ?? null,
-        cliente_dni: cliente?.dni ?? null,
-        servicio_nombre: servicio?.nombre ?? null,
-        monto: c.precio_cobrado ?? 0,
-        notas: c.notas ?? null,
-        factura_id: factura?.id ?? null,
-        factura_cae: factura?.cae ?? null,
-        factura_numero: factura?.numero_cbte != null ? String(factura.numero_cbte).padStart(8, '0') : null,
-        factura_estado: factura?.estado ?? null,
-        factura_vencimiento: factura?.cae_vencimiento ?? null,
-      }
-    })
-
-    setFilas(rows)
+    const json = await res.json()
+    setItems(json.items || [])
     setLoading(false)
-  }, [mesBase]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mesBase])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // ── Generar factura ───────────────────────────────────────────────────────
+  // ── Helpers de estado de fila ─────────────────────────────────────────────
 
-  async function handleGenerar(fila: FilaFacturacion) {
-    setGenerando(fila.cita_id)
-    setError(null)
+  function setMode(key: string, mode: RowMode) {
+    setRowMode(p => ({ ...p, [key]: mode }))
+  }
+  function setErr(key: string, msg: string) {
+    setRowError(p => ({ ...p, [key]: msg }))
+  }
+  function clearErr(key: string) {
+    setRowError(p => { const n = { ...p }; delete n[key]; return n })
+  }
+
+  // ── Acciones ──────────────────────────────────────────────────────────────
+
+  function handleCheckClick(key: string) {
+    clearErr(key)
+    setMode(key, 'confirming')
+  }
+
+  async function handleConfirmar(item: ItemFacturacion) {
+    setMode(item.afip_row_key, 'loading')
+    clearErr(item.afip_row_key)
     try {
       const res = await fetch('/api/facturacion/generar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cita_id: fila.cita_id,
-          receptor_nombre: fila.cliente_nombre,
-          receptor_dni: fila.cliente_dni,
-          monto: fila.monto,
-          fecha: fila.fecha,
-          descripcion: fila.servicio_nombre ?? fila.notas ?? 'Servicio de estética',
+          afip_row_key:    item.afip_row_key,
+          receptor_nombre: item.cliente_nombre,
+          receptor_dni:    item.cliente_dni,
+          monto:           item.monto,
+          fecha:           item.fecha,
+          descripcion:     item.servicio_nombre || 'Servicio de estética',
         }),
       })
       const json = await res.json()
       if (!res.ok || json.error) {
-        setError(json.error || `Error al generar la factura (HTTP ${res.status})`)
+        setErr(item.afip_row_key, json.error || `Error HTTP ${res.status}`)
+        setMode(item.afip_row_key, 'idle')
       } else {
         await fetchData()
+        setMode(item.afip_row_key, 'idle')
       }
-    } catch (e) {
-      setError('No se pudo conectar con el servidor de facturación.')
-    } finally {
-      setGenerando(null)
+    } catch {
+      setErr(item.afip_row_key, 'No se pudo conectar con el servidor.')
+      setMode(item.afip_row_key, 'idle')
     }
   }
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
+  async function handleExcluir(item: ItemFacturacion) {
+    setMode(item.afip_row_key, 'loading')
+    clearErr(item.afip_row_key)
 
-  const totalMonto = filas.reduce((s, f) => s + f.monto, 0)
-  const emitidas = filas.filter(f => f.factura_estado === 'emitida').length
-  const pendientes = filas.filter(f => !f.factura_estado || f.factura_estado === 'pendiente').length
-  const conError = filas.filter(f => f.factura_estado === 'error').length
+    if (item.factura_id) {
+      await supabase.from('facturas').update({ estado: 'excluida' }).eq('id', item.factura_id)
+    } else {
+      await supabase.from('facturas').insert({
+        afip_row_key: item.afip_row_key,
+        fecha:        item.fecha,
+        monto:        item.monto,
+        descripcion:  item.servicio_nombre,
+        receptor_nombre: item.cliente_nombre,
+        receptor_dni:    item.cliente_dni,
+        estado: 'excluida',
+      })
+    }
+    await fetchData()
+    setMode(item.afip_row_key, 'idle')
+  }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  async function handleRestaurar(item: ItemFacturacion) {
+    if (!item.factura_id) return
+    setMode(item.afip_row_key, 'loading')
+    await supabase.from('facturas').delete().eq('id', item.factura_id)
+    await fetchData()
+    setMode(item.afip_row_key, 'idle')
+  }
+
+  // ── Particiones ───────────────────────────────────────────────────────────
+
+  const pendientes = items.filter(i => !i.factura_estado || i.factura_estado === 'pendiente')
+  const emitidas   = items.filter(i => i.factura_estado === 'emitida')
+  const excluidas  = items.filter(i => i.factura_estado === 'excluida')
+  const conError   = items.filter(i => i.factura_estado === 'error')
+
+  const totalMonto     = items.filter(i => i.factura_estado !== 'excluida').reduce((s, i) => s + i.monto, 0)
+  const montoEmitido   = emitidas.reduce((s, i) => s + i.monto, 0)
+  const montoPendiente = [...pendientes, ...conError].reduce((s, i) => s + i.monto, 0)
+
+  // ── Render de fila ────────────────────────────────────────────────────────
+
+  function renderFila(item: ItemFacturacion) {
+    const key  = item.afip_row_key
+    const mode = rowMode[key] || 'idle'
+    const err  = rowError[key]
+
+    // ── Emitida ─────────────────────────────────────────────────────────────
+    if (item.factura_estado === 'emitida') {
+      return (
+        <li key={key} className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+            {initials(item.cliente_nombre)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm">{item.cliente_nombre}</p>
+            <p className="text-xs text-muted-foreground">{item.cliente_dni ? `DNI ${item.cliente_dni}` : 'Consumidor Final'}</p>
+          </div>
+          <div className="hidden md:block text-xs text-muted-foreground truncate max-w-[160px]">{item.servicio_nombre}</div>
+          <div className="text-right shrink-0">
+            <p className="font-semibold text-sm">{formatPrecio(item.monto)}</p>
+            <p className="text-xs text-muted-foreground">{isoToDisplay(item.fecha)}</p>
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="flex items-center gap-1 text-green-700 text-xs font-medium whitespace-nowrap">
+              <CheckCircle2 className="h-3.5 w-3.5" /> N°{item.factura_numero}
+            </div>
+            <p className="text-xs text-green-600 font-mono">{item.factura_cae?.slice(0, 7)}…</p>
+          </div>
+        </li>
+      )
+    }
+
+    // ── Excluida ─────────────────────────────────────────────────────────────
+    if (item.factura_estado === 'excluida') {
+      return (
+        <li key={key} className="flex items-center gap-3 rounded-xl border border-dashed bg-muted/20 px-4 py-3 opacity-50">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-sm font-bold">
+            {initials(item.cliente_nombre)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm line-through">{item.cliente_nombre}</p>
+            <p className="text-xs text-muted-foreground">{item.cliente_dni ? `DNI ${item.cliente_dni}` : '—'}</p>
+          </div>
+          <p className="font-semibold text-sm line-through shrink-0">{formatPrecio(item.monto)}</p>
+          <button
+            onClick={() => handleRestaurar(item)}
+            disabled={mode === 'loading'}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+          >
+            {mode === 'loading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            Restaurar
+          </button>
+        </li>
+      )
+    }
+
+    // ── Loading ──────────────────────────────────────────────────────────────
+    if (mode === 'loading') {
+      return (
+        <li key={key} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 opacity-60">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium">{item.cliente_nombre}</p>
+            <p className="text-xs text-muted-foreground">Procesando…</p>
+          </div>
+          <p className="font-semibold text-sm shrink-0">{formatPrecio(item.monto)}</p>
+        </li>
+      )
+    }
+
+    // ── Confirmando ──────────────────────────────────────────────────────────
+    if (mode === 'confirming') {
+      return (
+        <li key={key} className="flex flex-col gap-2.5 rounded-xl border border-blue-300 bg-blue-50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+              {initials(item.cliente_nombre)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm">{item.cliente_nombre}</p>
+              <p className="text-xs text-muted-foreground">
+                {item.cliente_dni ? `DNI ${item.cliente_dni}` : <span className="text-amber-700">Sin DNI → se emite a Consumidor Final</span>}
+              </p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="font-bold text-sm">{formatPrecio(item.monto)}</p>
+              <p className="text-xs text-muted-foreground">{isoToDisplay(item.fecha)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-lg bg-white border border-blue-200 px-3 py-2 text-sm text-blue-800">
+            <Receipt className="h-4 w-4 shrink-0 text-blue-500" />
+            <span>¿Generar factura electrónica en ARCA por <strong>{formatPrecio(item.monto)}</strong>?</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleConfirmar(item)}
+              className="flex items-center gap-1.5 rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-green-700 transition-colors"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> Sí, generar
+            </button>
+            <button
+              onClick={() => setMode(key, 'idle')}
+              className="flex items-center gap-1.5 rounded-lg border px-4 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </li>
+      )
+    }
+
+    // ── Error ────────────────────────────────────────────────────────────────
+    if (err || item.factura_estado === 'error') {
+      const msg = err || item.factura_error || 'Error desconocido'
+      return (
+        <li key={key} className="flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+              {initials(item.cliente_nombre)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-sm">{item.cliente_nombre}</p>
+              <p className="text-xs text-red-600 truncate">{msg}</p>
+            </div>
+            <p className="font-semibold text-sm shrink-0">{formatPrecio(item.monto)}</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => handleCheckClick(key)}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
+              <RotateCcw className="h-3 w-3" /> Reintentar
+            </button>
+            <button onClick={() => handleExcluir(item)}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
+              <XCircle className="h-3 w-3" /> Descartar
+            </button>
+          </div>
+        </li>
+      )
+    }
+
+    // ── Pendiente (idle normal) ───────────────────────────────────────────────
+    return (
+      <li key={key} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 hover:bg-muted/20 transition-colors group">
+        {/* Avatar */}
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+          {initials(item.cliente_nombre)}
+        </div>
+
+        {/* Nombre */}
+        <div className="w-40 min-w-0 shrink-0">
+          <p className="font-medium text-sm truncate">{item.cliente_nombre}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {item.cliente_dni
+              ? `DNI ${item.cliente_dni}`
+              : <span className="text-amber-600">Sin DNI</span>}
+          </p>
+        </div>
+
+        {/* Servicio */}
+        <p className="flex-1 hidden md:block text-xs text-muted-foreground truncate">
+          {item.servicio_nombre}
+        </p>
+
+        {/* Fecha */}
+        <p className="hidden lg:block text-xs text-muted-foreground shrink-0 w-20 text-right">
+          {isoToDisplay(item.fecha)}
+        </p>
+
+        {/* Monto */}
+        <p className="font-semibold text-sm shrink-0 w-24 text-right">
+          {formatPrecio(item.monto)}
+        </p>
+
+        {/* Botones ✓ / ✗ */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => handleCheckClick(key)}
+            title="Aprobar y generar factura"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-green-300 bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => handleExcluir(item)}
+            title="Descartar (no facturar)"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      </li>
+    )
+  }
+
+  // ── Render principal ──────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6 p-6">
 
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Receipt className="h-6 w-6 text-blue-600" />
             Facturación Electrónica
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Comprobantes fiscales para pagos con MercadoPago · Integración ARCA (AFIP)
+            Datos desde hoja "Afip" · Solo MercadoPago · Aprobación manual por ítem
           </p>
         </div>
-
-        {/* Tabs */}
         <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
-          <button
-            onClick={() => setTab('transacciones')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              tab === 'transacciones' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <FileText className="h-3.5 w-3.5" /> Transacciones
+          <button onClick={() => setTab('lista')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Receipt className="h-3.5 w-3.5" /> Lista
           </button>
-          <button
-            onClick={() => setTab('configuracion')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              tab === 'configuracion' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Settings2 className="h-3.5 w-3.5" /> Configuración ARCA
+          <button onClick={() => setTab('configuracion')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'configuracion' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Settings2 className="h-3.5 w-3.5" /> Config ARCA
           </button>
         </div>
       </div>
 
-      {/* ── TAB: Transacciones ─────────────────────────────────────────────── */}
-      {tab === 'transacciones' && (
+      {/* ── TAB: Lista ───────────────────────────────────────────────────────── */}
+      {tab === 'lista' && (
         <>
           {/* Selector de mes */}
-          <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-3 self-start w-fit">
+          <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2.5 self-start w-fit">
             <button onClick={mesAnterior} className="rounded p-1 hover:bg-muted transition-colors">
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="w-40 text-center font-medium capitalize">{mesLabel(mesBase)}</span>
+            <span className="w-44 text-center font-medium capitalize text-sm">{mesLabel(mesBase)}</span>
             <button onClick={mesSiguiente} className="rounded p-1 hover:bg-muted transition-colors">
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Total MercadoPago</p>
-              <p className="text-xl font-bold text-blue-700 mt-1">{formatPrecio(totalMonto)}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{filas.length} transacciones</p>
-            </div>
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Facturas emitidas</p>
-              <p className="text-xl font-bold text-green-700 mt-1">{emitidas}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">con CAE de ARCA</p>
-            </div>
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs text-muted-foreground">Pendientes</p>
-              <p className="text-xl font-bold text-yellow-700 mt-1">{pendientes}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">sin factura aún</p>
-            </div>
-            {conError > 0 && (
-              <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                <p className="text-xs text-red-600">Con error</p>
-                <p className="text-xl font-bold text-red-700 mt-1">{conError}</p>
-                <p className="text-xs text-red-500 mt-0.5">reintentar</p>
+          {!loading && items.length > 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-xl border bg-card px-4 py-3">
+                <p className="text-xs text-muted-foreground">Total MP del mes</p>
+                <p className="text-xl font-bold text-blue-700">{formatPrecio(totalMonto)}</p>
+                <p className="text-xs text-muted-foreground">{items.length - excluidas.length} transacciones</p>
               </div>
-            )}
-          </div>
-
-          {/* Error banner */}
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {error}
+              <div className="rounded-xl border bg-card px-4 py-3">
+                <p className="text-xs text-muted-foreground">Pendientes</p>
+                <p className="text-xl font-bold text-amber-700">{pendientes.length + conError.length}</p>
+                <p className="text-xs text-muted-foreground">{formatPrecio(montoPendiente)}</p>
+              </div>
+              <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+                <p className="text-xs text-green-700">Facturas emitidas</p>
+                <p className="text-xl font-bold text-green-700">{emitidas.length}</p>
+                <p className="text-xs text-green-600">{formatPrecio(montoEmitido)}</p>
+              </div>
             </div>
           )}
 
-          {/* Tabla de transacciones */}
-          <div className="rounded-xl border bg-card overflow-hidden">
-            {loading ? (
-              <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" /> Cargando...
-              </div>
-            ) : filas.length === 0 ? (
-              <div className="py-16 text-center text-muted-foreground">
-                <Receipt className="h-10 w-10 mx-auto mb-3 opacity-30" />
-                <p className="font-medium">Sin transacciones MercadoPago</p>
-                <p className="text-sm mt-1">No hay citas completadas con MercadoPago en este mes.</p>
-              </div>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Fecha</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Cliente</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden md:table-cell">Servicio</th>
-                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Monto</th>
-                    <th className="px-4 py-3 text-center font-medium text-muted-foreground">Estado</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground hidden lg:table-cell">CAE</th>
-                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filas.map((fila) => (
-                    <tr key={fila.cita_id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                        {isoToDisplay(fila.fecha)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{fila.cliente_nombre ?? <span className="text-muted-foreground italic">Sin nombre</span>}</div>
-                        {fila.cliente_dni && (
-                          <div className="text-xs text-muted-foreground">DNI {fila.cliente_dni}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell max-w-[200px] truncate">
-                        {fila.servicio_nombre ?? fila.notas?.slice(0, 40) ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold">
-                        {formatPrecio(fila.monto)}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {badgeEstado(fila.factura_estado)}
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        {fila.factura_cae ? (
-                          <div>
-                            <span className="font-mono text-xs text-green-700">{fila.factura_cae}</span>
-                            {fila.factura_vencimiento && (
-                              <div className="text-xs text-muted-foreground">Vence {isoToDisplay(fila.factura_vencimiento)}</div>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {fila.factura_estado === 'emitida' ? (
-                          <span className="text-xs text-muted-foreground">
-                            N° {fila.factura_numero}
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleGenerar(fila)}
-                            disabled={generando === fila.cita_id}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          >
-                            {generando === fila.cita_id ? (
-                              <><Loader2 className="h-3 w-3 animate-spin" /> Generando...</>
-                            ) : (
-                              <><Receipt className="h-3 w-3" /> Generar</>
-                            )}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {/* Error de carga */}
+          {fetchError && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle className="h-4 w-4 shrink-0" /> {fetchError}
+            </div>
+          )}
+
+          {/* Lista */}
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" /> Cargando hoja Afip…
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground">
+              <Receipt className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="font-medium">Sin registros en la hoja "Afip"</p>
+              <p className="text-sm mt-1">No hay filas para este mes en el Google Sheet.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+
+              {/* Encabezado de columnas */}
+              {(pendientes.length > 0 || conError.length > 0) && (
+                <div className="flex items-center gap-3 px-4 text-xs font-medium text-muted-foreground">
+                  <span className="w-9 shrink-0" />
+                  <span className="w-40 shrink-0">Cliente · DNI</span>
+                  <span className="flex-1 hidden md:block">Servicio</span>
+                  <span className="hidden lg:block w-20 text-right">Fecha</span>
+                  <span className="w-24 text-right shrink-0">Monto</span>
+                  <span className="w-20 text-right shrink-0">Acción</span>
+                </div>
+              )}
+
+              {/* Pendientes */}
+              {(pendientes.length > 0 || conError.length > 0) && (
+                <ul className="space-y-2">
+                  {[...pendientes, ...conError].map(item => renderFila(item))}
+                </ul>
+              )}
+
+              {/* Emitidas */}
+              {emitidas.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-green-700 uppercase tracking-wide px-1">
+                    Facturas emitidas ({emitidas.length})
+                  </p>
+                  <ul className="space-y-2">{emitidas.map(item => renderFila(item))}</ul>
+                </div>
+              )}
+
+              {/* Excluidas (colapsable) */}
+              {excluidas.length > 0 && (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setMostrarExcluidas(v => !v)}
+                    className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
+                  >
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${mostrarExcluidas ? 'rotate-180' : ''}`} />
+                    {mostrarExcluidas ? 'Ocultar' : 'Ver'} descartadas ({excluidas.length})
+                  </button>
+                  {mostrarExcluidas && (
+                    <ul className="space-y-2">{excluidas.map(item => renderFila(item))}</ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
-      {/* ── TAB: Configuración ARCA ────────────────────────────────────────── */}
+      {/* ── TAB: Configuración ARCA ───────────────────────────────────────────── */}
       {tab === 'configuracion' && (
-        <div className="space-y-6 max-w-2xl">
+        <div className="space-y-5 max-w-2xl">
 
-          {/* Info ARCA */}
           <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 space-y-3">
             <div className="flex items-center gap-2 font-semibold text-blue-800">
-              <Building2 className="h-5 w-5" />
-              ¿Qué es ARCA y cómo funciona?
+              <Building2 className="h-5 w-5" /> ¿Cómo funciona la integración con ARCA?
             </div>
             <p className="text-sm text-blue-700 leading-relaxed">
-              <strong>ARCA</strong> (ex-AFIP) es el organismo recaudador de Argentina.
-              Para emitir facturas electrónicas legales, debés conectarte a su sistema
-              de Web Services usando un <strong>certificado digital X.509</strong> asociado a tu CUIT.
+              ARCA (ex-AFIP) usa Web Services SOAP. El flujo es: certificado digital →
+              autenticación WSAA (token 12 h) → solicitud WSFEV1 →
+              recibo <strong>CAE</strong> (14 dígitos que validan la factura fiscalmente).
             </p>
-            <p className="text-sm text-blue-700 leading-relaxed">
-              Cada vez que generás una factura, la app se conecta a ARCA, valida los datos
-              y recibe un <strong>CAE</strong> (Código de Autorización Electrónico), que es
-              la clave que acredita la validez fiscal del comprobante.
-            </p>
-            <p className="text-sm text-blue-700 font-medium">
-              💡 Para facturas a Consumidor Final (servicios de estética), no se requiere
-              el CUIT del cliente para montos menores a $10.000.000.
+            <p className="text-sm text-blue-700">
+              💡 Para servicios de estética a consumidor final, <strong>no se requiere CUIT del cliente</strong> hasta $10.000.000 por operación.
             </p>
           </div>
 
-          {/* Pasos de configuración */}
           <div className="rounded-xl border bg-card p-5 space-y-5">
             <h2 className="font-semibold flex items-center gap-2">
-              <Settings2 className="h-5 w-5 text-muted-foreground" />
-              Pasos para activar la integración
+              <Settings2 className="h-4 w-4 text-muted-foreground" /> Pasos para activar
             </h2>
-
             <ol className="space-y-4 text-sm">
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-xs">1</span>
-                <div>
-                  <p className="font-medium">Generá tu certificado digital X.509</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    Ingresá a <strong>ARCA → Servicios habilitados → Administrador de Relaciones</strong>,
-                    agregá el servicio WSFEV1 y descargá el certificado de homologación (testing).
-                  </p>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-xs">2</span>
-                <div>
-                  <p className="font-medium">Configurá las variables de entorno en Vercel</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    En tu proyecto Vercel, agregá las siguientes variables:
-                  </p>
-                  <div className="mt-2 rounded-lg bg-muted p-3 font-mono text-xs space-y-1">
-                    <p><span className="text-blue-700">AFIP_CUIT</span>=20xxxxxxxxx8</p>
-                    <p><span className="text-blue-700">AFIP_CERT</span>=-----BEGIN CERTIFICATE-----...</p>
-                    <p><span className="text-blue-700">AFIP_KEY</span>=-----BEGIN PRIVATE KEY-----...</p>
-                    <p><span className="text-blue-700">AFIP_PUNTO_VENTA</span>=1</p>
-                    <p><span className="text-blue-700">AFIP_TIPO_CBTE</span>=11  <span className="text-muted-foreground"># 11=Factura C, 6=Factura B</span></p>
-                    <p><span className="text-blue-700">AFIP_PROD</span>=false  <span className="text-muted-foreground"># false=testing, true=producción</span></p>
-                  </div>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-xs">3</span>
-                <div>
-                  <p className="font-medium">Ejecutá la migración de base de datos</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    Corré el archivo <code className="bg-muted px-1 rounded">00009_facturas.sql</code> en
-                    el editor SQL de Supabase para crear la tabla de facturas.
-                  </p>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-xs">4</span>
-                <div>
-                  <p className="font-medium">Probá en modo homologación (testing)</p>
-                  <p className="text-muted-foreground mt-0.5">
-                    Con <code className="bg-muted px-1 rounded">AFIP_PROD=false</code>, las facturas
-                    generadas no tienen validez fiscal pero te permiten verificar que todo funcione.
-                    Cuando estés listo, cambiá a <code className="bg-muted px-1 rounded">AFIP_PROD=true</code>.
-                  </p>
-                </div>
-              </li>
+              {[
+                { n: 1, title: 'Ejecutar la migración en Supabase',
+                  body: <>Abrí SQL Editor → ejecutá <code className="bg-muted px-1 rounded text-xs">supabase/migrations/00009_facturas.sql</code> para crear la tabla de facturas.</> },
+                { n: 2, title: 'Obtener certificado digital X.509 en ARCA',
+                  body: 'Ingresá a arca.gob.ar con tu CUIT → Administrador de Relaciones → agregá WSFEV1 → descargá el certificado.' },
+                { n: 3, title: 'Agregar variables de entorno en Vercel',
+                  body: (
+                    <div className="mt-1 rounded-lg bg-muted p-3 font-mono text-xs space-y-0.5">
+                      <p><span className="text-blue-700">AFIP_CUIT</span>=20xxxxxxxxx8</p>
+                      <p><span className="text-blue-700">AFIP_CERT</span>=-----BEGIN CERTIFICATE-----...</p>
+                      <p><span className="text-blue-700">AFIP_KEY</span>=-----BEGIN PRIVATE KEY-----...</p>
+                      <p><span className="text-blue-700">AFIP_PUNTO_VENTA</span>=1</p>
+                      <p><span className="text-blue-700">AFIP_TIPO_CBTE</span>=11 <span className="text-muted-foreground"># 11=Factura C (Monotributista)</span></p>
+                      <p><span className="text-blue-700">AFIP_PROD</span>=false <span className="text-muted-foreground"># false=testing</span></p>
+                    </div>
+                  )},
+                { n: 4, title: 'Probar en homologación, luego pasar a producción',
+                  body: 'Con AFIP_PROD=false las facturas son de prueba. Cuando todo funcione, cambiá a true.' },
+              ].map(({ n, title, body }) => (
+                <li key={n} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-xs">{n}</span>
+                  <div><p className="font-medium">{title}</p><div className="text-muted-foreground mt-0.5">{body}</div></div>
+                </li>
+              ))}
             </ol>
-
-            <a
-              href="https://www.afip.gob.ar/ws/documentacion/ws-factura-electronica.asp"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              Documentación oficial ARCA — Web Services Factura Electrónica
+            <a href="https://www.afip.gob.ar/ws/documentacion/ws-factura-electronica.asp" target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
+              <ExternalLink className="h-3.5 w-3.5" /> Documentación oficial ARCA
             </a>
           </div>
 
-          {/* Tipo de factura */}
           <div className="rounded-xl border bg-card p-5 space-y-3">
             <h2 className="font-semibold flex items-center gap-2">
-              <Info className="h-4 w-4 text-muted-foreground" />
-              ¿Qué tipo de factura emitir?
+              <Info className="h-4 w-4 text-muted-foreground" /> Tipo de factura
             </h2>
             <div className="text-sm space-y-2 text-muted-foreground">
-              <p><strong className="text-foreground">Factura C</strong> (tipo 11) · Si sos <strong>Monotributista</strong>. Es la más común para servicios de estética al consumidor final.</p>
-              <p><strong className="text-foreground">Factura B</strong> (tipo 6) · Si sos <strong>Responsable Inscripto</strong> y el cliente es Consumidor Final o Monotributista.</p>
-              <p><strong className="text-foreground">Factura A</strong> (tipo 1) · Si sos Responsable Inscripto y el cliente también lo es (requiere CUIT).</p>
+              <p><strong className="text-foreground">Factura C (tipo 11)</strong> · Monotributista → consumidor final. La más común para estética.</p>
+              <p><strong className="text-foreground">Factura B (tipo 6)</strong> · Resp. Inscripto → consumidor final o monotributista.</p>
             </div>
             <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-              <strong>Importante:</strong> Para servicios de estética a clientes particulares,
-              lo más habitual es <strong>Factura C</strong> (Monotributista).
-              No necesitás el CUIT del cliente para montos menores a $10.000.000.
+              <strong>Para clientes sin DNI:</strong> la factura se emite a <em>Consumidor Final</em> (DocTipo=99, DocNro=0). Es válido para montos menores a $10.000.000.
             </div>
           </div>
-
         </div>
       )}
     </div>

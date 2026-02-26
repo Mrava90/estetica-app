@@ -1,8 +1,11 @@
 -- Tabla para facturas electrónicas (integración ARCA/AFIP)
 CREATE TABLE facturas (
   id                UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+
+  -- Origen: cita de la app (cita_id) o fila de la hoja "Afip" (afip_row_key)
   cita_id           UUID        REFERENCES citas(id) ON DELETE SET NULL,
-  cliente_id        UUID        REFERENCES clientes(id) ON DELETE SET NULL,
+  afip_row_key      TEXT,       -- Ej: "afip-12" (índice de fila en la hoja Afip)
+
   fecha             DATE        NOT NULL,
   monto             DECIMAL(10,2) NOT NULL,
   descripcion       TEXT,
@@ -20,8 +23,12 @@ CREATE TABLE facturas (
   cae_vencimiento   DATE,
 
   -- Estado
+  --   pendiente  = en lista, aún no revisada
+  --   excluida   = el admin la descartó (no facturar)
+  --   emitida    = CAE obtenido de ARCA, con validez fiscal
+  --   error      = intento fallido (ver error_msg)
   estado            TEXT        NOT NULL DEFAULT 'pendiente'
-                    CHECK (estado IN ('pendiente', 'emitida', 'error')),
+                    CHECK (estado IN ('pendiente', 'excluida', 'emitida', 'error')),
   error_msg         TEXT,
   datos_json        JSONB,       -- Respuesta completa de ARCA (para auditoría)
 
@@ -30,9 +37,14 @@ CREATE TABLE facturas (
 );
 
 -- Índices útiles
-CREATE INDEX idx_facturas_cita_id  ON facturas(cita_id);
-CREATE INDEX idx_facturas_fecha    ON facturas(fecha);
-CREATE INDEX idx_facturas_estado   ON facturas(estado);
+CREATE INDEX idx_facturas_cita_id      ON facturas(cita_id);
+CREATE INDEX idx_facturas_afip_row_key ON facturas(afip_row_key);
+CREATE INDEX idx_facturas_fecha        ON facturas(fecha);
+CREATE INDEX idx_facturas_estado       ON facturas(estado);
+
+-- Una sola factura por fila de la hoja Afip
+CREATE UNIQUE INDEX idx_facturas_afip_row_key_unique
+  ON facturas(afip_row_key) WHERE afip_row_key IS NOT NULL;
 
 -- RLS
 ALTER TABLE facturas ENABLE ROW LEVEL SECURITY;
