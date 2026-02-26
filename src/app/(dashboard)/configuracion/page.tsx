@@ -15,7 +15,8 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { DIAS_SEMANA } from '@/lib/constants'
 
 const ADMIN_EMAIL = 'ravamartin@gmail.com'
@@ -289,6 +290,17 @@ export default function ConfiguracionPage() {
       .eq('id', prof.id)
     if (!error) {
       toast.success(prof.activo ? 'Empleado desactivado' : 'Empleado activado')
+      fetchProfesionales()
+    }
+  }
+
+  async function toggleVisibleCalendario(prof: Profesional) {
+    const { error } = await supabase
+      .from('profesionales')
+      .update({ visible_calendario: !prof.visible_calendario, updated_at: new Date().toISOString() })
+      .eq('id', prof.id)
+    if (!error) {
+      toast.success(prof.visible_calendario ? `${prof.nombre} oculto del calendario` : `${prof.nombre} visible en calendario`)
       fetchProfesionales()
     }
   }
@@ -648,6 +660,11 @@ export default function ConfiguracionPage() {
                       <TableHead>Teléfono</TableHead>
                       <TableHead className="text-center">Comisión %</TableHead>
                       <TableHead className="text-center">Estado</TableHead>
+                      <TableHead className="text-center">
+                        <span className="flex items-center justify-center gap-1">
+                          <CalendarDays className="h-3.5 w-3.5" />Calendario
+                        </span>
+                      </TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -682,6 +699,12 @@ export default function ConfiguracionPage() {
                           >
                             {prof.activo ? 'Activo' : 'Inactivo'}
                           </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Switch
+                            checked={prof.visible_calendario ?? true}
+                            onCheckedChange={() => toggleVisibleCalendario(prof)}
+                          />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">

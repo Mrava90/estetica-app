@@ -10,6 +10,7 @@ export interface Profesional {
   color: string
   comision_porcentaje: number
   activo: boolean
+  visible_calendario: boolean
   created_at: string
   updated_at: string
 }

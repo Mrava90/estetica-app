@@ -42,7 +42,7 @@ export function CalendarioView() {
         .select('*, clientes(*), profesionales(*), servicios(*)')
         .in('status', ['pendiente', 'confirmada'])
         .order('fecha_inicio'),
-      supabase.from('profesionales').select('*').eq('activo', true).order('nombre'),
+      supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre'),
     ])
 
     if (citasRes.data) setCitas(citasRes.data)

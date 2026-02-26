@@ -33,6 +33,10 @@ import { ADMIN_EMAIL } from '@/lib/constants'
 interface MonthlyStats {
   efectivo: number
   mercadopago: number
+  ingresosEfectivo: number
+  ingresosMercadopago: number
+  gastosEfectivo: number
+  gastosMercadopago: number
 }
 
 export default function CajaDiariaPage() {
@@ -76,7 +80,8 @@ export default function CajaDiariaPage() {
         supabase
           .from('citas')
           .select('precio_cobrado, metodo_pago')
-          .eq('status', 'completada')
+          .in('status', ['completada', 'confirmada'])
+          .gt('precio_cobrado', 0)
           .gte('fecha_inicio', `${monthStart}T00:00:00`)
           .lt('fecha_inicio', monthEnd),
         supabase
@@ -85,27 +90,37 @@ export default function CajaDiariaPage() {
           .gte('fecha', monthStart),
       ])
 
-      let efectivo = 0
-      let mercadopago = 0
+      let ingresosEfectivo = 0
+      let ingresosMercadopago = 0
+      let gastosEfectivo = 0
+      let gastosMercadopago = 0
 
       for (const cita of (citasRes.data || [])) {
         if (cita.metodo_pago === 'mercadopago') {
-          mercadopago += cita.precio_cobrado || 0
+          ingresosMercadopago += cita.precio_cobrado || 0
         } else {
-          efectivo += cita.precio_cobrado || 0
+          ingresosEfectivo += cita.precio_cobrado || 0
         }
       }
 
       for (const mov of (movsRes.data || [])) {
         if (mov.descripcion.startsWith('Comisión:')) continue
+        if (mov.monto >= 0) continue // solo gastos (negativos)
         if (mov.tipo === 'mercadopago') {
-          mercadopago += mov.monto
+          gastosMercadopago += Math.abs(mov.monto)
         } else {
-          efectivo += mov.monto
+          gastosEfectivo += Math.abs(mov.monto)
         }
       }
 
-      setMonthlyStats({ efectivo, mercadopago })
+      setMonthlyStats({
+        efectivo: ingresosEfectivo - gastosEfectivo,
+        mercadopago: ingresosMercadopago - gastosMercadopago,
+        ingresosEfectivo,
+        ingresosMercadopago,
+        gastosEfectivo,
+        gastosMercadopago,
+      })
     }
     fetchAdminStats()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -249,23 +264,33 @@ export default function CajaDiariaPage() {
         {/* Admin: disponible del mes */}
         {isAdmin && monthlyStats && (
           <div className="flex-1 flex justify-center">
-            <div className="border rounded-md px-3 py-1.5 bg-background shadow-sm text-xs min-w-[260px]">
-              <div className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wide mb-1 text-center">
+            <div className="border rounded-md px-3 py-2 bg-background shadow-sm text-xs min-w-[300px]">
+              <div className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5 text-center">
                 Caja al día — {new Date().toLocaleString('es-AR', { month: 'long' })}
               </div>
-              <div className="flex justify-between gap-6">
-                <div className="flex justify-between gap-2 w-full">
-                  <span className="text-muted-foreground">Efectivo</span>
-                  <span className="font-semibold text-green-700">{formatPrecio(monthlyStats.efectivo)}</span>
-                </div>
-                <div className="flex justify-between gap-2 w-full">
-                  <span className="text-muted-foreground">Mercadopago</span>
-                  <span className="font-semibold text-blue-700">{formatPrecio(monthlyStats.mercadopago)}</span>
-                </div>
+              {/* Headers */}
+              <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground mb-0.5">
+                <span></span>
+                <span className="text-center">Efectivo</span>
+                <span className="text-center">Mercadopago</span>
               </div>
-              <div className="border-t mt-1.5 pt-1 flex justify-between">
-                <span className="font-semibold text-amber-700">DISPONIBLE</span>
-                <span className="font-bold text-amber-700">{formatPrecio(monthlyStats.efectivo + monthlyStats.mercadopago)}</span>
+              {/* Ingresos */}
+              <div className="grid grid-cols-3 gap-2 items-center">
+                <span className="text-muted-foreground">Ingresos</span>
+                <span className="text-right text-green-700">{formatPrecio(monthlyStats.ingresosEfectivo)}</span>
+                <span className="text-right text-blue-700">{formatPrecio(monthlyStats.ingresosMercadopago)}</span>
+              </div>
+              {/* Gastos */}
+              <div className="grid grid-cols-3 gap-2 items-center">
+                <span className="text-muted-foreground">Gastos</span>
+                <span className="text-right text-destructive">-{formatPrecio(monthlyStats.gastosEfectivo)}</span>
+                <span className="text-right text-destructive">-{formatPrecio(monthlyStats.gastosMercadopago)}</span>
+              </div>
+              {/* Disponible */}
+              <div className="border-t mt-1.5 pt-1 grid grid-cols-3 gap-2 items-center">
+                <span className="font-semibold text-amber-700 text-[10px] uppercase">Disponible</span>
+                <span className="text-right font-bold text-amber-700">{formatPrecio(monthlyStats.efectivo)}</span>
+                <span className="text-right font-bold text-blue-700">{formatPrecio(monthlyStats.mercadopago)}</span>
               </div>
             </div>
           </div>
