@@ -28,6 +28,12 @@ import {
   Building2,
   Wallet,
 } from 'lucide-react'
+import { ADMIN_EMAIL } from '@/lib/constants'
+
+interface MonthlyStats {
+  efectivo: number
+  mercadopago: number
+}
 
 export default function CajaDiariaPage() {
   const [fecha, setFecha] = useState<Date>(new Date())
@@ -36,6 +42,8 @@ export default function CajaDiariaPage() {
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
 
   // New movement form state
   const [newMonto, setNewMonto] = useState('')
@@ -52,6 +60,55 @@ export default function CajaDiariaPage() {
   )
 
   const supabase = createClient()
+
+  // Fetch admin check + monthly available balance (acumulado del mes)
+  useEffect(() => {
+    async function fetchAdminStats() {
+      const { data: userData } = await supabase.auth.getUser()
+      if (userData.user?.email !== ADMIN_EMAIL) return
+      setIsAdmin(true)
+
+      const now = new Date()
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
+
+      const [citasRes, movsRes] = await Promise.all([
+        supabase
+          .from('citas')
+          .select('precio_cobrado, metodo_pago')
+          .eq('status', 'completada')
+          .gte('fecha_inicio', `${monthStart}T00:00:00`)
+          .lt('fecha_inicio', monthEnd),
+        supabase
+          .from('movimientos_caja')
+          .select('monto, tipo, descripcion')
+          .gte('fecha', monthStart),
+      ])
+
+      let efectivo = 0
+      let mercadopago = 0
+
+      for (const cita of (citasRes.data || [])) {
+        if (cita.metodo_pago === 'mercadopago') {
+          mercadopago += cita.precio_cobrado || 0
+        } else {
+          efectivo += cita.precio_cobrado || 0
+        }
+      }
+
+      for (const mov of (movsRes.data || [])) {
+        if (mov.descripcion.startsWith('Comisión:')) continue
+        if (mov.tipo === 'mercadopago') {
+          mercadopago += mov.monto
+        } else {
+          efectivo += mov.monto
+        }
+      }
+
+      setMonthlyStats({ efectivo, mercadopago })
+    }
+    fetchAdminStats()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -186,9 +243,35 @@ export default function CajaDiariaPage() {
   return (
     <div className="space-y-4">
       {/* Header with date navigation */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Caja Diaria</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold shrink-0">Caja Diaria</h1>
+
+        {/* Admin: disponible del mes */}
+        {isAdmin && monthlyStats && (
+          <div className="flex-1 flex justify-center">
+            <div className="border rounded-md px-3 py-1.5 bg-background shadow-sm text-xs min-w-[260px]">
+              <div className="font-semibold text-[10px] text-muted-foreground uppercase tracking-wide mb-1 text-center">
+                Caja al día — {new Date().toLocaleString('es-AR', { month: 'long' })}
+              </div>
+              <div className="flex justify-between gap-6">
+                <div className="flex justify-between gap-2 w-full">
+                  <span className="text-muted-foreground">Efectivo</span>
+                  <span className="font-semibold text-green-700">{formatPrecio(monthlyStats.efectivo)}</span>
+                </div>
+                <div className="flex justify-between gap-2 w-full">
+                  <span className="text-muted-foreground">Mercadopago</span>
+                  <span className="font-semibold text-blue-700">{formatPrecio(monthlyStats.mercadopago)}</span>
+                </div>
+              </div>
+              <div className="border-t mt-1.5 pt-1 flex justify-between">
+                <span className="font-semibold text-amber-700">DISPONIBLE</span>
+                <span className="font-bold text-amber-700">{formatPrecio(monthlyStats.efectivo + monthlyStats.mercadopago)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="icon" onClick={() => setFecha(subDays(fecha, 1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
