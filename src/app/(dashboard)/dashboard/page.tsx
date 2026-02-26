@@ -5,11 +5,15 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { CitaConRelaciones } from '@/types/database'
 import { formatHora, formatPrecio } from '@/lib/dates'
-import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
+import { STATUS_LABELS, STATUS_COLORS, ADMIN_EMAIL } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { CalendarDays, Users, DollarSign, Clock } from 'lucide-react'
+import { CalendarDays, Users, DollarSign, Clock, Banknote, CreditCard } from 'lucide-react'
+
+function formatMoney(n: number): string {
+  return new Intl.NumberFormat('es-AR', { style: 'decimal', maximumFractionDigits: 0 }).format(n)
+}
 
 interface Stats {
   citasHoy: number
@@ -18,14 +22,27 @@ interface Stats {
   facturacionMes: number
 }
 
+interface AdminStats {
+  efectivo: number
+  mercadopago: number
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({ citasHoy: 0, citasSemana: 0, clientesNuevos: 0, facturacionMes: 0 })
   const [citasHoy, setCitasHoy] = useState<CitaConRelaciones[]>([])
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminStats, setAdminStats] = useState<AdminStats>({ efectivo: 0, mercadopago: 0 })
   const supabase = createClient()
 
   useEffect(() => {
     fetchStats()
     fetchCitasHoy()
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user?.email === ADMIN_EMAIL) {
+        setIsAdmin(true)
+        fetchAdminStats()
+      }
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchStats() {
@@ -73,6 +90,28 @@ export default function DashboardPage() {
       clientesNuevos: clientesRes.count || 0,
       facturacionMes: facturacion,
     })
+  }
+
+  async function fetchAdminStats() {
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
+
+    const { data } = await supabase
+      .from('citas')
+      .select('precio_cobrado, metodo_pago')
+      .eq('status', 'completada')
+      .gte('fecha_inicio', startOfMonth)
+      .lt('fecha_inicio', endOfMonth)
+
+    if (!data) return
+    const efectivo = data
+      .filter(c => c.metodo_pago !== 'mercadopago')
+      .reduce((s, c) => s + (c.precio_cobrado || 0), 0)
+    const mercadopago = data
+      .filter(c => c.metodo_pago === 'mercadopago')
+      .reduce((s, c) => s + (c.precio_cobrado || 0), 0)
+    setAdminStats({ efectivo, mercadopago })
   }
 
   async function fetchCitasHoy() {
@@ -134,6 +173,36 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Admin-only: saldos de caja */}
+      {isAdmin && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">Efectivo (este mes)</CardTitle>
+              <Banknote className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                ${formatMoney(adminStats.efectivo)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Ingresos en efectivo</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium">MercadoPago (este mes)</CardTitle>
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                ${formatMoney(adminStats.mercadopago)}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Ingresos por MercadoPago</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Today's appointments */}
       <Card>

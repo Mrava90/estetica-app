@@ -40,8 +40,16 @@ export default function CajaDiariaPage() {
   // New movement form state
   const [newMonto, setNewMonto] = useState('')
   const [newTipo, setNewTipo] = useState<'efectivo' | 'mercadopago'>('efectivo')
+  const [newCategoria, setNewCategoria] = useState<'local' | 'adelanto' | 'personal'>('local')
   const [newDescripcion, setNewDescripcion] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Excluir solo las comisiones por porcentaje (formato viejo "Comisión: PROF - cliente")
+  // Los adelantos "Adelanto comisión:" SÍ son movimientos de caja diarios
+  const movimientosDiarios = useMemo(
+    () => movimientos.filter(m => !m.descripcion.startsWith('Comisión:')),
+    [movimientos]
+  )
 
   const supabase = createClient()
 
@@ -84,7 +92,6 @@ export default function CajaDiariaPage() {
       if (cita.metodo_pago === 'mercadopago') {
         mercadopagoCitas += monto
       } else {
-        // efectivo + transferencia both count as efectivo
         efectivoCitas += monto
       }
     }
@@ -92,7 +99,7 @@ export default function CajaDiariaPage() {
     let efectivoMovimientos = 0
     let mercadopagoMovimientos = 0
 
-    for (const mov of movimientos) {
+    for (const mov of movimientosDiarios) {
       if (mov.tipo === 'efectivo') {
         efectivoMovimientos += mov.monto
       } else {
@@ -109,11 +116,11 @@ export default function CajaDiariaPage() {
       totalMercadopago: mercadopagoCitas + mercadopagoMovimientos,
       grandTotal: efectivoCitas + mercadopagoCitas + efectivoMovimientos + mercadopagoMovimientos,
     }
-  }, [citas, movimientos])
+  }, [citas, movimientosDiarios])
 
   async function handleAddMovimiento() {
-    const monto = parseFloat(newMonto)
-    if (!monto || monto === 0) {
+    const montoRaw = parseFloat(newMonto)
+    if (!montoRaw || montoRaw === 0) {
       toast.error('El monto no puede ser 0')
       return
     }
@@ -122,12 +129,21 @@ export default function CajaDiariaPage() {
       return
     }
 
+    const PREFIXES = {
+      local: 'Gasto local:',
+      adelanto: 'Adelanto comisión:',
+      personal: 'Gasto personal:',
+    } as const
+
+    const monto = -Math.abs(montoRaw)
+    const descripcion = `${PREFIXES[newCategoria]} ${newDescripcion.trim()}`
+
     setSaving(true)
     const { error } = await supabase.from('movimientos_caja').insert({
       fecha: format(fecha, 'yyyy-MM-dd'),
       monto,
       tipo: newTipo,
-      descripcion: newDescripcion.trim(),
+      descripcion,
       origen: 'manual',
     })
 
@@ -138,6 +154,7 @@ export default function CajaDiariaPage() {
       setDialogOpen(false)
       setNewMonto('')
       setNewTipo('efectivo')
+      setNewCategoria('local')
       setNewDescripcion('')
       fetchData()
     }
@@ -256,7 +273,7 @@ export default function CajaDiariaPage() {
                   {formatPrecio(totals.grandTotal)}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {citas.length} cobro{citas.length !== 1 ? 's' : ''} + {movimientos.length} mov{movimientos.length !== 1 ? 's' : ''}
+                  {citas.length} cobro{citas.length !== 1 ? 's' : ''} + {movimientosDiarios.length} mov{movimientosDiarios.length !== 1 ? 's' : ''}
                 </p>
               </CardContent>
             </Card>
@@ -331,14 +348,14 @@ export default function CajaDiariaPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {movimientos.length === 0 && (
+                  {movimientosDiarios.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                        Sin movimientos manuales
+                        Sin gastos registrados
                       </TableCell>
                     </TableRow>
                   )}
-                  {movimientos.map((mov) => (
+                  {movimientosDiarios.map((mov) => (
                     <TableRow key={mov.id}>
                       <TableCell className="font-medium">{mov.descripcion}</TableCell>
                       <TableCell>
@@ -380,31 +397,60 @@ export default function CajaDiariaPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Monto (negativo para retiros/gastos)</Label>
+              <Label>Categoría</Label>
+              <div className="flex gap-2">
+                {([
+                  { key: 'local', label: 'Gasto local' },
+                  { key: 'adelanto', label: 'Adelanto' },
+                  { key: 'personal', label: 'Personal' },
+                ] as const).map((cat) => (
+                  <Button
+                    key={cat.key}
+                    type="button"
+                    variant={newCategoria === cat.key ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setNewCategoria(cat.key)}
+                  >
+                    {cat.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Monto del gasto</Label>
               <Input
                 type="number"
                 step="0.01"
-                placeholder="Ej: -5000 para un retiro"
+                placeholder="Ej: 5000"
                 value={newMonto}
                 onChange={(e) => setNewMonto(e.target.value)}
               />
             </div>
             <div className="space-y-2">
               <Label>Tipo</Label>
-              <Select value={newTipo} onValueChange={(v) => setNewTipo(v as 'efectivo' | 'mercadopago')}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="efectivo">Efectivo</SelectItem>
-                  <SelectItem value="mercadopago">Mercadopago</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                {([
+                  { key: 'efectivo', label: 'Efectivo' },
+                  { key: 'mercadopago', label: 'Mercadopago' },
+                ] as const).map((t) => (
+                  <Button
+                    key={t.key}
+                    type="button"
+                    variant={newTipo === t.key ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setNewTipo(t.key)}
+                  >
+                    {t.label}
+                  </Button>
+                ))}
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Descripción</Label>
               <Input
-                placeholder="Ej: Retiro de caja, Compra insumos..."
+                placeholder="Ej: alquiler, compra insumos..."
                 value={newDescripcion}
                 onChange={(e) => setNewDescripcion(e.target.value)}
               />
