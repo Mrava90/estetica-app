@@ -202,44 +202,50 @@ export default function ContabilidadPage() {
     const monthCitas = citas.filter(c => c.fecha_inicio.slice(0, 7) === monthStr)
     const monthMovs = movimientos.filter(m => m.fecha.slice(0, 7) === monthStr)
 
-    const byDay: Record<string, { efectivo: number; mercadopago: number; egresos: number }> = {}
+    interface DayData {
+      ingresosEf: number; ingresosMp: number
+      egresosEf: number;  egresosMp: number
+      creditosEf: number; creditosMp: number
+    }
+    const byDay: Record<string, DayData> = {}
+    const empty = (): DayData => ({ ingresosEf: 0, ingresosMp: 0, egresosEf: 0, egresosMp: 0, creditosEf: 0, creditosMp: 0 })
 
-    // Ingresos: solo de citas, separados por metodo_pago
-    // (los pagos de citas NO están en movimientos_caja — van solo a tabla citas)
     for (const c of monthCitas) {
       const day = c.fecha_inicio.slice(0, 10)
-      if (!byDay[day]) byDay[day] = { efectivo: 0, mercadopago: 0, egresos: 0 }
-      if (c.metodo_pago === 'mercadopago') {
-        byDay[day].mercadopago += c.precio_cobrado || 0
+      if (!byDay[day]) byDay[day] = empty()
+      if (c.metodo_pago === 'mercadopago' || c.metodo_pago === 'transferencia') {
+        byDay[day].ingresosMp += c.precio_cobrado || 0
       } else {
-        // efectivo + transferencia → efectivo
-        byDay[day].efectivo += c.precio_cobrado || 0
+        byDay[day].ingresosEf += c.precio_cobrado || 0
       }
     }
 
-    // Egresos: gastos reales (local, personal) + adelantos de caja del día
-    // Solo excluir "Comisión: PROF - cliente" (porcentaje calculado, no movimiento de caja)
     for (const m of monthMovs) {
-      if (m.monto >= 0) continue
       if (m.descripcion.startsWith('Comisión:')) continue
-      if (!byDay[m.fecha]) byDay[m.fecha] = { efectivo: 0, mercadopago: 0, egresos: 0 }
-      byDay[m.fecha].egresos += Math.abs(m.monto)
+      if (!byDay[m.fecha]) byDay[m.fecha] = empty()
+      if (m.monto < 0) {
+        if (m.tipo === 'mercadopago') byDay[m.fecha].egresosMp += Math.abs(m.monto)
+        else byDay[m.fecha].egresosEf += Math.abs(m.monto)
+      } else {
+        if (m.tipo === 'mercadopago') byDay[m.fecha].creditosMp += m.monto
+        else byDay[m.fecha].creditosEf += m.monto
+      }
     }
 
     const sorted = Object.entries(byDay).sort(([a], [b]) => a.localeCompare(b))
-    let acumulado = 0
     return sorted.map(([fecha, d]) => {
-      const ingresos = d.efectivo + d.mercadopago
-      const neto = ingresos - d.egresos
-      acumulado += neto
+      const netoEf = d.ingresosEf - d.egresosEf + d.creditosEf
+      const netoMp = d.ingresosMp - d.egresosMp + d.creditosMp
+      // movimiento neto de gastos/créditos por tipo (negativo = gasto, positivo = crédito)
+      const movEf = d.creditosEf - d.egresosEf
+      const movMp = d.creditosMp - d.egresosMp
       return {
         fecha: `${fecha.slice(8, 10)}/${fecha.slice(5, 7)}`,
-        efectivo: d.efectivo,
-        mercadopago: d.mercadopago,
-        ingresos,
-        egresos: d.egresos,
-        neto,
-        acumulado,
+        netoEf,
+        netoMp,
+        movEf,
+        movMp,
+        resultado: netoEf + netoMp,
       }
     })
   }, [citas, movimientos, year, selectedMonth])
@@ -511,15 +517,13 @@ export default function ContabilidadPage() {
                         <TableHead>Día</TableHead>
                         <TableHead className="text-right">Efectivo</TableHead>
                         <TableHead className="text-right">MercadoPago</TableHead>
-                        <TableHead className="text-right">Egresos</TableHead>
-                        <TableHead className="text-right">Neto</TableHead>
-                        <TableHead className="text-right">Acumulado</TableHead>
+                        <TableHead className="text-right">Resultado</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {cajaDiariaData.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                             Sin datos para este mes
                           </TableCell>
                         </TableRow>
@@ -527,40 +531,42 @@ export default function ContabilidadPage() {
                         <>
                           {cajaDiariaData.map(d => (
                             <TableRow key={d.fecha}>
-                              <TableCell>{d.fecha}</TableCell>
-                              <TableCell className="text-right text-green-600">
-                                {d.efectivo > 0 ? `$${formatMoney(d.efectivo)}` : '—'}
+                              <TableCell className="font-medium">{d.fecha}</TableCell>
+                              <TableCell className="text-right">
+                                <div className={d.netoEf < 0 ? 'text-red-500 font-medium' : 'text-green-600 font-medium'}>
+                                  {d.netoEf !== 0 ? `$${formatMoney(d.netoEf)}` : '—'}
+                                </div>
+                                {d.movEf !== 0 && (
+                                  <div className={`text-[10px] ${d.movEf < 0 ? 'text-red-400' : 'text-green-500'}`}>
+                                    {d.movEf < 0 ? `-$${formatMoney(Math.abs(d.movEf))}` : `+$${formatMoney(d.movEf)}`}
+                                  </div>
+                                )}
                               </TableCell>
-                              <TableCell className="text-right text-blue-600">
-                                {d.mercadopago > 0 ? `$${formatMoney(d.mercadopago)}` : '—'}
+                              <TableCell className="text-right">
+                                <div className={d.netoMp < 0 ? 'text-red-500 font-medium' : 'text-blue-600 font-medium'}>
+                                  {d.netoMp !== 0 ? `$${formatMoney(d.netoMp)}` : '—'}
+                                </div>
+                                {d.movMp !== 0 && (
+                                  <div className={`text-[10px] ${d.movMp < 0 ? 'text-red-400' : 'text-green-500'}`}>
+                                    {d.movMp < 0 ? `-$${formatMoney(Math.abs(d.movMp))}` : `+$${formatMoney(d.movMp)}`}
+                                  </div>
+                                )}
                               </TableCell>
-                              <TableCell className="text-right text-red-500">
-                                {d.egresos > 0 ? `-$${formatMoney(d.egresos)}` : '—'}
-                              </TableCell>
-                              <TableCell className={`text-right font-medium ${d.neto >= 0 ? '' : 'text-red-500'}`}>
-                                ${formatMoney(d.neto)}
-                              </TableCell>
-                              <TableCell className={`text-right font-semibold ${d.acumulado >= 0 ? '' : 'text-red-500'}`}>
-                                ${formatMoney(d.acumulado)}
+                              <TableCell className={`text-right font-semibold ${d.resultado < 0 ? 'text-red-500' : ''}`}>
+                                {d.resultado !== 0 ? `$${formatMoney(d.resultado)}` : '—'}
                               </TableCell>
                             </TableRow>
                           ))}
                           <TableRow className="border-t-2 bg-muted/50 font-bold">
                             <TableCell>TOTAL</TableCell>
                             <TableCell className="text-right text-green-600">
-                              ${formatMoney(cajaDiariaData.reduce((s, d) => s + d.efectivo, 0))}
+                              ${formatMoney(cajaDiariaData.reduce((s, d) => s + d.netoEf, 0))}
                             </TableCell>
                             <TableCell className="text-right text-blue-600">
-                              ${formatMoney(cajaDiariaData.reduce((s, d) => s + d.mercadopago, 0))}
-                            </TableCell>
-                            <TableCell className="text-right text-red-500">
-                              -${formatMoney(cajaDiariaData.reduce((s, d) => s + d.egresos, 0))}
-                            </TableCell>
-                            <TableCell className="text-right font-bold">
-                              ${formatMoney(cajaDiariaData.reduce((s, d) => s + d.neto, 0))}
+                              ${formatMoney(cajaDiariaData.reduce((s, d) => s + d.netoMp, 0))}
                             </TableCell>
                             <TableCell className="text-right">
-                              ${formatMoney(cajaDiariaData[cajaDiariaData.length - 1]?.acumulado || 0)}
+                              ${formatMoney(cajaDiariaData.reduce((s, d) => s + d.resultado, 0))}
                             </TableCell>
                           </TableRow>
                         </>
