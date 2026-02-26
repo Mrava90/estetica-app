@@ -21,18 +21,25 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     const supabase = createClient()
 
-    // Listen for PASSWORD_RECOVERY event (handles hash fragment flow)
+    // PKCE flow: Supabase sends ?code=xxx in the URL (default in @supabase/ssr)
+    const code = new URLSearchParams(window.location.search).get('code')
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
+        if (!error) setReady(true)
+      })
+      return
+    }
+
+    // Implicit flow fallback: listen for PASSWORD_RECOVERY event (hash fragment)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setReady(true)
       }
     })
 
-    // Also check if we already have a session (from server-side code exchange)
+    // Also check existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setReady(true)
-      }
+      if (session) setReady(true)
     })
 
     return () => subscription.unsubscribe()
@@ -64,7 +71,7 @@ export default function ResetPasswordPage() {
 
     setSuccess(true)
     setTimeout(() => {
-      router.push('/dashboard')
+      router.push('/calendario')
     }, 2000)
   }
 
