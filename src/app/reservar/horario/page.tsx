@@ -60,12 +60,13 @@ function HorarioContent() {
           .from('profesionales')
           .select('*')
           .eq('activo', true)
+          .eq('visible_calendario', true)
           .in('id', ids)
           .order('nombre')
         if (data) setProfesionales(data)
       } else {
         // No records = all professionals (backwards compatible)
-        const { data } = await supabase.from('profesionales').select('*').eq('activo', true).order('nombre')
+        const { data } = await supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre')
         if (data) setProfesionales(data)
       }
     }

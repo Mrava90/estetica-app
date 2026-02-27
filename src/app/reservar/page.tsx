@@ -59,7 +59,7 @@ export default function ReservarPage() {
     async function fetchData() {
       const [servRes, profRes] = await Promise.all([
         supabase.from('servicios').select('*').eq('activo', true).order('nombre'),
-        supabase.from('profesionales').select('*').eq('activo', true).order('nombre'),
+        supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre'),
       ])
       if (servRes.data) setServicios(servRes.data)
       if (profRes.data) setProfesionales(profRes.data)
