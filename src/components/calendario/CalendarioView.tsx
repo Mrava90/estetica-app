@@ -8,10 +8,11 @@ import type { CitaConRelaciones, Profesional, Horario, Bloqueo } from '@/types/d
 import { CalendarioResourceDayView } from './CalendarioResourceDayView'
 import { CitaDialog } from './CitaDialog'
 import { BloqueoDialog } from './BloqueoDialog'
+import { RecordatoriosDialog } from './RecordatoriosDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, CalendarDays, Ban } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Ban, MessageCircle } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 
@@ -32,8 +33,43 @@ export function CalendarioView() {
   const [selectedBloqueo, setSelectedBloqueo] = useState<Bloqueo | null>(null)
   const [bloqueoDefaultStart, setBloqueoDefaultStart] = useState<string | undefined>()
   const [bloqueoDefaultEnd, setBloqueoDefaultEnd] = useState<string | undefined>()
+  const [recordatoriosOpen, setRecordatoriosOpen] = useState(false)
+  const [recordatoriosPendientes, setRecordatoriosPendientes] = useState(0)
 
   const supabase = createClient()
+
+  const fetchRecordatoriosPendientes = useCallback(async () => {
+    const manana = addDays(new Date(), 1)
+    const mananaStr = format(manana, 'yyyy-MM-dd')
+    const inicio = `${mananaStr}T00:00:00`
+    const fin = `${mananaStr}T23:59:59`
+
+    // Total de citas mañana con status activo
+    const { data: citasManana } = await supabase
+      .from('citas')
+      .select('id')
+      .in('status', ['pendiente', 'confirmada'])
+      .gte('fecha_inicio', inicio)
+      .lte('fecha_inicio', fin)
+
+    if (!citasManana || citasManana.length === 0) {
+      setRecordatoriosPendientes(0)
+      return
+    }
+
+    const ids = citasManana.map((c) => c.id)
+
+    // Cuántas ya tienen recordatorio enviado
+    const { data: enviados } = await supabase
+      .from('recordatorios')
+      .select('cita_id')
+      .eq('tipo', 'whatsapp')
+      .eq('status', 'enviado')
+      .in('cita_id', ids)
+
+    const pendientes = citasManana.length - (enviados?.length ?? 0)
+    setRecordatoriosPendientes(pendientes > 0 ? pendientes : 0)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = useCallback(async () => {
     const [citasRes, profRes] = await Promise.all([
@@ -78,6 +114,7 @@ export function CalendarioView() {
 
   useEffect(() => {
     fetchData()
+    fetchRecordatoriosPendientes()
 
     const channel = supabase
       .channel('citas-bloqueos-changes')
@@ -92,7 +129,7 @@ export function CalendarioView() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [fetchData, supabase])
+  }, [fetchData, fetchRecordatoriosPendientes, supabase])
 
   const filteredProfesionales = profesionales.filter((p) => filtrosProfesional.includes(p.id))
 
@@ -204,6 +241,20 @@ export function CalendarioView() {
             <Ban className="h-3.5 w-3.5" />
             Bloquear
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="relative gap-1.5 text-xs"
+            onClick={() => setRecordatoriosOpen(true)}
+          >
+            <MessageCircle className="h-3.5 w-3.5 text-green-600" />
+            Recordatorios
+            {recordatoriosPendientes > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-bold text-white">
+                {recordatoriosPendientes}
+              </span>
+            )}
+          </Button>
           {!isToday && (
             <Button variant="ghost" size="sm" className="ml-1 text-xs" onClick={() => setFecha(new Date())}>
               Hoy
@@ -261,6 +312,14 @@ export function CalendarioView() {
         fecha={fecha}
         defaultStart={bloqueoDefaultStart}
         defaultEnd={bloqueoDefaultEnd}
+      />
+
+      <RecordatoriosDialog
+        open={recordatoriosOpen}
+        onClose={() => {
+          setRecordatoriosOpen(false)
+          fetchRecordatoriosPendientes()
+        }}
       />
     </div>
   )

@@ -4,6 +4,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Archivos estáticos: nunca pasar por auth
+  if (/\.(?:jpg|jpeg|png|gif|svg|ico|webp|css|js|woff2?|ttf|eot|otf|mp4|pdf)$/i.test(pathname)) {
+    return NextResponse.next()
+  }
+
   // Public routes that don't need auth
   const publicPaths = ['/login', '/reset-password', '/auth/confirm', '/reservar', '/api/citas', '/api/whatsapp/webhook', '/api/cron']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
@@ -60,5 +65,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
