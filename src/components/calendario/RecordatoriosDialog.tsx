@@ -167,69 +167,78 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
             No hay turnos para mañana.
           </div>
         ) : (
-          <div className="space-y-2">
-            {citas.map((cita) => (
-              <div
-                key={cita.id}
-                className={`flex items-center gap-3 rounded-xl border p-3 transition-opacity ${
-                  cita.recordatorio_enviado ? 'opacity-40 bg-muted/30' : 'bg-white'
-                }`}
-              >
-                {/* Hora */}
-                <div className="flex w-14 shrink-0 flex-col items-center justify-center rounded-lg bg-slate-100 py-2">
-                  <span className="text-xl font-bold tabular-nums leading-none text-slate-800">
-                    {format(new Date(cita.fecha_inicio), 'HH:mm')}
-                  </span>
-                </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="pb-2 pr-3 font-medium">Cliente</th>
+                  <th className="pb-2 pr-3 font-medium">Servicio</th>
+                  <th className="pb-2 pr-3 font-medium">Hora</th>
+                  <th className="pb-2 pr-3 font-medium">Teléfono</th>
+                  <th className="pb-2 pr-3 font-medium text-center">WhatsApp</th>
+                  <th className="pb-2 font-medium text-center">Enviado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {citas.map((cita) => (
+                  <tr key={cita.id} className={cita.recordatorio_enviado ? 'opacity-50' : ''}>
+                    <td className="py-3 pr-3 font-medium">
+                      {cita.clientes?.nombre ?? <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">
+                      {cita.servicios?.nombre ?? '—'}
+                    </td>
+                    <td className="py-3 pr-3">
+                      <span className="text-xl font-bold tabular-nums text-slate-800">
+                        {format(new Date(cita.fecha_inicio), 'HH:mm')}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-3">
+                      {cita.clientes?.telefono ? (
+                        <span className="flex items-center gap-1 text-muted-foreground">
+                          <Phone className="h-3 w-3" />
+                          {cita.clientes.telefono}
+                        </span>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-muted-foreground">Sin tel.</Badge>
+                      )}
+                    </td>
+                    <td className="py-3 pr-3 text-center">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="gap-2 bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => abrirWhatsApp(cita)}
+                        disabled={!cita.clientes?.telefono}
+                        title="Abrir chat WhatsApp"
+                      >
+                        <MessageCircle className="h-5 w-5" />
+                        WA
+                      </Button>
+                    </td>
+                    <td className="py-3 text-center">
+                      <Button
+                        variant={cita.recordatorio_enviado ? 'default' : 'outline'}
+                        size="icon"
+                        className={`h-8 w-8 ${cita.recordatorio_enviado ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                        onClick={() => marcarEnviado(cita)}
+                        disabled={enviando === cita.id}
+                        title={cita.recordatorio_enviado ? 'Desmarcar' : 'Marcar como enviado'}
+                      >
+                        {enviando === cita.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
 
-                {/* Info */}
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm truncate">
-                    {cita.clientes?.nombre ?? <span className="text-muted-foreground">Sin nombre</span>}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">{cita.servicios?.nombre ?? '—'}</p>
-                  {cita.clientes?.telefono ? (
-                    <p className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                      <Phone className="h-3 w-3" />
-                      {cita.clientes.telefono}
-                    </p>
-                  ) : (
-                    <Badge variant="outline" className="mt-0.5 text-xs text-muted-foreground">Sin teléfono</Badge>
-                  )}
-                </div>
-
-                {/* WhatsApp */}
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="shrink-0 gap-2 bg-green-600 hover:bg-green-700 text-white px-4"
-                  onClick={() => abrirWhatsApp(cita)}
-                  disabled={!cita.clientes?.telefono}
-                >
-                  <MessageCircle className="h-5 w-5" />
-                  <span className="hidden sm:inline">Enviar WA</span>
-                </Button>
-
-                {/* Check enviado */}
-                <Button
-                  variant={cita.recordatorio_enviado ? 'default' : 'outline'}
-                  size="icon"
-                  className={`shrink-0 h-9 w-9 ${cita.recordatorio_enviado ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                  onClick={() => marcarEnviado(cita)}
-                  disabled={enviando === cita.id}
-                  title={cita.recordatorio_enviado ? 'Desmarcar' : 'Marcar como enviado'}
-                >
-                  {enviando === cita.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Check className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            ))}
-
-            <p className="pt-1 text-xs text-muted-foreground">
-              "Enviar WA" abre el chat con el mensaje pre-cargado. Marcá el tick después de enviar.
+            <p className="mt-4 text-xs text-muted-foreground">
+              El botón WA abre el chat con el mensaje de recordatorio pre-cargado. Marcá el tick después de enviar.
             </p>
           </div>
         )}
