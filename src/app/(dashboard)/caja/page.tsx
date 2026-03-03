@@ -198,6 +198,17 @@ export default function CajaDiariaPage() {
     }
   }
 
+  /** Las citas de Sheets tienen servicio_id/cliente_id = null.
+   *  La info viene en notas con formato "[SSR] NombreCliente - NombreServicio" */
+  function parseSheetNotas(notas: string | null): { cliente: string; servicio: string } {
+    if (!notas) return { cliente: '—', servicio: '—' }
+    const match = notas.match(/^\[(SSR|KW)\]\s*(.+?)\s*-\s*(.+)$/)
+    if (match) {
+      return { cliente: match[2]?.trim() || '—', servicio: match[3]?.trim() || '—' }
+    }
+    return { cliente: '—', servicio: notas }
+  }
+
   function MetodoPagoBadge({ metodo }: { metodo: string }) {
     switch (metodo) {
       case 'mercadopago':
@@ -354,11 +365,15 @@ export default function CajaDiariaPage() {
                       </TableCell>
                     </TableRow>
                   )}
-                  {citas.map((cita) => (
+                  {citas.map((cita) => {
+                    const sheet = cita.origen === 'sheets' ? parseSheetNotas(cita.notas) : null
+                    const clienteDisplay = cita.clientes?.nombre || sheet?.cliente || '—'
+                    const servicioDisplay = cita.servicios?.nombre || sheet?.servicio || '—'
+                    return (
                     <TableRow key={cita.id}>
                       <TableCell className="text-sm">{formatHora(cita.fecha_inicio)}</TableCell>
-                      <TableCell className="text-sm font-medium">{cita.clientes?.nombre || '—'}</TableCell>
-                      <TableCell className="text-sm">{cita.servicios?.nombre || '—'}</TableCell>
+                      <TableCell className="text-sm font-medium">{clienteDisplay}</TableCell>
+                      <TableCell className="text-sm">{servicioDisplay}</TableCell>
                       <TableCell className="text-sm">
                         <div className="flex items-center gap-1.5">
                           {cita.profesionales && (
@@ -375,7 +390,8 @@ export default function CajaDiariaPage() {
                       <TableCell><MetodoPagoBadge metodo={cita.metodo_pago} /></TableCell>
                       <TableCell className="text-right font-medium">{formatPrecio(cita.precio_cobrado || 0)}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
