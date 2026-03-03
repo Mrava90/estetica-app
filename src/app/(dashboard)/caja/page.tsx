@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { format, addDays, subDays, startOfDay, isToday } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
@@ -27,12 +27,24 @@ import {
   Smartphone,
   Building2,
   Wallet,
+  Upload,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import { isAdminEmail, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 
 interface MonthlyStats {
   efectivo: number
   mercadopago: number
+}
+
+interface CsvRow {
+  fecha: string
+  descripcion: string
+  monto: number
+  tipo: 'efectivo' | 'mercadopago'
+  valid: boolean
+  errorMsg?: string
 }
 
 export default function CajaDiariaPage() {
@@ -51,6 +63,12 @@ export default function CajaDiariaPage() {
   const [newCategoria, setNewCategoria] = useState<'local' | 'adelanto' | 'personal'>('local')
   const [newDescripcion, setNewDescripcion] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // CSV import state
+  const [csvDialogOpen, setCsvDialogOpen] = useState(false)
+  const [csvPreview, setCsvPreview] = useState<CsvRow[]>([])
+  const [csvImporting, setCsvImporting] = useState(false)
+  const csvInputRef = useRef<HTMLInputElement>(null)
 
   // Excluir solo las comisiones por porcentaje (formato viejo "Comisión: PROF - cliente")
   // Los adelantos "Adelanto comisión:" SÍ son movimientos de caja diarios
@@ -91,7 +109,7 @@ export default function CajaDiariaPage() {
         .select('*, clientes(*), profesionales(*), servicios(*)')
         .gte('fecha_inicio', dayStart)
         .lt('fecha_inicio', dayEnd)
-        .in('status', ['pendiente', 'confirmada', 'completada'])
+        .in('status', ['confirmada', 'completada'])
         .order('fecha_inicio'),
       supabase
         .from('movimientos_caja')
@@ -196,6 +214,92 @@ export default function CajaDiariaPage() {
       toast.success('Movimiento eliminado')
       fetchData()
     }
+  }
+
+  // ── CSV helpers ────────────────────────────────────────────
+  function parseCsvDate(raw: string): string {
+    const trimmed = raw.trim()
+    const parts = trimmed.split('/')
+    if (parts.length === 3) {
+      const [d, m, y] = parts
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+    return ''
+  }
+
+  function parseCsvMonto(raw: string): number {
+    let s = raw.trim().replace(/[$\s"]/g, '')
+    if (s.includes('.') && s.includes(',')) s = s.replace(/\./g, '').replace(',', '.')
+    else if (s.includes(',')) {
+      const after = s.split(',')[1]
+      s = after?.length === 3 ? s.replace(',', '') : s.replace(',', '.')
+    }
+    return parseFloat(s) || 0
+  }
+
+  function parseCsvText(text: string): CsvRow[] {
+    const lines = text.trim().split(/\r?\n/).filter((l) => l.trim())
+    const sep = lines[0]?.includes(';') ? ';' : ','
+    const firstLower = lines[0]?.toLowerCase() || ''
+    const hasHeader =
+      firstLower.includes('fecha') || firstLower.includes('monto') || firstLower.includes('desc')
+    const data = hasHeader ? lines.slice(1) : lines
+
+    return data.map((line) => {
+      const cols = line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ''))
+      const fechaRaw = cols[0] || ''
+      const descripcion = cols[1]?.trim() || ''
+      const montoRaw = cols[2] || ''
+      const tipoRaw = (cols[3] || '').toLowerCase()
+
+      const fecha = parseCsvDate(fechaRaw)
+      const montoNum = parseCsvMonto(montoRaw)
+      const tipo: 'efectivo' | 'mercadopago' =
+        tipoRaw.includes('mp') || tipoRaw.includes('mercado') ? 'mercadopago' : 'efectivo'
+
+      const valid = !!fecha && !!descripcion && montoNum !== 0
+      return {
+        fecha,
+        descripcion,
+        monto: -Math.abs(montoNum),
+        tipo,
+        valid,
+        errorMsg: !fecha ? 'Fecha inválida' : !descripcion ? 'Sin descripción' : !montoNum ? 'Monto 0' : undefined,
+      }
+    })
+  }
+
+  async function handleCsvFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    setCsvPreview(parseCsvText(text))
+  }
+
+  async function handleImportCsv() {
+    const validRows = csvPreview.filter((r) => r.valid)
+    if (validRows.length === 0) return
+    setCsvImporting(true)
+    const { error } = await supabase.from('movimientos_caja').insert(
+      validRows.map((r) => ({
+        fecha: r.fecha,
+        monto: r.monto,
+        tipo: r.tipo,
+        descripcion: r.descripcion,
+        origen: 'manual',
+      })),
+    )
+    if (error) {
+      toast.error('Error al importar: ' + error.message)
+    } else {
+      toast.success(`${validRows.length} movimiento(s) importados`)
+      setCsvDialogOpen(false)
+      setCsvPreview([])
+      if (csvInputRef.current) csvInputRef.current.value = ''
+      fetchData()
+    }
+    setCsvImporting(false)
   }
 
   /** Las citas de Sheets tienen servicio_id/cliente_id = null.
@@ -402,10 +506,16 @@ export default function CajaDiariaPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Movimientos manuales</CardTitle>
-                <Button size="sm" className="gap-2" onClick={() => setDialogOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                  Nuevo movimiento
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" className="gap-2" onClick={() => setCsvDialogOpen(true)}>
+                    <Upload className="h-4 w-4" />
+                    Importar CSV
+                  </Button>
+                  <Button size="sm" className="gap-2" onClick={() => setDialogOpen(true)}>
+                    <Plus className="h-4 w-4" />
+                    Nuevo movimiento
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -459,6 +569,90 @@ export default function CajaDiariaPage() {
           </Card>
         </>
       )}
+
+      {/* Dialog importar CSV */}
+      <Dialog open={csvDialogOpen} onOpenChange={(open) => {
+        setCsvDialogOpen(open)
+        if (!open) { setCsvPreview([]); if (csvInputRef.current) csvInputRef.current.value = '' }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Importar movimientos desde CSV</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground space-y-1">
+              <p className="font-medium text-foreground">Formato esperado (separador coma o punto y coma):</p>
+              <p className="font-mono">fecha,descripcion,monto,tipo</p>
+              <p className="font-mono">03/03/2026,Compra insumos,5000,efectivo</p>
+              <p className="font-mono">03/03/2026,Adelanto Lola,8000,mercadopago</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Seleccionar archivo CSV / Excel (.csv, .txt)</Label>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,.txt,.tsv"
+                onChange={handleCsvFileChange}
+                className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+              />
+            </div>
+
+            {csvPreview.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">{csvPreview.length} filas detectadas</span>
+                  <span className="text-muted-foreground">
+                    {csvPreview.filter((r) => r.valid).length} válidas ·{' '}
+                    {csvPreview.filter((r) => !r.valid).length} con error
+                  </span>
+                </div>
+                <div className="max-h-60 overflow-y-auto rounded-md border">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background">
+                      <TableRow>
+                        <TableHead className="w-8"></TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead>Monto</TableHead>
+                        <TableHead>Tipo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {csvPreview.map((row, i) => (
+                        <TableRow key={i} className={!row.valid ? 'opacity-50' : ''}>
+                          <TableCell>
+                            {row.valid ? (
+                              <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <XCircle className="h-4 w-4 text-destructive" aria-label={row.errorMsg} />
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">{row.fecha || '—'}</TableCell>
+                          <TableCell className="text-sm">{row.descripcion || '—'}</TableCell>
+                          <TableCell className={`text-sm font-medium ${row.monto < 0 ? 'text-destructive' : 'text-green-600'}`}>
+                            {row.monto !== 0 ? formatPrecio(row.monto) : '—'}
+                          </TableCell>
+                          <TableCell className="text-sm capitalize">{row.tipo}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <Button
+                  className="w-full"
+                  onClick={handleImportCsv}
+                  disabled={csvImporting || csvPreview.filter((r) => r.valid).length === 0}
+                >
+                  {csvImporting
+                    ? 'Importando...'
+                    : `Importar ${csvPreview.filter((r) => r.valid).length} movimiento(s)`}
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog para nuevo movimiento */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
