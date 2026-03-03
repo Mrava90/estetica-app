@@ -61,6 +61,7 @@ export default function CajaDiariaPage() {
   // New movement form state
   const [newMonto, setNewMonto] = useState('')
   const [newTipo, setNewTipo] = useState<'efectivo' | 'mercadopago'>('efectivo')
+  const [newTipoMov, setNewTipoMov] = useState<'gasto' | 'ingreso'>('gasto')
   const [newCategoria, setNewCategoria] = useState<'local' | 'adelanto' | 'personal'>('local')
   const [newDescripcion, setNewDescripcion] = useState('')
   const [saving, setSaving] = useState(false)
@@ -182,8 +183,11 @@ export default function CajaDiariaPage() {
       personal: 'Gasto personal:',
     } as const
 
-    const monto = -Math.abs(montoRaw)
-    const descripcion = `${PREFIXES[newCategoria]} ${newDescripcion.trim()}`
+    const monto = newTipoMov === 'gasto' ? -Math.abs(montoRaw) : Math.abs(montoRaw)
+    const descripcion =
+      newTipoMov === 'gasto'
+        ? `${PREFIXES[newCategoria]} ${newDescripcion.trim()}`
+        : `Ingreso: ${newDescripcion.trim()}`
 
     setSaving(true)
     const { error } = await supabase.from('movimientos_caja').insert({
@@ -197,10 +201,11 @@ export default function CajaDiariaPage() {
     if (error) {
       toast.error('Error al guardar movimiento')
     } else {
-      toast.success('Movimiento agregado')
+      toast.success(newTipoMov === 'gasto' ? 'Gasto registrado' : 'Ingreso registrado')
       setDialogOpen(false)
       setNewMonto('')
       setNewTipo('efectivo')
+      setNewTipoMov('gasto')
       setNewCategoria('local')
       setNewDescripcion('')
       fetchData()
@@ -691,35 +696,69 @@ export default function CajaDiariaPage() {
       </Dialog>
 
       {/* Dialog para nuevo movimiento */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open)
+        if (!open) { setNewTipoMov('gasto'); setNewMonto(''); setNewDescripcion(''); setNewTipo('efectivo'); setNewCategoria('local') }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Nuevo movimiento</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Categoría</Label>
-              <div className="flex gap-2">
-                {([
-                  { key: 'local', label: 'Gasto local' },
-                  { key: 'adelanto', label: 'Adelanto' },
-                  { key: 'personal', label: 'Personal' },
-                ] as const).map((cat) => (
-                  <Button
-                    key={cat.key}
-                    type="button"
-                    variant={newCategoria === cat.key ? 'default' : 'outline'}
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setNewCategoria(cat.key)}
-                  >
-                    {cat.label}
-                  </Button>
-                ))}
-              </div>
+
+            {/* Toggle Gasto / Ingreso */}
+            <div className="flex rounded-lg border p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => setNewTipoMov('gasto')}
+                className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all ${
+                  newTipoMov === 'gasto'
+                    ? 'bg-destructive text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                — Gasto
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewTipoMov('ingreso')}
+                className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all ${
+                  newTipoMov === 'ingreso'
+                    ? 'bg-green-600 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                + Ingreso
+              </button>
             </div>
+
+            {/* Categoría (solo gastos) */}
+            {newTipoMov === 'gasto' && (
+              <div className="space-y-2">
+                <Label>Categoría</Label>
+                <div className="flex gap-2">
+                  {([
+                    { key: 'local', label: 'Gasto local' },
+                    { key: 'adelanto', label: 'Adelanto' },
+                    { key: 'personal', label: 'Personal' },
+                  ] as const).map((cat) => (
+                    <Button
+                      key={cat.key}
+                      type="button"
+                      variant={newCategoria === cat.key ? 'default' : 'outline'}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setNewCategoria(cat.key)}
+                    >
+                      {cat.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label>Monto del gasto</Label>
+              <Label>Monto</Label>
               <Input
                 type="number"
                 step="0.01"
@@ -728,8 +767,9 @@ export default function CajaDiariaPage() {
                 onChange={(e) => setNewMonto(e.target.value)}
               />
             </div>
+
             <div className="space-y-2">
-              <Label>Tipo</Label>
+              <Label>Medio de pago</Label>
               <div className="flex gap-2">
                 {([
                   { key: 'efectivo', label: 'Efectivo' },
@@ -748,16 +788,22 @@ export default function CajaDiariaPage() {
                 ))}
               </div>
             </div>
+
             <div className="space-y-2">
               <Label>Descripción</Label>
               <Input
-                placeholder="Ej: alquiler, compra insumos..."
+                placeholder={newTipoMov === 'gasto' ? 'Ej: alquiler, compra insumos...' : 'Ej: cobro extra, seña...'}
                 value={newDescripcion}
                 onChange={(e) => setNewDescripcion(e.target.value)}
               />
             </div>
-            <Button className="w-full" onClick={handleAddMovimiento} disabled={saving}>
-              {saving ? 'Guardando...' : 'Agregar movimiento'}
+
+            <Button
+              className={`w-full ${newTipoMov === 'ingreso' ? 'bg-green-600 hover:bg-green-700' : ''}`}
+              onClick={handleAddMovimiento}
+              disabled={saving}
+            >
+              {saving ? 'Guardando...' : newTipoMov === 'gasto' ? 'Registrar gasto' : 'Registrar ingreso'}
             </Button>
           </div>
         </DialogContent>
