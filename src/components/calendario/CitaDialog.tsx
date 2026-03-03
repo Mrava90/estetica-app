@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient } from '@/lib/supabase/client'
@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Phone, Banknote, Smartphone, Building2 } from 'lucide-react'
+import { Phone, Banknote, Smartphone, Building2, Check } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -32,15 +32,26 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [profServMap, setProfServMap] = useState<Record<string, string[]>>({})
-  const [clienteSearch, setClienteSearch] = useState('')
-  const [showNewCliente, setShowNewCliente] = useState(false)
-  const [newClienteNombre, setNewClienteNombre] = useState('')
-  const [newClienteTelefono, setNewClienteTelefono] = useState('')
   const [loading, setLoading] = useState(false)
   const [precioCustom, setPrecioCustom] = useState<number | null>(null)
   const [showPrecioEdit, setShowPrecioEdit] = useState(false)
-  const isEditing = !!cita
+  const [showNewCliente, setShowNewCliente] = useState(false)
+  const [newClienteNombre, setNewClienteNombre] = useState('')
+  const [newClienteTelefono, setNewClienteTelefono] = useState('')
 
+  // Combobox states — cliente
+  const [clienteQuery, setClienteQuery] = useState('')
+  const [clienteOpen, setClienteOpen] = useState(false)
+  const [clienteLabel, setClienteLabel] = useState('')
+  const clienteRef = useRef<HTMLDivElement>(null)
+
+  // Combobox states — servicio
+  const [servicioQuery, setServicioQuery] = useState('')
+  const [servicioOpen, setServicioOpen] = useState(false)
+  const [servicioLabel, setServicioLabel] = useState('')
+  const servicioRef = useRef<HTMLDivElement>(null)
+
+  const isEditing = !!cita
   const supabase = createClient()
 
   const {
@@ -58,10 +69,14 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   const selectedMetodoPago = watch('metodo_pago') || 'efectivo'
   const selectedServicio = servicios.find((s) => s.id === selectedServicioId)
 
-  // Filter professionals by selected service
   const filteredProfesionales = selectedServicioId && profServMap[selectedServicioId]
     ? profesionales.filter((p) => profServMap[selectedServicioId].includes(p.id))
     : profesionales
+
+  // Filter servicios locally as the user types
+  const filteredServicios = servicioQuery
+    ? servicios.filter((s) => s.nombre.toLowerCase().includes(servicioQuery.toLowerCase()))
+    : servicios
 
   useEffect(() => {
     if (open) {
@@ -70,14 +85,19 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
       fetchClientes('')
       setPrecioCustom(null)
       setShowPrecioEdit(false)
+      setShowNewCliente(false)
+      setNewClienteNombre('')
+      setNewClienteTelefono('')
+
       if (cita) {
-        // If the cita has a custom price different from the service price, show the editor
         const servPrecio = servicios.find((s) => s.id === cita.servicio_id)
         const expectedPrecio = cita.metodo_pago === 'mercadopago' ? servPrecio?.precio_mercadopago : servPrecio?.precio_efectivo
         if (cita.precio_cobrado != null && expectedPrecio != null && cita.precio_cobrado !== expectedPrecio) {
           setPrecioCustom(cita.precio_cobrado)
           setShowPrecioEdit(true)
         }
+        setClienteLabel(cita.clientes ? `${cita.clientes.nombre} — ${cita.clientes.telefono}` : '')
+        setServicioLabel(cita.servicios ? `${cita.servicios.nombre} (${cita.servicios.duracion_minutos} min)` : '')
         reset({
           cliente_id: cita.cliente_id || '',
           profesional_id: cita.profesional_id || '',
@@ -87,9 +107,10 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
           notas: cita.notas || '',
         })
       } else if (selectedDate) {
-        // Format as local datetime for datetime-local input (YYYY-MM-DDTHH:mm)
         const d = selectedDate.start
         const localISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+        setClienteLabel('')
+        setServicioLabel('')
         reset({
           cliente_id: '',
           profesional_id: selectedProfesionalId || '',
@@ -126,6 +147,20 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     }
     const { data } = await query
     if (data) setClientes(data)
+  }
+
+  function selectCliente(c: Cliente) {
+    setValue('cliente_id', c.id)
+    setClienteLabel(`${c.nombre} — ${c.telefono}`)
+    setClienteQuery('')
+    setClienteOpen(false)
+  }
+
+  function selectServicio(s: Servicio) {
+    setValue('servicio_id', s.id)
+    setServicioLabel(`${s.nombre} (${s.duracion_minutos} min)`)
+    setServicioQuery('')
+    setServicioOpen(false)
   }
 
   function getPrecioServicio(servicio: Servicio | undefined, metodo: string): number | null {
@@ -216,7 +251,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
         .select()
         .single()
       if (error) throw error
-      setValue('cliente_id', data.id)
+      selectCliente(data)
       setClientes((prev) => [data, ...prev])
       setShowNewCliente(false)
       setNewClienteNombre('')
@@ -235,6 +270,9 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     )
     window.open(`https://wa.me/${tel}?text=${msg}`, '_blank')
   }
+
+  const clienteIdValue = watch('cliente_id')
+  const servicioIdValue = watch('servicio_id')
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -263,39 +301,55 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
         )}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Cliente */}
+
+          {/* ── Cliente combobox ── */}
           <div className="space-y-2">
             <Label>Cliente</Label>
             {!showNewCliente ? (
               <>
-                <Input
-                  placeholder="Buscar por nombre o teléfono..."
-                  value={clienteSearch}
-                  onChange={(e) => {
-                    setClienteSearch(e.target.value)
-                    fetchClientes(e.target.value)
-                  }}
-                />
-                <Select
-                  value={watch('cliente_id')}
-                  onValueChange={(v) => setValue('cliente_id', v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.nombre} - {c.telefono}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div ref={clienteRef} className="relative">
+                  <input
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    placeholder="Buscar por nombre o teléfono..."
+                    value={clienteOpen ? clienteQuery : clienteLabel}
+                    onChange={(e) => {
+                      setClienteQuery(e.target.value)
+                      fetchClientes(e.target.value)
+                    }}
+                    onFocus={() => {
+                      setClienteQuery('')
+                      setClienteOpen(true)
+                      fetchClientes('')
+                    }}
+                    onBlur={() => setTimeout(() => setClienteOpen(false), 150)}
+                  />
+                  {clienteOpen && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border bg-popover shadow-lg">
+                      {clientes.length === 0 && (
+                        <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                      )}
+                      {clientes.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+                          onMouseDown={(e) => { e.preventDefault(); selectCliente(c) }}
+                        >
+                          {c.id === clienteIdValue && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                          <span className={c.id === clienteIdValue ? 'font-medium' : ''}>
+                            {c.nombre}
+                          </span>
+                          <span className="text-muted-foreground ml-auto shrink-0">{c.telefono}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="link"
                   size="sm"
-                  className="px-0"
+                  className="px-0 h-auto"
                   onClick={() => setShowNewCliente(true)}
                 >
                   + Nuevo cliente
@@ -314,15 +368,8 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                   onChange={(e) => setNewClienteTelefono(e.target.value)}
                 />
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" onClick={handleCreateCliente}>
-                    Crear
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowNewCliente(false)}
-                  >
+                  <Button type="button" size="sm" onClick={handleCreateCliente}>Crear</Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setShowNewCliente(false)}>
                     Cancelar
                   </Button>
                 </div>
@@ -333,7 +380,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             )}
           </div>
 
-          {/* Profesional */}
+          {/* ── Profesional ── */}
           <div className="space-y-2">
             <Label>Profesional</Label>
             <Select
@@ -362,37 +409,53 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             )}
           </div>
 
-          {/* Servicio */}
+          {/* ── Servicio combobox ── */}
           <div className="space-y-2">
             <Label>Servicio</Label>
-            <Select
-              value={watch('servicio_id')}
-              onValueChange={(v) => setValue('servicio_id', v)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar servicio" />
-              </SelectTrigger>
-              <SelectContent>
-                {servicios.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.nombre} ({s.duracion_minutos} min)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div ref={servicioRef} className="relative">
+              <input
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                placeholder="Buscar servicio..."
+                value={servicioOpen ? servicioQuery : servicioLabel}
+                onChange={(e) => setServicioQuery(e.target.value)}
+                onFocus={() => {
+                  setServicioQuery('')
+                  setServicioOpen(true)
+                }}
+                onBlur={() => setTimeout(() => setServicioOpen(false), 150)}
+              />
+              {servicioOpen && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border bg-popover shadow-lg">
+                  {filteredServicios.length === 0 && (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">Sin resultados</p>
+                  )}
+                  {filteredServicios.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+                      onMouseDown={(e) => { e.preventDefault(); selectServicio(s) }}
+                    >
+                      {s.id === servicioIdValue && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                      <span className={s.id === servicioIdValue ? 'font-medium' : ''}>{s.nombre}</span>
+                      <span className="text-muted-foreground ml-auto shrink-0 text-xs">{s.duracion_minutos} min</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {errors.servicio_id && (
               <p className="text-sm text-destructive">{errors.servicio_id.message}</p>
             )}
             {selectedServicio && (
               <p className="text-xs text-muted-foreground">
-                Duración: {selectedServicio.duracion_minutos} min |
                 Efectivo: {formatPrecio(selectedServicio.precio_efectivo)} |
                 Mercadopago: {formatPrecio(selectedServicio.precio_mercadopago)}
               </p>
             )}
           </div>
 
-          {/* Metodo de pago */}
+          {/* ── Método de pago ── */}
           <div className="space-y-2">
             <Label>Método de pago</Label>
             <div className="flex gap-2">
@@ -438,7 +501,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             </div>
           </div>
 
-          {/* Custom price */}
+          {/* ── Precio custom ── */}
           {selectedServicio && (
             <div className="flex items-center gap-2">
               {!showPrecioEdit ? (
@@ -478,25 +541,21 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             </div>
           )}
 
-          {/* Fecha/Hora */}
+          {/* ── Fecha/Hora ── */}
           <div className="space-y-2">
             <Label>Fecha y hora</Label>
-            <Input
-              type="datetime-local"
-              {...register('fecha_inicio')}
-            />
+            <Input type="datetime-local" {...register('fecha_inicio')} />
             {errors.fecha_inicio && (
               <p className="text-sm text-destructive">{errors.fecha_inicio.message}</p>
             )}
           </div>
 
-          {/* Notas */}
+          {/* ── Notas ── */}
           <div className="space-y-2">
             <Label>Notas (opcional)</Label>
             <Textarea placeholder="Notas adicionales..." {...register('notas')} />
           </div>
 
-          {/* Actions */}
           <div className="flex gap-2 pt-2">
             <Button type="submit" disabled={loading} className="flex-1">
               {loading ? 'Guardando...' : isEditing ? 'Actualizar' : 'Crear cita'}
@@ -507,7 +566,6 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
           </div>
         </form>
 
-        {/* Status change buttons for existing appointments */}
         {isEditing && cita && (
           <>
             <Separator />
