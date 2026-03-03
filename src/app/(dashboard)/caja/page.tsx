@@ -30,6 +30,7 @@ import {
   Upload,
   CheckCircle2,
   XCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { isAdminEmail, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 
@@ -63,6 +64,8 @@ export default function CajaDiariaPage() {
   const [newCategoria, setNewCategoria] = useState<'local' | 'adelanto' | 'personal'>('local')
   const [newDescripcion, setNewDescripcion] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const [syncing, setSyncing] = useState(false)
 
   // CSV import state
   const [csvDialogOpen, setCsvDialogOpen] = useState(false)
@@ -216,6 +219,25 @@ export default function CajaDiariaPage() {
     }
   }
 
+  async function handleSyncSheets() {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/admin/sync-sheets', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error('Error al sincronizar: ' + (data.details || data.error))
+      } else {
+        toast.success(
+          `Sync OK — ${data.synced.citas} citas, ${data.synced.movimientos} movimientos importados`,
+        )
+        fetchData()
+      }
+    } catch {
+      toast.error('Error de red al sincronizar')
+    }
+    setSyncing(false)
+  }
+
   // ── CSV helpers ────────────────────────────────────────────
   function parseCsvDate(raw: string): string {
     const trimmed = raw.trim()
@@ -328,7 +350,21 @@ export default function CajaDiariaPage() {
     <div className="space-y-4">
       {/* Header with date navigation */}
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold shrink-0">Caja Diaria</h1>
+        <div className="flex items-center gap-2 shrink-0">
+        <h1 className="text-2xl font-bold">Caja Diaria</h1>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={handleSyncSheets}
+            disabled={syncing}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Sincronizando...' : 'Sync Sheets'}
+          </Button>
+        )}
+      </div>
 
         {/* Admin: disponible del mes */}
         {isAdmin && monthlyStats && (
