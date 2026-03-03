@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Search, Eye, ChevronRight, Phone, X } from 'lucide-react'
+import { Search, Eye, ChevronRight, Phone, X, Download } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ClientesPage() {
@@ -48,7 +48,18 @@ export default function ClientesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Clientes</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Clientes</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { window.location.href = '/api/export/clientes' }}
+          className="gap-2"
+        >
+          <Download className="h-4 w-4" />
+          Exportar CSV
+        </Button>
+      </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

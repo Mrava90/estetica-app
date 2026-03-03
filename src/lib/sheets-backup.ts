@@ -1,8 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 
-const SHEET_NAME = 'Backup Calendario'
-
 async function getSheetsWriteToken(): Promise<string> {
   const auth = new GoogleAuth({
     credentials: {
@@ -17,32 +15,32 @@ async function getSheetsWriteToken(): Promise<string> {
   return tokenRes.token
 }
 
-async function ensureSheetExists(spreadsheetId: string, token: string): Promise<void> {
+async function ensureSheetExists(spreadsheetId: string, token: string, sheetName: string): Promise<void> {
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: SHEET_NAME } } }],
+        requests: [{ addSheet: { properties: { title: sheetName } } }],
       }),
     }
   )
-  // Ignore "already exists" errors (status 400 with "already exists" message)
+  // Ignore "already exists" errors (status 400)
   if (!res.ok && res.status !== 400) {
     const text = await res.text()
-    throw new Error(`Error creating sheet tab: ${res.status} ${text}`)
+    throw new Error(`Error creating sheet tab "${sheetName}": ${res.status} ${text}`)
   }
 }
 
 async function clearAndWriteSheet(
   spreadsheetId: string,
   token: string,
+  sheetName: string,
   values: (string | number)[][]
 ): Promise<void> {
-  const encodedRange = encodeURIComponent(`'${SHEET_NAME}'!A:N`)
+  const encodedRange = encodeURIComponent(`'${sheetName}'!A:Z`)
 
-  // Clear existing data
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodedRange}:clear`,
     {
@@ -52,8 +50,7 @@ async function clearAndWriteSheet(
     }
   )
 
-  // Write new data
-  const writeRange = encodeURIComponent(`'${SHEET_NAME}'!A1`)
+  const writeRange = encodeURIComponent(`'${sheetName}'!A1`)
   const writeRes = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${writeRange}?valueInputOption=RAW`,
     {
@@ -65,20 +62,30 @@ async function clearAndWriteSheet(
 
   if (!writeRes.ok) {
     const text = await writeRes.text()
-    throw new Error(`Sheets write error: ${writeRes.status} ${text}`)
+    throw new Error(`Sheets write error for "${sheetName}": ${writeRes.status} ${text}`)
   }
 }
+
+function getSpreadsheetId(): string {
+  const id = process.env.GOOGLE_SPREADSHEET_ID
+  if (!id) throw new Error('Missing GOOGLE_SPREADSHEET_ID')
+  return id
+}
+
+function checkCredentials() {
+  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+    throw new Error('Missing Google credentials')
+  }
+}
+
+// ── Backup Calendario ────────────────────────────────────────
 
 export async function backupCalendarioToSheets(
   supabase: SupabaseClient
 ): Promise<{ citasBackedUp: number }> {
-  if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
-    throw new Error('Missing Google credentials')
-  }
-  const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID
-  if (!spreadsheetId) throw new Error('Missing GOOGLE_SPREADSHEET_ID')
+  checkCredentials()
+  const spreadsheetId = getSpreadsheetId()
 
-  // Fetch all citas with relations (no limit)
   const { data: citas, error } = await supabase
     .from('citas')
     .select('*, clientes(*), profesionales(*), servicios(*)')
@@ -87,19 +94,9 @@ export async function backupCalendarioToSheets(
   if (error) throw new Error(`Error fetching citas: ${error.message}`)
 
   const header = [
-    'Fecha',
-    'Hora',
-    'Cliente',
-    'Teléfono',
-    'Email',
-    'Servicio',
-    'Profesional',
-    'Estado',
-    'Precio',
-    'Método Pago',
-    'Notas',
-    'Origen',
-    'ID',
+    'Fecha', 'Hora', 'Cliente', 'Teléfono', 'Email',
+    'Servicio', 'Profesional', 'Estado', 'Precio', 'Método Pago',
+    'Notas', 'Origen', 'ID',
   ]
 
   const rows = (citas || []).map((c) => {
@@ -111,8 +108,7 @@ export async function backupCalendarioToSheets(
       timeZone: 'America/Argentina/Buenos_Aires',
     })
     return [
-      fecha,
-      hora,
+      fecha, hora,
       c.clientes?.nombre ?? '',
       c.clientes?.telefono ?? '',
       c.clientes?.email ?? '',
@@ -128,8 +124,42 @@ export async function backupCalendarioToSheets(
   })
 
   const token = await getSheetsWriteToken()
-  await ensureSheetExists(spreadsheetId, token)
-  await clearAndWriteSheet(spreadsheetId, token, [header, ...rows])
+  await ensureSheetExists(spreadsheetId, token, 'Backup Calendario')
+  await clearAndWriteSheet(spreadsheetId, token, 'Backup Calendario', [header, ...rows])
 
   return { citasBackedUp: rows.length }
+}
+
+// ── Backup Clientes ──────────────────────────────────────────
+
+export async function backupClientesToSheets(
+  supabase: SupabaseClient
+): Promise<{ clientesBackedUp: number }> {
+  checkCredentials()
+  const spreadsheetId = getSpreadsheetId()
+
+  const { data: clientes, error } = await supabase
+    .from('clientes')
+    .select('*')
+    .order('nombre')
+
+  if (error) throw new Error(`Error fetching clientes: ${error.message}`)
+
+  const header = ['Nombre', 'Teléfono', 'DNI', 'Email', 'Notas', 'Registrado desde', 'ID']
+
+  const rows = (clientes || []).map((c) => [
+    c.nombre,
+    c.telefono ?? '',
+    c.dni ?? '',
+    c.email ?? '',
+    c.notas ?? '',
+    new Date(c.created_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }),
+    c.id,
+  ])
+
+  const token = await getSheetsWriteToken()
+  await ensureSheetExists(spreadsheetId, token, 'Backup Clientes')
+  await clearAndWriteSheet(spreadsheetId, token, 'Backup Clientes', [header, ...rows])
+
+  return { clientesBackedUp: rows.length }
 }

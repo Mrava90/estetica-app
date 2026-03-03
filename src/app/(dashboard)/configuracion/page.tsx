@@ -242,7 +242,7 @@ export default function ConfiguracionPage() {
       const res = await fetch('/api/cron/backup-calendario', { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      toast.success(`Backup completado: ${data.citasBackedUp} citas guardadas en Google Sheets`)
+      toast.success(`Backup completado: ${data.citasBackedUp} citas y ${data.clientesBackedUp} clientes guardados en Google Sheets`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al hacer el backup')
     } finally {

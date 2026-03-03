@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-import { backupCalendarioToSheets } from '@/lib/sheets-backup'
+import { backupCalendarioToSheets, backupClientesToSheets } from '@/lib/sheets-backup'
 import { isAdminEmail } from '@/lib/constants'
 
 async function runBackup() {
   const supabase = createAdminClient()
-  return backupCalendarioToSheets(supabase)
+  const [calendario, clientes] = await Promise.all([
+    backupCalendarioToSheets(supabase),
+    backupClientesToSheets(supabase),
+  ])
+  return { citasBackedUp: calendario.citasBackedUp, clientesBackedUp: clientes.clientesBackedUp }
 }
 
 // Cron automático (llamado por Vercel con CRON_SECRET)
@@ -18,17 +22,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await runBackup()
-    return NextResponse.json({
-      ok: true,
-      citasBackedUp: result.citasBackedUp,
-      timestamp: new Date().toISOString(),
-    })
+    return NextResponse.json({ ok: true, ...result, timestamp: new Date().toISOString() })
   } catch (error) {
-    console.error('Backup calendario error:', error)
-    return NextResponse.json(
-      { error: 'Backup failed', details: String(error) },
-      { status: 500 }
-    )
+    console.error('Backup error:', error)
+    return NextResponse.json({ error: 'Backup failed', details: String(error) }, { status: 500 })
   }
 }
 
@@ -43,16 +40,9 @@ export async function POST() {
 
   try {
     const result = await runBackup()
-    return NextResponse.json({
-      ok: true,
-      citasBackedUp: result.citasBackedUp,
-      timestamp: new Date().toISOString(),
-    })
+    return NextResponse.json({ ok: true, ...result, timestamp: new Date().toISOString() })
   } catch (error) {
-    console.error('Backup calendario error:', error)
-    return NextResponse.json(
-      { error: 'Backup failed', details: String(error) },
-      { status: 500 }
-    )
+    console.error('Backup error:', error)
+    return NextResponse.json({ error: 'Backup failed', details: String(error) }, { status: 500 })
   }
 }
