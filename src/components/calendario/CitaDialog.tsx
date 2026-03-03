@@ -312,11 +312,13 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     placeholder="Buscar por nombre o teléfono..."
                     value={clienteOpen ? clienteQuery : clienteLabel}
+                    autoComplete="off"
                     onChange={(e) => {
                       setClienteQuery(e.target.value)
                       fetchClientes(e.target.value)
+                      if (!clienteOpen) setClienteOpen(true)
                     }}
-                    onFocus={() => {
+                    onClick={() => {
                       setClienteQuery('')
                       setClienteOpen(true)
                       fetchClientes('')
@@ -417,8 +419,12 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 placeholder="Buscar servicio..."
                 value={servicioOpen ? servicioQuery : servicioLabel}
-                onChange={(e) => setServicioQuery(e.target.value)}
-                onFocus={() => {
+                autoComplete="off"
+                onChange={(e) => {
+                  setServicioQuery(e.target.value)
+                  if (!servicioOpen) setServicioOpen(true)
+                }}
+                onClick={() => {
                   setServicioQuery('')
                   setServicioOpen(true)
                 }}
