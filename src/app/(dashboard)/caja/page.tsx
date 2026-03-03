@@ -706,19 +706,8 @@ export default function CajaDiariaPage() {
           </DialogHeader>
           <div className="space-y-4">
 
-            {/* Toggle Gasto / Ingreso */}
+            {/* Toggle Ingreso / Gasto */}
             <div className="flex rounded-lg border p-1 gap-1">
-              <button
-                type="button"
-                onClick={() => setNewTipoMov('gasto')}
-                className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all ${
-                  newTipoMov === 'gasto'
-                    ? 'bg-destructive text-white shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                — Gasto
-              </button>
               <button
                 type="button"
                 onClick={() => setNewTipoMov('ingreso')}
@@ -729,6 +718,17 @@ export default function CajaDiariaPage() {
                 }`}
               >
                 + Ingreso
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewTipoMov('gasto')}
+                className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all ${
+                  newTipoMov === 'gasto'
+                    ? 'bg-destructive text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                — Gasto
               </button>
             </div>
 
