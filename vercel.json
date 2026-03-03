@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/sync-sheets",
-      "schedule": "0 9 * * *"
+      "schedule": "30 21 * * *"
     },
     {
       "path": "/api/cron/backup-calendario",
