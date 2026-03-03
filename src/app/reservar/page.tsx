@@ -17,6 +17,7 @@ export default function ReservarPage() {
   const [filteredProfs, setFilteredProfs] = useState<Profesional[]>([])
   const [categoria, setCategoria] = useState<string>('todos')
   const [busqueda, setBusqueda] = useState('')
+  const [bookingCounts, setBookingCounts] = useState<Record<string, number>>({})
   const supabase = createClient()
 
   const categorias = [
@@ -52,19 +53,49 @@ export default function ReservarPage() {
       return true
     })
     .sort((a, b) => {
-      const aStart = /^[23]d\b/i.test(a.nombre) ? 1 : 0
-      const bStart = /^[23]d\b/i.test(b.nombre) ? 1 : 0
-      return aStart - bStart
+      // 1. Promos primero
+      const aPromo = a.es_promo || /^promo/i.test(a.nombre) ? 1 : 0
+      const bPromo = b.es_promo || /^promo/i.test(b.nombre) ? 1 : 0
+      if (aPromo !== bPromo) return bPromo - aPromo
+
+      // 2. Por demanda (citas últimos 60 días) descendente
+      const aCount = bookingCounts[a.id] || 0
+      const bCount = bookingCounts[b.id] || 0
+      if (bCount !== aCount) return bCount - aCount
+
+      // 3. Nombres que empiezan con 2D/3D al final, resto alfabético
+      const aLast = /^[23]d\b/i.test(a.nombre) ? 1 : 0
+      const bLast = /^[23]d\b/i.test(b.nombre) ? 1 : 0
+      if (aLast !== bLast) return aLast - bLast
+
+      return a.nombre.localeCompare(b.nombre, 'es')
     })
 
   useEffect(() => {
     async function fetchData() {
-      const [servRes, profRes] = await Promise.all([
+      const sixtyDaysAgo = new Date()
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
+
+      const [servRes, profRes, citasRes] = await Promise.all([
         supabase.from('servicios').select('*').eq('activo', true).order('nombre'),
         supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre'),
+        supabase
+          .from('citas')
+          .select('servicio_id')
+          .gte('fecha_inicio', sixtyDaysAgo.toISOString())
+          .in('status', ['completada', 'confirmada', 'pendiente'])
+          .not('servicio_id', 'is', null),
       ])
+
       if (servRes.data) setServicios(servRes.data)
       if (profRes.data) setProfesionales(profRes.data)
+
+      // Contar reservas por servicio para ordenar por demanda
+      const counts: Record<string, number> = {}
+      for (const c of citasRes.data || []) {
+        if (c.servicio_id) counts[c.servicio_id] = (counts[c.servicio_id] || 0) + 1
+      }
+      setBookingCounts(counts)
     }
     fetchData()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
