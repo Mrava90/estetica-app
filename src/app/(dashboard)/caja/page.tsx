@@ -717,7 +717,7 @@ export default function CajaDiariaPage() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                + Ingreso
+                Ingreso
               </button>
               <button
                 type="button"
@@ -728,7 +728,7 @@ export default function CajaDiariaPage() {
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                — Gasto
+                Gastos
               </button>
             </div>
 
