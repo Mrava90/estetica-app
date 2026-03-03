@@ -28,7 +28,7 @@ import {
   Building2,
   Wallet,
 } from 'lucide-react'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminEmail, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 
 interface MonthlyStats {
   efectivo: number
@@ -91,7 +91,7 @@ export default function CajaDiariaPage() {
         .select('*, clientes(*), profesionales(*), servicios(*)')
         .gte('fecha_inicio', dayStart)
         .lt('fecha_inicio', dayEnd)
-        .in('status', ['confirmada', 'completada'])
+        .in('status', ['pendiente', 'confirmada', 'completada'])
         .order('fecha_inicio'),
       supabase
         .from('movimientos_caja')
@@ -341,6 +341,7 @@ export default function CajaDiariaPage() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Servicio</TableHead>
                     <TableHead>Profesional</TableHead>
+                    <TableHead>Estado</TableHead>
                     <TableHead>Pago</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
                   </TableRow>
@@ -348,7 +349,7 @@ export default function CajaDiariaPage() {
                 <TableBody>
                   {citas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                         Sin cobros este día
                       </TableCell>
                     </TableRow>
@@ -365,6 +366,11 @@ export default function CajaDiariaPage() {
                           )}
                           {cita.profesionales?.nombre || '—'}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`${STATUS_COLORS[cita.status]} text-xs`}>
+                          {STATUS_LABELS[cita.status]}
+                        </Badge>
                       </TableCell>
                       <TableCell><MetodoPagoBadge metodo={cita.metodo_pago} /></TableCell>
                       <TableCell className="text-right font-medium">{formatPrecio(cita.precio_cobrado || 0)}</TableCell>
