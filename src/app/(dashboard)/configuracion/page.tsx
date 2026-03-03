@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { NAV_ITEMS, DIAS_SEMANA, isAdminEmail } from '@/lib/constants'
 const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
@@ -42,6 +42,7 @@ export default function ConfiguracionPage() {
   const [myPassword, setMyPassword] = useState('')
   const [myPasswordConfirm, setMyPasswordConfirm] = useState('')
   const [changingMyPassword, setChangingMyPassword] = useState(false)
+  const [backingUp, setBackingUp] = useState(false)
 
   // Empleados state
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
@@ -232,6 +233,20 @@ export default function ConfiguracionPage() {
       fetchUsers()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al eliminar')
+    }
+  }
+
+  async function handleBackupNow() {
+    setBackingUp(true)
+    try {
+      const res = await fetch('/api/cron/backup-calendario', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success(`Backup completado: ${data.citasBackedUp} citas guardadas en Google Sheets`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al hacer el backup')
+    } finally {
+      setBackingUp(false)
     }
   }
 
@@ -527,6 +542,36 @@ export default function ConfiguracionPage() {
               </Button>
             </CardContent>
           </Card>
+
+          {/* Backup manual - admin only */}
+          {isAdmin && (
+            <>
+              <Separator />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <DatabaseBackup className="h-5 w-5" />
+                    Backup del calendario
+                  </CardTitle>
+                  <CardDescription>
+                    Exporta todas las citas a la pestaña &quot;Backup Calendario&quot; del Google Sheet.
+                    El backup automático corre cada día a las 3am.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="outline"
+                    onClick={handleBackupNow}
+                    disabled={backingUp}
+                    className="gap-2"
+                  >
+                    <DatabaseBackup className="h-4 w-4" />
+                    {backingUp ? 'Haciendo backup...' : 'Hacer backup ahora'}
+                  </Button>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* User management - admin only */}
           {isAdmin && (
