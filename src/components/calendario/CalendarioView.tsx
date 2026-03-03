@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { CitaConRelaciones, Profesional, Horario, Bloqueo } from '@/types/database'
 import { CalendarioResourceDayView } from './CalendarioResourceDayView'
 import { CitaDialog } from './CitaDialog'
+import { CitaDetailPanel } from './CitaDetailPanel'
 import { BloqueoDialog } from './BloqueoDialog'
 import { RecordatoriosDialog } from './RecordatoriosDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
@@ -22,6 +23,7 @@ export function CalendarioView() {
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [filtrosProfesional, setFiltrosProfesional] = useState<string[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
   const [selectedCita, setSelectedCita] = useState<CitaConRelaciones | null>(null)
   const [selectedDate, setSelectedDate] = useState<{ start: Date; end: Date } | null>(null)
   const [selectedProfesionalId, setSelectedProfesionalId] = useState<string | null>(null)
@@ -153,7 +155,18 @@ export function CalendarioView() {
     setSelectedCita(cita)
     setSelectedDate(null)
     setSelectedProfesionalId(null)
+    setDetailOpen(true)
+  }
+
+  function handleEditFromDetail() {
+    setDetailOpen(false)
     setDialogOpen(true)
+  }
+
+  function handleDetailClose() {
+    setDetailOpen(false)
+    setSelectedCita(null)
+    fetchData()
   }
 
   function handleBloqueoClick(bloqueo: Bloqueo) {
@@ -294,6 +307,13 @@ export function CalendarioView() {
           Seleccioná al menos un profesional para ver el calendario.
         </div>
       )}
+
+      <CitaDetailPanel
+        open={detailOpen}
+        cita={selectedCita}
+        onClose={handleDetailClose}
+        onEdit={handleEditFromDetail}
+      />
 
       <CitaDialog
         open={dialogOpen}

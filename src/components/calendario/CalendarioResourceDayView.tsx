@@ -8,7 +8,8 @@ import { formatPrecio } from '@/lib/dates'
 const HORA_INICIO = 8
 const HORA_FIN = 21
 const HORA_HEIGHT = 64
-const SLOT_MINUTOS = 30
+const SLOT_MINUTOS = 30        // resolución para drag-drop
+const SLOT_CLICK_MINUTOS = 15  // resolución para click/hover de nuevo turno
 
 interface Props {
   fecha: Date
@@ -39,10 +40,14 @@ export function CalendarioResourceDayView({
   const [isDragging, setIsDragging] = useState(false)
   const [dropPreview, setDropPreview] = useState<{ profId: string; top: number; height: number } | null>(null)
 
-  // Hover tooltip
+  // Hover tooltip sobre cita existente
   const [hoveredCita, setHoveredCita] = useState<CitaConRelaciones | null>(null)
   const [tooltipAnchor, setTooltipAnchor] = useState<DOMRect | null>(null)
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Hover highlight de slot vacío (15 min)
+  type HoverSlot = { profId: string; top: number; startLabel: string; endLabel: string }
+  const [hoverSlot, setHoverSlot] = useState<HoverSlot | null>(null)
 
   // Refs to column DOM elements keyed by profId
   const colRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -207,15 +212,40 @@ export function CalendarioResourceDayView({
     const rect = col.getBoundingClientRect()
     const y = e.clientY - rect.top
     const minutesFromStart = (y / HORA_HEIGHT) * 60
-    const slotMinutes = Math.floor(minutesFromStart / SLOT_MINUTOS) * SLOT_MINUTOS
+    const slotMinutes = Math.floor(minutesFromStart / SLOT_CLICK_MINUTOS) * SLOT_CLICK_MINUTOS
     const totalMinutes = HORA_INICIO * 60 + slotMinutes
 
     const start = new Date(fecha)
     start.setHours(Math.floor(totalMinutes / 60), totalMinutes % 60, 0, 0)
     const end = new Date(start)
-    end.setMinutes(end.getMinutes() + SLOT_MINUTOS)
+    end.setMinutes(end.getMinutes() + SLOT_CLICK_MINUTOS)
 
     onSlotClick(profesionalId, start, end)
+  }
+
+  function handleColMouseMove(profId: string, e: React.MouseEvent<HTMLDivElement>) {
+    if (isDragging) { setHoverSlot(null); return }
+    if ((e.target as HTMLElement).closest('[data-cita]')) { setHoverSlot(null); return }
+    const col = colRefsMap.current.get(profId)
+    if (!col) return
+    const rect = col.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    const minutesFromStart = (y / HORA_HEIGHT) * 60
+    const slotMinutes = Math.floor(minutesFromStart / SLOT_CLICK_MINUTOS) * SLOT_CLICK_MINUTOS
+    const clamped = Math.max(0, Math.min(slotMinutes, (HORA_FIN - HORA_INICIO) * 60 - SLOT_CLICK_MINUTOS))
+    const top = (clamped / 60) * HORA_HEIGHT
+    const totalMinutes = HORA_INICIO * 60 + clamped
+    const p = (n: number) => String(n).padStart(2, '0')
+    const h1 = Math.floor(totalMinutes / 60)
+    const m1 = totalMinutes % 60
+    const endTotal = totalMinutes + SLOT_CLICK_MINUTOS
+    const h2 = Math.floor(endTotal / 60)
+    const m2 = endTotal % 60
+    setHoverSlot({ profId, top, startLabel: `${p(h1)}:${p(m1)}`, endLabel: `${p(h2)}:${p(m2)}` })
+  }
+
+  function handleColMouseLeave() {
+    setHoverSlot(null)
   }
 
   function handleCitaHoverEnter(cita: CitaConRelaciones, e: React.MouseEvent) {
@@ -387,6 +417,8 @@ export function CalendarioResourceDayView({
               }}
               className="flex-1 min-w-[140px] border-r last:border-r-0 relative"
               onClick={(e) => handleGridClick(prof.id, e)}
+              onMouseMove={(e) => handleColMouseMove(prof.id, e)}
+              onMouseLeave={handleColMouseLeave}
             >
               {/* Hour lines */}
               {timeSlots.map((hour) => (
@@ -492,6 +524,21 @@ export function CalendarioResourceDayView({
                   </div>
                 )
               })}
+
+              {/* Slot hover highlight (15 min) */}
+              {hoverSlot && hoverSlot.profId === prof.id && !isDragging && (
+                <div
+                  className="absolute left-0.5 right-0.5 rounded bg-primary/8 border border-primary/20 pointer-events-none z-[2] flex items-center justify-center"
+                  style={{
+                    top: `${hoverSlot.top}px`,
+                    height: `${(SLOT_CLICK_MINUTOS / 60) * HORA_HEIGHT}px`,
+                  }}
+                >
+                  <span className="text-[10px] text-primary/70 font-medium select-none">
+                    {hoverSlot.startLabel} – {hoverSlot.endLabel}
+                  </span>
+                </div>
+              )}
 
               {/* Drop preview */}
               {dropPreview && dropPreview.profId === prof.id && (

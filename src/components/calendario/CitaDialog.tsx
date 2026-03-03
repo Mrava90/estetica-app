@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
-import { Phone, Banknote, Smartphone, Building2, Check } from 'lucide-react'
+import { Phone, Banknote, Smartphone, Building2, Check, RotateCcw } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -28,24 +28,33 @@ interface Props {
   profesionales: Profesional[]
 }
 
+/** Converts a UTC/ISO timestamp from the DB to a local datetime-local string */
+function toDatetimeLocal(isoString: string): string {
+  const d = new Date(isoString)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesionalId, profesionales }: Props) {
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [profServMap, setProfServMap] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(false)
-  const [precioCustom, setPrecioCustom] = useState<number | null>(null)
-  const [showPrecioEdit, setShowPrecioEdit] = useState(false)
   const [showNewCliente, setShowNewCliente] = useState(false)
   const [newClienteNombre, setNewClienteNombre] = useState('')
   const [newClienteTelefono, setNewClienteTelefono] = useState('')
 
-  // Combobox states — cliente
+  // Precio field — always visible, auto-filled, editable
+  const [precioInput, setPrecioInput] = useState<string>('')
+  const [precioDirty, setPrecioDirty] = useState(false)
+
+  // Combobox — cliente
   const [clienteQuery, setClienteQuery] = useState('')
   const [clienteOpen, setClienteOpen] = useState(false)
   const [clienteLabel, setClienteLabel] = useState('')
   const clienteRef = useRef<HTMLDivElement>(null)
 
-  // Combobox states — servicio
+  // Combobox — servicio
   const [servicioQuery, setServicioQuery] = useState('')
   const [servicioOpen, setServicioOpen] = useState(false)
   const [servicioLabel, setServicioLabel] = useState('')
@@ -73,36 +82,44 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     ? profesionales.filter((p) => profServMap[selectedServicioId].includes(p.id))
     : profesionales
 
-  // Filter servicios locally as the user types
   const filteredServicios = servicioQuery
     ? servicios.filter((s) => s.nombre.toLowerCase().includes(servicioQuery.toLowerCase()))
     : servicios
 
+  /** Price for the currently selected service + method (service's default) */
+  function getDefaultPrecio(serv: Servicio | undefined, metodo: string): number | null {
+    if (!serv) return null
+    return metodo === 'mercadopago' ? serv.precio_mercadopago : serv.precio_efectivo
+  }
+
+  function resetPrecioToDefault() {
+    const p = getDefaultPrecio(selectedServicio, selectedMetodoPago)
+    setPrecioInput(p != null ? String(p) : '')
+    setPrecioDirty(false)
+  }
+
+  // Initialize dialog on open
   useEffect(() => {
     if (open) {
       fetchServicios()
       fetchProfServMap()
       fetchClientes('')
-      setPrecioCustom(null)
-      setShowPrecioEdit(false)
       setShowNewCliente(false)
       setNewClienteNombre('')
       setNewClienteTelefono('')
 
       if (cita) {
-        const servPrecio = servicios.find((s) => s.id === cita.servicio_id)
-        const expectedPrecio = cita.metodo_pago === 'mercadopago' ? servPrecio?.precio_mercadopago : servPrecio?.precio_efectivo
-        if (cita.precio_cobrado != null && expectedPrecio != null && cita.precio_cobrado !== expectedPrecio) {
-          setPrecioCustom(cita.precio_cobrado)
-          setShowPrecioEdit(true)
-        }
         setClienteLabel(cita.clientes ? `${cita.clientes.nombre} — ${cita.clientes.telefono}` : '')
         setServicioLabel(cita.servicios ? `${cita.servicios.nombre} (${cita.servicios.duracion_minutos} min)` : '')
+        // Pre-fill precio (keep dirty=true so loading servicios doesn't override)
+        setPrecioInput(cita.precio_cobrado != null ? String(cita.precio_cobrado) : '')
+        setPrecioDirty(true)
         reset({
           cliente_id: cita.cliente_id || '',
           profesional_id: cita.profesional_id || '',
           servicio_id: cita.servicio_id || '',
-          fecha_inicio: cita.fecha_inicio,
+          // Convert UTC ISO to local datetime for the input
+          fecha_inicio: toDatetimeLocal(cita.fecha_inicio),
           metodo_pago: (cita.metodo_pago as 'efectivo' | 'mercadopago' | 'transferencia') || 'efectivo',
           notas: cita.notas || '',
         })
@@ -111,6 +128,8 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
         const localISO = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
         setClienteLabel('')
         setServicioLabel('')
+        setPrecioInput('')
+        setPrecioDirty(false)
         reset({
           cliente_id: '',
           profesional_id: selectedProfesionalId || '',
@@ -142,9 +161,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
   async function fetchClientes(search: string) {
     let query = supabase.from('clientes').select('*').order('nombre').limit(20)
-    if (search) {
-      query = query.or(`nombre.ilike.%${search}%,telefono.ilike.%${search}%`)
-    }
+    if (search) query = query.or(`nombre.ilike.%${search}%,telefono.ilike.%${search}%`)
     const { data } = await query
     if (data) setClientes(data)
   }
@@ -161,12 +178,19 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     setServicioLabel(`${s.nombre} (${s.duracion_minutos} min)`)
     setServicioQuery('')
     setServicioOpen(false)
+    // Auto-fill price with the service's default for current method
+    const precio = selectedMetodoPago === 'mercadopago' ? s.precio_mercadopago : s.precio_efectivo
+    setPrecioInput(precio != null ? String(precio) : '')
+    setPrecioDirty(false)  // new service → reset dirty so method change can still auto-update
   }
 
-  function getPrecioServicio(servicio: Servicio | undefined, metodo: string): number | null {
-    if (!servicio) return null
-    if (metodo === 'mercadopago') return servicio.precio_mercadopago
-    return servicio.precio_efectivo
+  function handleMetodoPagoChange(metodo: 'efectivo' | 'mercadopago' | 'transferencia') {
+    setValue('metodo_pago', metodo)
+    // Auto-update price if user hasn't manually edited it
+    if (!precioDirty && selectedServicio) {
+      const precio = metodo === 'mercadopago' ? selectedServicio.precio_mercadopago : selectedServicio.precio_efectivo
+      setPrecioInput(precio != null ? String(precio) : '')
+    }
   }
 
   async function onSubmit(data: CitaInput) {
@@ -175,8 +199,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
       const servicio = servicios.find((s) => s.id === data.servicio_id)
       const fechaInicio = new Date(data.fecha_inicio)
       const fechaFin = addMinutes(fechaInicio, servicio?.duracion_minutos || 30)
-      const precioBase = getPrecioServicio(servicio, data.metodo_pago)
-      const precio = precioCustom !== null ? precioCustom : precioBase
+      const precio = precioInput !== '' ? Number(precioInput) : getDefaultPrecio(servicio, data.metodo_pago)
 
       if (isEditing) {
         const { error } = await supabase
@@ -205,7 +228,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
           fecha_fin: fechaFin.toISOString(),
           metodo_pago: data.metodo_pago,
           notas: data.notas || null,
-          precio_cobrado: precioCustom !== null ? precioCustom : precioBase,
+          precio_cobrado: precio,
           origen: 'manual',
         })
 
@@ -274,6 +297,9 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   const clienteIdValue = watch('cliente_id')
   const servicioIdValue = watch('servicio_id')
 
+  const defaultPrecio = getDefaultPrecio(selectedServicio, selectedMetodoPago)
+  const isPrecioModified = precioDirty && precioInput !== '' && defaultPrecio != null && Number(precioInput) !== defaultPrecio
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -338,9 +364,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                           onMouseDown={(e) => { e.preventDefault(); selectCliente(c) }}
                         >
                           {c.id === clienteIdValue && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                          <span className={c.id === clienteIdValue ? 'font-medium' : ''}>
-                            {c.nombre}
-                          </span>
+                          <span className={c.id === clienteIdValue ? 'font-medium' : ''}>{c.nombre}</span>
                           <span className="text-muted-foreground ml-auto shrink-0">{c.telefono}</span>
                         </button>
                       ))}
@@ -453,99 +477,70 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             {errors.servicio_id && (
               <p className="text-sm text-destructive">{errors.servicio_id.message}</p>
             )}
-            {selectedServicio && (
-              <p className="text-xs text-muted-foreground">
-                Efectivo: {formatPrecio(selectedServicio.precio_efectivo)} |
-                Mercadopago: {formatPrecio(selectedServicio.precio_mercadopago)}
-              </p>
-            )}
           </div>
 
           {/* ── Método de pago ── */}
           <div className="space-y-2">
             <Label>Método de pago</Label>
             <div className="flex gap-2">
-              <Button
-                type="button"
-                variant={selectedMetodoPago === 'efectivo' ? 'default' : 'outline'}
-                size="sm"
-                className="flex-1 gap-1"
-                onClick={() => setValue('metodo_pago', 'efectivo')}
-              >
-                <Banknote className="h-4 w-4" />
-                Efectivo
-                {selectedServicio && (
-                  <span className="text-xs opacity-80">({formatPrecio(selectedServicio.precio_efectivo)})</span>
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant={selectedMetodoPago === 'mercadopago' ? 'default' : 'outline'}
-                size="sm"
-                className="flex-1 gap-1"
-                onClick={() => setValue('metodo_pago', 'mercadopago')}
-              >
-                <Smartphone className="h-4 w-4" />
-                MP
-                {selectedServicio && (
-                  <span className="text-xs opacity-80">({formatPrecio(selectedServicio.precio_mercadopago)})</span>
-                )}
-              </Button>
-              <Button
-                type="button"
-                variant={selectedMetodoPago === 'transferencia' ? 'default' : 'outline'}
-                size="sm"
-                className="flex-1 gap-1"
-                onClick={() => setValue('metodo_pago', 'transferencia')}
-              >
-                <Building2 className="h-4 w-4" />
-                Transf.
-                {selectedServicio && (
-                  <span className="text-xs opacity-80">({formatPrecio(selectedServicio.precio_efectivo)})</span>
-                )}
-              </Button>
+              {(['efectivo', 'mercadopago', 'transferencia'] as const).map((metodo) => {
+                const labels = { efectivo: 'Efectivo', mercadopago: 'MP', transferencia: 'Transf.' }
+                const icons = { efectivo: Banknote, mercadopago: Smartphone, transferencia: Building2 }
+                const Icon = icons[metodo]
+                const precio = metodo === 'mercadopago'
+                  ? selectedServicio?.precio_mercadopago
+                  : selectedServicio?.precio_efectivo
+                return (
+                  <Button
+                    key={metodo}
+                    type="button"
+                    variant={selectedMetodoPago === metodo ? 'default' : 'outline'}
+                    size="sm"
+                    className="flex-1 gap-1"
+                    onClick={() => handleMetodoPagoChange(metodo)}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {labels[metodo]}
+                    {precio != null && (
+                      <span className="text-xs opacity-80">({formatPrecio(precio)})</span>
+                    )}
+                  </Button>
+                )
+              })}
             </div>
           </div>
 
-          {/* ── Precio custom ── */}
-          {selectedServicio && (
-            <div className="flex items-center gap-2">
-              {!showPrecioEdit ? (
-                <Button
+          {/* ── Monto a cobrar ── */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>Monto a cobrar</Label>
+              {isPrecioModified && (
+                <button
                   type="button"
-                  variant="link"
-                  size="sm"
-                  className="px-0 h-auto text-xs text-muted-foreground"
-                  onClick={() => {
-                    setShowPrecioEdit(true)
-                    setPrecioCustom(getPrecioServicio(selectedServicio, selectedMetodoPago) || 0)
-                  }}
+                  onClick={resetPrecioToDefault}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Editar precio
-                </Button>
-              ) : (
-                <>
-                  <Label className="text-xs shrink-0">Precio:</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={precioCustom ?? ''}
-                    onChange={(e) => setPrecioCustom(Number(e.target.value))}
-                    className="h-7 w-28 text-xs"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs text-muted-foreground"
-                    onClick={() => { setShowPrecioEdit(false); setPrecioCustom(null) }}
-                  >
-                    Resetear
-                  </Button>
-                </>
+                  <RotateCcw className="h-3 w-3" />
+                  Restablecer ({defaultPrecio != null ? formatPrecio(defaultPrecio) : ''})
+                </button>
               )}
             </div>
-          )}
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0"
+                value={precioInput}
+                onChange={(e) => {
+                  setPrecioInput(e.target.value)
+                  setPrecioDirty(true)
+                }}
+                className="pl-7"
+              />
+            </div>
+          </div>
 
           {/* ── Fecha/Hora ── */}
           <div className="space-y-2">
@@ -564,7 +559,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
           <div className="flex gap-2 pt-2">
             <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Guardando...' : isEditing ? 'Actualizar' : 'Crear cita'}
+              {loading ? 'Guardando...' : isEditing ? 'Actualizar cita' : 'Crear cita'}
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
