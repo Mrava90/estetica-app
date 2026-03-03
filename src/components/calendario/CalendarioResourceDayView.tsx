@@ -3,6 +3,7 @@
 import { useMemo, useEffect, useRef, useState } from 'react'
 import type { CitaConRelaciones, Profesional, Bloqueo, Horario } from '@/types/database'
 import { STATUS_COLORS } from '@/lib/constants'
+import { formatPrecio } from '@/lib/dates'
 
 const HORA_INICIO = 8
 const HORA_FIN = 21
@@ -37,6 +38,11 @@ export function CalendarioResourceDayView({
   const dragRef = useRef<{ citaId: string; offsetMinutes: number; duration: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [dropPreview, setDropPreview] = useState<{ profId: string; top: number; height: number } | null>(null)
+
+  // Hover tooltip
+  const [hoveredCita, setHoveredCita] = useState<CitaConRelaciones | null>(null)
+  const [tooltipAnchor, setTooltipAnchor] = useState<DOMRect | null>(null)
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Refs to column DOM elements keyed by profId
   const colRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -210,6 +216,31 @@ export function CalendarioResourceDayView({
     end.setMinutes(end.getMinutes() + SLOT_MINUTOS)
 
     onSlotClick(profesionalId, start, end)
+  }
+
+  function handleCitaHoverEnter(cita: CitaConRelaciones, e: React.MouseEvent) {
+    if (isDragging) return
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    hoverTimerRef.current = setTimeout(() => {
+      setHoveredCita(cita)
+      setTooltipAnchor(rect)
+    }, 250)
+  }
+
+  function handleCitaHoverLeave() {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
+    setHoveredCita(null)
+    setTooltipAnchor(null)
+  }
+
+  function getTooltipStyle(anchor: DOMRect): React.CSSProperties {
+    const W = 232
+    let x = anchor.right + 10
+    if (x + W > window.innerWidth) x = anchor.left - W - 10
+    let y = anchor.top
+    if (y + 160 > window.innerHeight) y = window.innerHeight - 168
+    return { position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), width: W, zIndex: 200 }
   }
 
   function formatTime(date: Date) {
@@ -422,6 +453,8 @@ export function CalendarioResourceDayView({
                     key={cita.id}
                     data-cita
                     onPointerDown={(e) => handleCitaPointerDown(cita, e)}
+                    onMouseEnter={(e) => handleCitaHoverEnter(cita, e)}
+                    onMouseLeave={handleCitaHoverLeave}
                     className="absolute left-1 right-1 rounded-md border-l-[3px] bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 px-1.5 py-0.5 overflow-hidden transition-all z-[1] hover:z-[5] hover:shadow-lg hover:ring-2 hover:ring-fuchsia-500/40 shadow-sm select-none"
                     style={{
                       top: `${pos.top}px`,
@@ -433,7 +466,10 @@ export function CalendarioResourceDayView({
                     }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!isDragging) onCitaClick(cita)
+                      if (!isDragging) {
+                        handleCitaHoverLeave()
+                        onCitaClick(cita)
+                      }
                     }}
                   >
                     {isSmall ? (
@@ -480,6 +516,35 @@ export function CalendarioResourceDayView({
           )}
         </div>
       </div>
+
+      {/* ── Hover tooltip (position: fixed, fuera del scroll) ── */}
+      {hoveredCita && tooltipAnchor && !isDragging && (
+        <div
+          className="bg-card border rounded-xl shadow-2xl p-3 pointer-events-none text-sm"
+          style={getTooltipStyle(tooltipAnchor)}
+        >
+          <p className="font-semibold text-foreground leading-tight truncate">
+            {hoveredCita.clientes?.nombre || 'Sin cliente'}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+            {hoveredCita.servicios?.nombre || 'Sin servicio'}
+          </p>
+          <div className="flex items-center justify-between mt-2 pt-2 border-t text-xs gap-2">
+            <span className="text-muted-foreground">
+              {formatTime(new Date(hoveredCita.fecha_inicio))} – {formatTime(new Date(hoveredCita.fecha_fin))}
+            </span>
+            {hoveredCita.precio_cobrado != null && (
+              <span className="font-semibold">{formatPrecio(hoveredCita.precio_cobrado)}</span>
+            )}
+          </div>
+          {hoveredCita.notas && (
+            <p className="text-xs text-muted-foreground mt-1.5 pt-1.5 border-t line-clamp-2 leading-snug">
+              {hoveredCita.notas}
+            </p>
+          )}
+          <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">Clic para ver detalle</p>
+        </div>
+      )}
     </div>
   )
 }
