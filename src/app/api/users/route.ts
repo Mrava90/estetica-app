@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-
-const ADMIN_EMAIL = 'ravamartin@gmail.com'
+import { isAdminEmail } from '@/lib/constants'
 
 async function isAdmin(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  return user?.email === ADMIN_EMAIL
+  return isAdminEmail(user?.email)
 }
 
 export async function GET(request: NextRequest) {
@@ -97,7 +96,7 @@ export async function DELETE(request: NextRequest) {
   // Prevent deleting admin
   const admin = createAdminClient()
   const { data: userData } = await admin.auth.admin.getUserById(userId)
-  if (userData?.user?.email === ADMIN_EMAIL) {
+  if (isAdminEmail(userData?.user?.email)) {
     return NextResponse.json({ error: 'No podés eliminar al administrador' }, { status: 403 })
   }
 

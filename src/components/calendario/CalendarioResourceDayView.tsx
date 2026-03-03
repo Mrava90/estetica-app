@@ -18,7 +18,7 @@ interface Props {
   onSlotClick: (profesionalId: string, start: Date, end: Date) => void
   onCitaClick: (cita: CitaConRelaciones) => void
   onBloqueoClick?: (bloqueo: Bloqueo) => void
-  onCitaDrop?: (citaId: string, newStart: Date, newEnd: Date) => void
+  onCitaDrop?: (citaId: string, newStart: Date, newEnd: Date, newProfesionalId: string) => void
 }
 
 export function CalendarioResourceDayView({
@@ -35,7 +35,21 @@ export function CalendarioResourceDayView({
   const gridRef = useRef<HTMLDivElement>(null)
   const nowRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ citaId: string; offsetMinutes: number; duration: number } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [dropPreview, setDropPreview] = useState<{ profId: string; top: number; height: number } | null>(null)
+
+  // Refs to column DOM elements keyed by profId
+  const colRefsMap = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  // Keep refs to avoid stale closures – updated on every render
+  const fechaRef = useRef(fecha)
+  const onCitaDropRef = useRef(onCitaDrop)
+  useEffect(() => { fechaRef.current = fecha }, [fecha])
+  useEffect(() => { onCitaDropRef.current = onCitaDrop }, [onCitaDrop])
+
+  // Cleanup drag listeners on unmount
+  const cleanupDragRef = useRef<(() => void) | null>(null)
+  useEffect(() => () => { cleanupDragRef.current?.() }, [])
 
   const timeSlots = useMemo(() => {
     const slots: number[] = []
@@ -93,27 +107,99 @@ export function CalendarioResourceDayView({
       if (isToday && nowRef.current) {
         nowRef.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
       } else {
-        // Scroll to 9:00
         const offset = (9 - HORA_INICIO) * HORA_HEIGHT
         gridRef.current.scrollTop = offset
       }
     }
   }, [fecha])
 
-  function getCitaPosition(cita: CitaConRelaciones) {
+  // Find which column the cursor is in by comparing clientX against bounding rects
+  function getColAt(clientX: number): { profId: string; el: HTMLDivElement } | null {
+    for (const [profId, el] of colRefsMap.current.entries()) {
+      const rect = el.getBoundingClientRect()
+      if (clientX >= rect.left && clientX <= rect.right) {
+        return { profId, el }
+      }
+    }
+    return null
+  }
+
+  // Calculate drop time from column element and clientY
+  function calcDropPosition(colEl: HTMLElement, clientY: number) {
+    const drag = dragRef.current!
+    const rect = colEl.getBoundingClientRect()
+    const y = clientY - rect.top
+    const minutesFromGridTop = (y / HORA_HEIGHT) * 60 - drag.offsetMinutes
+    const snapped = Math.round(minutesFromGridTop / SLOT_MINUTOS) * SLOT_MINUTOS
+    const clamped = Math.max(0, Math.min(snapped, (HORA_FIN - HORA_INICIO) * 60 - SLOT_MINUTOS))
+    const top = (clamped / 60) * HORA_HEIGHT
+    const height = (drag.duration / 60) * HORA_HEIGHT
+    const totalStartMinutes = HORA_INICIO * 60 + clamped
+    return { top, height, totalStartMinutes }
+  }
+
+  function handleCitaPointerDown(cita: CitaConRelaciones, e: React.PointerEvent) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+
     const start = new Date(cita.fecha_inicio)
     const end = new Date(cita.fecha_fin)
-    const startMinutes = start.getHours() * 60 + start.getMinutes()
-    const endMinutes = end.getHours() * 60 + end.getMinutes()
-    const top = ((startMinutes - HORA_INICIO * 60) / 60) * HORA_HEIGHT
-    const height = ((endMinutes - startMinutes) / 60) * HORA_HEIGHT
-    return { top, height: Math.max(height, 24) }
+    const duration = (end.getTime() - start.getTime()) / 60000
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const offsetMinutes = ((e.clientY - rect.top) / HORA_HEIGHT) * 60
+
+    dragRef.current = { citaId: cita.id, offsetMinutes, duration }
+    setIsDragging(true)
+
+    // Attach global listeners SYNCHRONOUSLY – do NOT wait for useEffect
+    // This avoids a race condition where the user releases before React commits the effect
+    cleanupDragRef.current?.() // cancel any previous drag
+
+    function onMove(ev: PointerEvent) {
+      if (!dragRef.current) return
+      const col = getColAt(ev.clientX)
+      if (!col) { setDropPreview(null); return }
+      const { top, height } = calcDropPosition(col.el, ev.clientY)
+      setDropPreview({ profId: col.profId, top, height })
+    }
+
+    function onUp(ev: PointerEvent) {
+      if (!dragRef.current) return
+      const col = getColAt(ev.clientX)
+      if (col && onCitaDropRef.current) {
+        const { totalStartMinutes } = calcDropPosition(col.el, ev.clientY)
+        const newStart = new Date(fechaRef.current)
+        newStart.setHours(Math.floor(totalStartMinutes / 60), totalStartMinutes % 60, 0, 0)
+        const newEnd = new Date(newStart.getTime() + dragRef.current.duration * 60000)
+        onCitaDropRef.current(dragRef.current.citaId, newStart, newEnd, col.profId)
+      }
+      dragRef.current = null
+      setIsDragging(false)
+      setDropPreview(null)
+      cleanup()
+    }
+
+    function cleanup() {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      cleanupDragRef.current = null
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    cleanupDragRef.current = cleanup
   }
 
   function handleGridClick(profesionalId: string, e: React.MouseEvent<HTMLDivElement>) {
+    if (isDragging) return
     if ((e.target as HTMLElement).closest('[data-cita]')) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const y = e.clientY - rect.top + e.currentTarget.scrollTop
+    const col = colRefsMap.current.get(profesionalId)
+    if (!col) return
+    const rect = col.getBoundingClientRect()
+    const y = e.clientY - rect.top
     const minutesFromStart = (y / HORA_HEIGHT) * 60
     const slotMinutes = Math.floor(minutesFromStart / SLOT_MINUTOS) * SLOT_MINUTOS
     const totalMinutes = HORA_INICIO * 60 + slotMinutes
@@ -126,66 +212,11 @@ export function CalendarioResourceDayView({
     onSlotClick(profesionalId, start, end)
   }
 
-  function handleDragStart(cita: CitaConRelaciones, e: React.DragEvent) {
-    const start = new Date(cita.fecha_inicio)
-    const end = new Date(cita.fecha_fin)
-    const duration = (end.getTime() - start.getTime()) / 60000
-
-    // Calculate offset: where within the cita block the user grabbed
-    const rect = (e.target as HTMLElement).getBoundingClientRect()
-    const offsetY = e.clientY - rect.top
-    const offsetMinutes = (offsetY / HORA_HEIGHT) * 60
-
-    dragRef.current = { citaId: cita.id, offsetMinutes, duration }
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', cita.id)
-  }
-
-  function handleDragOver(profId: string, e: React.DragEvent) {
-    if (!dragRef.current) return
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    const scrollTop = e.currentTarget.scrollTop || 0
-    const y = e.clientY - rect.top + scrollTop
-    const minutesFromGridTop = (y / HORA_HEIGHT) * 60 - dragRef.current.offsetMinutes
-    const snapped = Math.round(minutesFromGridTop / SLOT_MINUTOS) * SLOT_MINUTOS
-    const top = (snapped / 60) * HORA_HEIGHT
-    const height = (dragRef.current.duration / 60) * HORA_HEIGHT
-
-    setDropPreview({ profId, top, height })
-  }
-
-  function handleDragLeave() {
-    setDropPreview(null)
-  }
-
-  function handleDrop(profId: string, e: React.DragEvent) {
-    e.preventDefault()
-    setDropPreview(null)
-    if (!dragRef.current || !onCitaDrop) return
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    const scrollTop = e.currentTarget.scrollTop || 0
-    const y = e.clientY - rect.top + scrollTop
-    const minutesFromGridTop = (y / HORA_HEIGHT) * 60 - dragRef.current.offsetMinutes
-    const snapped = Math.round(minutesFromGridTop / SLOT_MINUTOS) * SLOT_MINUTOS
-    const totalStartMinutes = HORA_INICIO * 60 + snapped
-
-    const newStart = new Date(fecha)
-    newStart.setHours(Math.floor(totalStartMinutes / 60), totalStartMinutes % 60, 0, 0)
-    const newEnd = new Date(newStart.getTime() + dragRef.current.duration * 60000)
-
-    onCitaDrop(dragRef.current.citaId, newStart, newEnd)
-    dragRef.current = null
-  }
-
   function formatTime(date: Date) {
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
   }
 
-  // Now indicator position
+  // Now indicator
   const now = new Date()
   const isToday =
     now.getFullYear() === fecha.getFullYear() &&
@@ -197,7 +228,6 @@ export function CalendarioResourceDayView({
 
   const totalHeight = (HORA_FIN - HORA_INICIO) * HORA_HEIGHT
 
-  // Availability helpers
   const toMin = (t: string) => {
     const [h, m] = t.split(':').map(Number)
     return h * 60 + m
@@ -251,19 +281,18 @@ export function CalendarioResourceDayView({
   }
 
   return (
-    <div className="rounded-lg border bg-card overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-      {/* Header with professional columns */}
+    <div
+      className="rounded-lg border bg-card overflow-hidden flex flex-col"
+      style={{ maxHeight: 'calc(100vh - 200px)', cursor: isDragging ? 'grabbing' : undefined }}
+    >
+      {/* Header */}
       <div className="flex border-b bg-muted/30 shrink-0">
         <div className="w-14 shrink-0 border-r" />
         {profesionales.map((prof) => {
           const count = citasPorProfesional.get(prof.id)?.length || 0
           const avail = getAvailability(prof.id)
           return (
-            <div
-              key={prof.id}
-              className="flex-1 min-w-[140px] px-2 py-1.5 text-center border-r last:border-r-0"
-            >
-              {/* Availability line */}
+            <div key={prof.id} className="flex-1 min-w-[140px] px-2 py-1.5 text-center border-r last:border-r-0">
               <div className="flex items-center justify-center gap-1 mb-0.5">
                 {avail ? (
                   <>
@@ -282,12 +311,8 @@ export function CalendarioResourceDayView({
                   <span className="text-[10px] text-muted-foreground/60 italic">No trabaja</span>
                 )}
               </div>
-              {/* Name + count */}
               <div className="flex items-center justify-center gap-1.5">
-                <span
-                  className="inline-block h-6 w-6 rounded-full shrink-0"
-                  style={{ backgroundColor: prof.color }}
-                />
+                <span className="inline-block h-6 w-6 rounded-full shrink-0" style={{ backgroundColor: prof.color }} />
                 <span className="text-base font-semibold truncate">{prof.nombre}</span>
                 {count > 0 && (
                   <span
@@ -303,7 +328,7 @@ export function CalendarioResourceDayView({
         })}
       </div>
 
-      {/* Scrollable grid body */}
+      {/* Scrollable grid */}
       <div ref={gridRef} className="overflow-y-auto overflow-x-auto flex-1">
         <div className="flex relative" style={{ height: totalHeight }}>
           {/* Time column */}
@@ -325,17 +350,18 @@ export function CalendarioResourceDayView({
           {profesionales.map((prof) => (
             <div
               key={prof.id}
+              ref={(el) => {
+                if (el) colRefsMap.current.set(prof.id, el)
+                else colRefsMap.current.delete(prof.id)
+              }}
               className="flex-1 min-w-[140px] border-r last:border-r-0 relative"
               onClick={(e) => handleGridClick(prof.id, e)}
-              onDragOver={(e) => handleDragOver(prof.id, e)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(prof.id, e)}
             >
               {/* Hour lines */}
               {timeSlots.map((hour) => (
                 <div
                   key={hour}
-                  className="absolute left-0 right-0 border-t border-border"
+                  className="absolute left-0 right-0 border-t border-border pointer-events-none"
                   style={{ top: (hour - HORA_INICIO) * HORA_HEIGHT }}
                 />
               ))}
@@ -343,7 +369,7 @@ export function CalendarioResourceDayView({
               {timeSlots.map((hour) => (
                 <div
                   key={`${hour}-half`}
-                  className="absolute left-0 right-0 border-t border-border/30"
+                  className="absolute left-0 right-0 border-t border-border/30 pointer-events-none"
                   style={{ top: (hour - HORA_INICIO) * HORA_HEIGHT + HORA_HEIGHT / 2 }}
                 />
               ))}
@@ -362,16 +388,14 @@ export function CalendarioResourceDayView({
                     key={bloqueo.id}
                     data-cita
                     className="absolute left-1 right-1 rounded-md border border-dashed border-gray-400 dark:border-gray-600 bg-gray-200/60 dark:bg-gray-800/60 px-1.5 py-0.5 overflow-hidden cursor-pointer transition-colors z-[1]"
-                    style={{ top: `${top}px`, height: `${height}px` }}
+                    style={{ top: `${top}px`, height: `${height}px`, pointerEvents: isDragging ? 'none' : 'auto' }}
                     onClick={(e) => {
                       e.stopPropagation()
                       onBloqueoClick?.(bloqueo)
                     }}
                   >
                     {isSmall ? (
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate leading-snug">
-                        Bloqueado
-                      </p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate leading-snug">Bloqueado</p>
                     ) : (
                       <>
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
@@ -392,21 +416,24 @@ export function CalendarioResourceDayView({
                 const start = new Date(cita.fecha_inicio)
                 const end = new Date(cita.fecha_fin)
                 const isSmall = pos.height < 40
+                const isBeingDragged = isDragging && dragRef.current?.citaId === cita.id
                 return (
                   <div
                     key={cita.id}
                     data-cita
-                    draggable
-                    onDragStart={(e) => handleDragStart(cita, e)}
-                    className="absolute left-1 right-1 rounded-md border-l-[3px] bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 px-1.5 py-0.5 overflow-hidden cursor-grab active:cursor-grabbing transition-all z-[1] hover:z-[5] hover:shadow-lg hover:ring-2 hover:ring-fuchsia-500/40 shadow-sm"
+                    onPointerDown={(e) => handleCitaPointerDown(cita, e)}
+                    className="absolute left-1 right-1 rounded-md border-l-[3px] bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 px-1.5 py-0.5 overflow-hidden transition-all z-[1] hover:z-[5] hover:shadow-lg hover:ring-2 hover:ring-fuchsia-500/40 shadow-sm select-none"
                     style={{
                       top: `${pos.top}px`,
                       height: `${pos.height}px`,
                       borderLeftColor: prof.color,
+                      cursor: isDragging ? 'grabbing' : 'grab',
+                      opacity: isBeingDragged ? 0.35 : 1,
+                      pointerEvents: isDragging ? 'none' : 'auto',
                     }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      onCitaClick(cita)
+                      if (!isDragging) onCitaClick(cita)
                     }}
                   >
                     {isSmall ? (
@@ -429,23 +456,15 @@ export function CalendarioResourceDayView({
                   </div>
                 )
               })}
-            </div>
-          ))}
 
-          {/* Drop preview */}
-          {dropPreview && profesionales.map((prof, idx) => (
-            dropPreview.profId === prof.id && (
-              <div
-                key={`preview-${prof.id}`}
-                className="absolute rounded-md border-2 border-dashed border-fuchsia-500 bg-fuchsia-500/10 z-[3] pointer-events-none"
-                style={{
-                  top: `${dropPreview.top}px`,
-                  height: `${dropPreview.height}px`,
-                  left: `calc(3.5rem + ${idx} * (100% - 3.5rem) / ${profesionales.length})`,
-                  width: `calc((100% - 3.5rem) / ${profesionales.length} - 2px)`,
-                }}
-              />
-            )
+              {/* Drop preview */}
+              {dropPreview && dropPreview.profId === prof.id && (
+                <div
+                  className="absolute left-1 right-1 rounded-md border-2 border-dashed border-fuchsia-500 bg-fuchsia-500/10 z-[3] pointer-events-none"
+                  style={{ top: `${dropPreview.top}px`, height: `${dropPreview.height}px` }}
+                />
+              )}
+            </div>
           ))}
 
           {/* Now indicator */}
@@ -463,4 +482,14 @@ export function CalendarioResourceDayView({
       </div>
     </div>
   )
+}
+
+function getCitaPosition(cita: CitaConRelaciones) {
+  const start = new Date(cita.fecha_inicio)
+  const end = new Date(cita.fecha_fin)
+  const startMinutes = start.getHours() * 60 + start.getMinutes()
+  const endMinutes = end.getHours() * 60 + end.getMinutes()
+  const top = ((startMinutes - HORA_INICIO * 60) / 60) * HORA_HEIGHT
+  const height = ((endMinutes - startMinutes) / 60) * HORA_HEIGHT
+  return { top, height: Math.max(height, 24) }
 }

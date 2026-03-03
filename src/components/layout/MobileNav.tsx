@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { NAV_ITEMS, ADMIN_EMAIL } from '@/lib/constants'
+import { NAV_ITEMS, isAdminEmail } from '@/lib/constants'
 import { Scissors } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -27,7 +27,7 @@ export function MobileNav() {
     })
   }, [])
 
-  const isAdmin = userEmail === ADMIN_EMAIL
+  const isAdmin = isAdminEmail(userEmail)
   const visibleItems = NAV_ITEMS.filter(item => {
     if (isAdmin) return true
     if (item.adminOnly) return false

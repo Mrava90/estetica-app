@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { CitaConRelaciones } from '@/types/database'
 import { formatHora, formatPrecio } from '@/lib/dates'
-import { STATUS_LABELS, STATUS_COLORS, ADMIN_EMAIL } from '@/lib/constants'
+import { STATUS_LABELS, STATUS_COLORS, isAdminEmail } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,7 +38,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email === ADMIN_EMAIL) {
+      if (isAdminEmail(data.user?.email)) {
         setIsAdmin(true)
         fetchStats()
         fetchCitasHoy()

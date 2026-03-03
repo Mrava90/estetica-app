@@ -19,6 +19,7 @@ export const servicioSchema = z.object({
   duracion_minutos: z.number().min(5, 'Mínimo 5 minutos'),
   precio_efectivo: z.number().min(0, 'Precio inválido'),
   precio_mercadopago: z.number().min(0, 'Precio inválido'),
+  es_promo: z.boolean(),
 })
 
 export const profesionalSchema = z.object({

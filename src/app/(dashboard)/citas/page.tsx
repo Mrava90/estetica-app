@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Phone } from 'lucide-react'
+import { Download, Phone } from 'lucide-react'
 
 export default function CitasPage() {
   const [citas, setCitas] = useState<CitaConRelaciones[]>([])
@@ -64,7 +64,7 @@ export default function CitasPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Citas</h1>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-center">
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Estado" />
@@ -90,6 +90,21 @@ export default function CitasPage() {
             ))}
           </SelectContent>
         </Select>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const params = new URLSearchParams()
+            if (filtroStatus !== 'todos') params.set('status', filtroStatus)
+            if (filtroProfesional !== 'todos') params.set('profesional_id', filtroProfesional)
+            window.location.href = `/api/export/citas?${params.toString()}`
+          }}
+          className="ml-auto"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          Exportar Excel
+        </Button>
       </div>
 
       <Card>

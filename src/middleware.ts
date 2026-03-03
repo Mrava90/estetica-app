@@ -1,6 +1,11 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const ADMIN_EMAILS = ['ravamartin@gmail.com', 'aye.13.romero@gmail.com']
+function isAdminEmail(email: string | null | undefined) {
+  return !!email && ADMIN_EMAILS.includes(email)
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -55,7 +60,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Admin-only routes
-  if (pathname.startsWith('/contabilidad') && user.email !== 'ravamartin@gmail.com') {
+  if (pathname.startsWith('/contabilidad') && !isAdminEmail(user.email)) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)

@@ -178,8 +178,9 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
         toast.success('Cita creada')
       }
       onClose()
-    } catch {
-      toast.error('Error al guardar la cita')
+    } catch (e) {
+      const msg = (e as { message?: string })?.message
+      toast.error(msg || 'Error al guardar la cita')
     } finally {
       setLoading(false)
     }

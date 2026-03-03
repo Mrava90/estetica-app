@@ -17,10 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { NAV_ITEMS } from '@/lib/constants'
-import { DIAS_SEMANA } from '@/lib/constants'
-
-const ADMIN_EMAIL = 'ravamartin@gmail.com'
+import { NAV_ITEMS, DIAS_SEMANA, isAdminEmail } from '@/lib/constants'
 const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
 
 interface AppUser {
@@ -77,7 +74,7 @@ export default function ConfiguracionPage() {
 
   async function checkAdmin() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (user?.email === ADMIN_EMAIL) {
+    if (isAdminEmail(user?.email)) {
       setIsAdmin(true)
       fetchUsers()
     }
@@ -600,7 +597,7 @@ export default function ConfiguracionPage() {
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               {u.email}
-                              {u.email === ADMIN_EMAIL && (
+                              {isAdminEmail(u.email) && (
                                 <Badge variant="secondary" className="text-[10px]">Admin</Badge>
                               )}
                             </div>
@@ -621,7 +618,7 @@ export default function ConfiguracionPage() {
                               >
                                 <KeyRound className="h-4 w-4" />
                               </Button>
-                              {u.email !== ADMIN_EMAIL && (
+                              {!isAdminEmail(u.email) && (
                                 <Button
                                   variant="ghost"
                                   size="icon"

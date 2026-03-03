@@ -21,6 +21,7 @@ export default function ReservarPage() {
 
   const categorias = [
     { key: 'todos', label: 'Todos' },
+    { key: 'promos', label: '🏷️ Promos' },
     { key: 'manos', label: 'Manos' },
     { key: 'pies', label: 'Pies' },
     { key: 'pestanas', label: 'Pestañas' },
@@ -45,6 +46,7 @@ export default function ReservarPage() {
 
   const filteredServicios = servicios
     .filter((s) => {
+      if (categoria === 'promos') return s.es_promo || /^promo/i.test(s.nombre)
       if (categoria !== 'todos' && getCategoria(s.nombre) !== categoria) return false
       if (busqueda && !s.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
       return true

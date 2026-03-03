@@ -162,12 +162,13 @@ export function CalendarioView() {
     setBloqueoDialogOpen(true)
   }
 
-  async function handleCitaDrop(citaId: string, newStart: Date, newEnd: Date) {
+  async function handleCitaDrop(citaId: string, newStart: Date, newEnd: Date, newProfesionalId: string) {
     const { error } = await supabase
       .from('citas')
       .update({
         fecha_inicio: newStart.toISOString(),
         fecha_fin: newEnd.toISOString(),
+        profesional_id: newProfesionalId,
         updated_at: new Date().toISOString(),
       })
       .eq('id', citaId)

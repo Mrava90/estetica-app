@@ -16,7 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Plus, Pencil, Banknote, Smartphone, Upload, Download } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Plus, Pencil, Banknote, Smartphone, Upload, Download, Tag } from 'lucide-react'
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([])
@@ -32,10 +33,14 @@ export default function ServiciosPage() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<ServicioInput>({
     resolver: zodResolver(servicioSchema),
   })
+
+  const esPromoValue = watch('es_promo')
 
   useEffect(() => {
     fetchServicios()
@@ -67,7 +72,7 @@ export default function ServiciosPage() {
 
   function openNew() {
     setEditingId(null)
-    reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_mercadopago: 0 })
+    reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_mercadopago: 0, es_promo: false })
     setSelectedProfs(profesionales.map((p) => p.id))
     setDialogOpen(true)
   }
@@ -80,6 +85,7 @@ export default function ServiciosPage() {
       duracion_minutos: servicio.duracion_minutos,
       precio_efectivo: servicio.precio_efectivo,
       precio_mercadopago: servicio.precio_mercadopago,
+      es_promo: servicio.es_promo ?? false,
     })
     fetchProfServicio(servicio.id)
     setDialogOpen(true)
@@ -236,7 +242,15 @@ export default function ServiciosPage() {
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">
                     <div>
-                      {s.nombre}
+                      <div className="flex items-center gap-1.5">
+                        {s.nombre}
+                        {s.es_promo && (
+                          <Badge variant="secondary" className="gap-1 text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 border-amber-300">
+                            <Tag className="h-2.5 w-2.5" />
+                            PROMO
+                          </Badge>
+                        )}
+                      </div>
                       {s.descripcion && (
                         <p className="text-xs text-muted-foreground">{s.descripcion}</p>
                       )}
@@ -314,6 +328,22 @@ export default function ServiciosPage() {
                 </Label>
                 <Input type="number" step="0.01" {...register('precio_mercadopago', { valueAsNumber: true })} />
                 {errors.precio_mercadopago && <p className="text-sm text-destructive">{errors.precio_mercadopago.message}</p>}
+              </div>
+            </div>
+
+            {/* Promo toggle */}
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <Checkbox
+                id="es_promo"
+                checked={!!esPromoValue}
+                onCheckedChange={(v) => setValue('es_promo', !!v)}
+              />
+              <div>
+                <Label htmlFor="es_promo" className="cursor-pointer flex items-center gap-1.5">
+                  <Tag className="h-3.5 w-3.5 text-amber-600" />
+                  Es una promo
+                </Label>
+                <p className="text-xs text-muted-foreground mt-0.5">Aparecerá en el filtro "Promos" del sistema de reservas</p>
               </div>
             </div>
 

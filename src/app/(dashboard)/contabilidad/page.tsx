@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ADMIN_EMAIL } from '@/lib/constants'
+import { isAdminEmail } from '@/lib/constants'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
@@ -67,7 +67,7 @@ export default function ContabilidadPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      setAuthorized(data.user?.email === ADMIN_EMAIL)
+      setAuthorized(isAdminEmail(data.user?.email))
     })
   }, [])
 

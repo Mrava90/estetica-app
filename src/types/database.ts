@@ -25,6 +25,7 @@ export interface Servicio {
   precio_efectivo: number
   precio_mercadopago: number
   activo: boolean
+  es_promo: boolean
   created_at: string
   updated_at: string
 }

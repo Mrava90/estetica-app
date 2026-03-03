@@ -28,7 +28,7 @@ import {
   Building2,
   Wallet,
 } from 'lucide-react'
-import { ADMIN_EMAIL } from '@/lib/constants'
+import { isAdminEmail } from '@/lib/constants'
 
 interface MonthlyStats {
   efectivo: number
@@ -65,7 +65,7 @@ export default function CajaDiariaPage() {
   useEffect(() => {
     async function fetchAdminStats() {
       const { data: userData } = await supabase.auth.getUser()
-      if (userData.user?.email !== ADMIN_EMAIL) return
+      if (!isAdminEmail(userData.user?.email)) return
       setIsAdmin(true)
 
       const now = new Date()
