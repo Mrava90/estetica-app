@@ -1,0 +1,5 @@
+fecha;hora_inicio;hora_fin;profesional;cliente;servicio;monto;metodo_pago;notas
+04/03/2026;09:00;10:00;Lola;María García;Lifting de pestañas;15000;efectivo;
+04/03/2026;10:00;10:30;Camila;Ana López;Esmaltado semipermanente;8000;mp;
+04/03/2026;11:00;12:00;Denise;Laura Martín;Cejas + henna;12000;efectivo;Promo marzo
+04/03/2026;12:00;13:00;Fabi;Julia Pérez;Manicura kapping;18000;transferencia;
