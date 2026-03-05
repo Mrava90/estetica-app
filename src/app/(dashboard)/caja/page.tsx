@@ -128,6 +128,7 @@ export default function CajaDiariaPage() {
         .gte('fecha_inicio', dayStart)
         .lt('fecha_inicio', dayEnd)
         .in('status', ['confirmada', 'completada'])
+        .eq('origen', 'sheets')
         .order('fecha_inicio'),
       supabase
         .from('movimientos_caja')
@@ -179,6 +180,20 @@ export default function CajaDiariaPage() {
       grandTotal: efectivoCitas + mercadopagoCitas + efectivoMovimientos + mercadopagoMovimientos,
     }
   }, [citas, movimientosDiarios])
+
+  const liquidacion = useMemo(() => {
+    const map = new Map<string, { nombre: string; color: string; comision: number }>()
+    for (const cita of citas) {
+      if (cita.origen !== 'sheets' || !cita.profesionales) continue
+      const { comision } = parseSheetNotas(cita.notas)
+      const prof = cita.profesionales
+      if (!map.has(prof.id)) {
+        map.set(prof.id, { nombre: prof.nombre, color: prof.color, comision: 0 })
+      }
+      map.get(prof.id)!.comision += comision
+    }
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre))
+  }, [citas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAddMovimiento() {
     const montoRaw = parseFloat(newMonto)
@@ -361,13 +376,15 @@ export default function CajaDiariaPage() {
 
   /** Las citas de Sheets tienen servicio_id/cliente_id = null.
    *  La info viene en notas con formato "[SSR] NombreCliente - NombreServicio" */
-  function parseSheetNotas(notas: string | null): { cliente: string; servicio: string } {
-    if (!notas) return { cliente: '—', servicio: '—' }
-    const match = notas.match(/^\[(SSR|KW)\]\s*(.+?)\s*-\s*(.+)$/)
+  function parseSheetNotas(notas: string | null): { cliente: string; servicio: string; comision: number } {
+    if (!notas) return { cliente: '—', servicio: '—', comision: 0 }
+    const [main, comPart] = notas.split(' | com:')
+    const comision = comPart ? parseInt(comPart, 10) || 0 : 0
+    const match = main.match(/^\[(SSR|KW)\]\s*(.+?)\s*-\s*(.+)$/)
     if (match) {
-      return { cliente: match[2]?.trim() || '—', servicio: match[3]?.trim() || '—' }
+      return { cliente: match[2]?.trim() || '—', servicio: match[3]?.trim() || '—', comision }
     }
-    return { cliente: '—', servicio: notas }
+    return { cliente: '—', servicio: main, comision }
   }
 
   function MetodoPagoBadge({ metodo }: { metodo: string }) {
@@ -582,6 +599,44 @@ export default function CajaDiariaPage() {
               </Table>
             </CardContent>
           </Card>
+
+          {/* Liquidación del día — A cobrar */}
+          {liquidacion.length > 0 && (
+            <Card>
+              <CardHeader className="px-4 py-3 border-b">
+                <CardTitle className="text-sm font-semibold">Liquidación del día — A cobrar</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Profesional</TableHead>
+                      <TableHead className="text-right">Comisión</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {liquidacion.map((prof) => (
+                      <TableRow key={prof.nombre}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-block h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: prof.color }} />
+                            {prof.nombre}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-green-700 dark:text-green-400">
+                          {formatPrecio(prof.comision)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-muted/40 font-bold">
+                      <TableCell>Total a cobrar</TableCell>
+                      <TableCell className="text-right">{formatPrecio(liquidacion.reduce((s, p) => s + p.comision, 0))}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Movimientos manuales */}
           <Card>

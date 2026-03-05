@@ -163,6 +163,7 @@ function parseAppointmentSheet(
     const entryAmount = parseAmount(row[4] || '') // ENTRADA column (E)
     const paymentMethod = row[5]?.trim()
     const professional = row[6]?.trim()
+    const comision = parseAmount(row[8] || '') // COMISION column (I)
 
     const parsedDate = parseSheetDate(dateVal)
     if (parsedDate) currentDate = parsedDate
@@ -181,7 +182,7 @@ function parseAppointmentSheet(
       fecha_inicio: formatISO(currentDate, hour, minute),
       fecha_fin: formatISO(currentDate, hour + 1, minute),
       status: 'completada',
-      notas: `[${sheetName}] ${clientName} - ${serviceName || ''}`.trim(),
+      notas: `[${sheetName}] ${clientName} - ${serviceName || ''}${comision > 0 ? ` | com:${Math.round(comision)}` : ''}`.trim(),
       precio_cobrado: entryAmount,
       metodo_pago: mapMetodoPago(paymentMethod),
       origen: 'sheets',
@@ -261,54 +262,19 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   const allCitas = [...ssrResult.citas, ...kwResult.citas]
   const allMovimientos = parseGastosSheet(gastosRows)
 
-  // 4. Deduplication: fetch existing non-sheets data to avoid duplicates
-  const [existingCitasRes, existingMovsRes] = await Promise.all([
-    supabase
-      .from('citas')
-      .select('fecha_inicio, profesional_id, precio_cobrado')
-      .neq('origen', 'sheets')
-      .in('status', ['confirmada', 'completada']),
-    supabase
-      .from('movimientos_caja')
-      .select('fecha, monto, tipo')
-      .neq('origen', 'sheets'),
-  ])
-  const existingCitas = existingCitasRes.data || []
-  const existingMovs = existingMovsRes.data || []
-
-  // Filter out sheet records that already exist as manual/online entries
-  const dedupedCitas = allCitas.filter((cita) => {
-    const citaDate = cita.fecha_inicio.slice(0, 10)
-    return !existingCitas.some((e) => {
-      const eDate = e.fecha_inicio.slice(0, 10)
-      const eMonto = e.precio_cobrado || 0
-      const tolerance = cita.precio_cobrado > 0 ? Math.abs(eMonto - cita.precio_cobrado) / cita.precio_cobrado : 0
-      return eDate === citaDate && e.profesional_id === cita.profesional_id && tolerance < 0.05
-    })
-  })
-
-  const dedupedMovs = allMovimientos.filter((mov) => {
-    return !existingMovs.some((e) =>
-      e.fecha === mov.fecha && e.monto === mov.monto && e.tipo === mov.tipo
-    )
-  })
-
-  const citasSkipped = allCitas.length - dedupedCitas.length
-  const movsSkipped = allMovimientos.length - dedupedMovs.length
-
-  // 5. Delete old sheet-synced data
+  // 4. Delete old sheet-synced data
   const { error: delCitasErr } = await supabase.from('citas').delete().eq('origen', 'sheets')
   if (delCitasErr) errors.push(`Error deleting citas: ${delCitasErr.message}`)
 
   const { error: delMovsErr } = await supabase.from('movimientos_caja').delete().eq('origen', 'sheets')
   if (delMovsErr) errors.push(`Error deleting movimientos: ${delMovsErr.message}`)
 
-  // 6. Insert deduplicated data in batches
+  // 5. Insert all sheet data in batches
   let citasInserted = 0
   let movsInserted = 0
 
-  for (let i = 0; i < dedupedCitas.length; i += 500) {
-    const chunk = dedupedCitas.slice(i, i + 500)
+  for (let i = 0; i < allCitas.length; i += 500) {
+    const chunk = allCitas.slice(i, i + 500)
     const { error } = await supabase.from('citas').insert(chunk)
     if (error) {
       errors.push(`Error inserting citas batch ${i}: ${error.message}`)
@@ -317,8 +283,8 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     }
   }
 
-  for (let i = 0; i < dedupedMovs.length; i += 500) {
-    const chunk = dedupedMovs.slice(i, i + 500)
+  for (let i = 0; i < allMovimientos.length; i += 500) {
+    const chunk = allMovimientos.slice(i, i + 500)
     const { error } = await supabase.from('movimientos_caja').insert(chunk)
     if (error) {
       errors.push(`Error inserting movimientos batch ${i}: ${error.message}`)
@@ -330,8 +296,8 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   return {
     citasCount: citasInserted,
     movimientosCount: movsInserted,
-    citasSkipped,
-    movimientosSkipped: movsSkipped,
+    citasSkipped: 0,
+    movimientosSkipped: 0,
     errors,
   }
 }
