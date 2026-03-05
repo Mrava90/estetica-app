@@ -28,6 +28,15 @@ interface CitaRow {
   comision_profesional: number | null
   profesional_id: string | null
   metodo_pago: string | null
+  notas: string | null
+  origen: string | null
+}
+
+function parseComisionNotas(notas: string | null): number {
+  if (!notas) return 0
+  const idx = notas.indexOf(' | com:')
+  if (idx === -1) return 0
+  return parseInt(notas.slice(idx + 7), 10) || 0
 }
 
 interface MovRow {
@@ -74,26 +83,18 @@ export default function ContabilidadPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
 
-    // Citas: intentar con comision_profesional, fallback si no existe
-    let citasData: CitaRow[] = []
+    // Citas del año
     const citasRes = await supabase
       .from('citas')
-      .select('fecha_inicio, precio_cobrado, comision_profesional, profesional_id, metodo_pago')
+      .select('fecha_inicio, precio_cobrado, profesional_id, metodo_pago, notas, origen')
       .eq('status', 'completada')
       .gte('fecha_inicio', `${year}-01-01`)
       .lt('fecha_inicio', `${year + 1}-01-01`)
 
-    if (citasRes.error && citasRes.error.message.includes('comision_profesional')) {
-      const fallback = await supabase
-        .from('citas')
-        .select('fecha_inicio, precio_cobrado, profesional_id, metodo_pago')
-        .eq('status', 'completada')
-        .gte('fecha_inicio', `${year}-01-01`)
-        .lt('fecha_inicio', `${year + 1}-01-01`)
-      citasData = (fallback.data || []).map(c => ({ ...c, comision_profesional: null }))
-    } else {
-      citasData = citasRes.data || []
-    }
+    const citasData: CitaRow[] = (citasRes.data || []).map(c => ({
+      ...c,
+      comision_profesional: parseComisionNotas(c.notas),
+    }))
 
     const [movsRes, profsRes, sueldosRes] = await Promise.all([
       supabase
@@ -149,12 +150,12 @@ export default function ContabilidadPage() {
       const nextMonth = monthNum === 12 ? 1 : monthNum + 1
       const nextYear = monthNum === 12 ? year + 1 : year
 
-      const monthCitas = citas.filter(c => c.fecha_inicio.slice(0, 7) === monthStr)
+      const monthCitas = citas.filter(c => c.fecha_inicio.slice(0, 7) === monthStr && c.origen === 'sheets')
       const monthMovs = movimientos.filter(m => m.fecha.slice(0, 7) === monthStr)
 
       // Ingresos
       const ventasBrutas = monthCitas.reduce((sum, c) => sum + (c.precio_cobrado || 0), 0)
-      // Comisiones de citas (columna comision_profesional)
+      // Comisiones de citas (parseadas de notas)
       const comisiones = monthCitas.reduce((sum, c) => sum + (c.comision_profesional || 0), 0)
       // Sueldos fijos del mes
       const sueldosFijos = profesionales.reduce((sum, p) => sum + getSueldoProf(p.id, monthStr), 0)
@@ -199,7 +200,7 @@ export default function ContabilidadPage() {
 
   const cajaDiariaData = useMemo(() => {
     const monthStr = `${year}-${String(selectedMonth + 1).padStart(2, '0')}`
-    const monthCitas = citas.filter(c => c.fecha_inicio.slice(0, 7) === monthStr)
+    const monthCitas = citas.filter(c => c.fecha_inicio.slice(0, 7) === monthStr && c.origen === 'sheets')
     const monthMovs = movimientos.filter(m => m.fecha.slice(0, 7) === monthStr)
 
     interface DayData {
@@ -258,7 +259,7 @@ export default function ContabilidadPage() {
     const monthMovs = movimientos.filter(m => m.fecha.slice(0, 7) === monthStr)
 
     return profesionales.map(prof => {
-      const profCitas = monthCitas.filter(c => c.profesional_id === prof.id)
+      const profCitas = monthCitas.filter(c => c.profesional_id === prof.id && c.origen === 'sheets')
       const ventasCitas = profCitas.reduce((sum, c) => sum + (c.precio_cobrado || 0), 0)
       const comisiones = profCitas.reduce((sum, c) => sum + (c.comision_profesional || 0), 0)
       const sueldoFijo = getSueldoProf(prof.id, monthStr)
