@@ -245,7 +245,7 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   // 1. Fetch all sheets via Google Sheets API
   const [ssrRows, kwRows, gastosRows] = await Promise.all([
     fetchSheetData(spreadsheetId, 'SSR'),
-    fetchSheetData(spreadsheetId, 'KW'),
+    fetchSheetData(spreadsheetId, 'base datos kw'),
     fetchSheetData(spreadsheetId, 'Gastos'),
   ])
 
