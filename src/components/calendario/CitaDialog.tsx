@@ -205,9 +205,9 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
         const { error } = await supabase
           .from('citas')
           .update({
-            cliente_id: data.cliente_id,
+            cliente_id: data.cliente_id || null,
             profesional_id: data.profesional_id,
-            servicio_id: data.servicio_id,
+            servicio_id: data.servicio_id || null,
             fecha_inicio: fechaInicio.toISOString(),
             fecha_fin: fechaFin.toISOString(),
             metodo_pago: data.metodo_pago,
@@ -221,9 +221,9 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
         toast.success('Cita actualizada')
       } else {
         const { error } = await supabase.from('citas').insert({
-          cliente_id: data.cliente_id,
+          cliente_id: data.cliente_id || null,
           profesional_id: data.profesional_id,
-          servicio_id: data.servicio_id,
+          servicio_id: data.servicio_id || null,
           fecha_inicio: fechaInicio.toISOString(),
           fecha_fin: fechaFin.toISOString(),
           metodo_pago: data.metodo_pago,

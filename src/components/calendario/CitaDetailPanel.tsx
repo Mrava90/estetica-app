@@ -60,6 +60,19 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit }: Props) {
     }
   }
 
+  async function handleEliminar() {
+    if (!confirm('¿Eliminar esta cita permanentemente? Esta acción no se puede deshacer.')) return
+    setLoading(true)
+    const { error } = await supabase.from('citas').delete().eq('id', cita!.id)
+    setLoading(false)
+    if (error) {
+      toast.error('Error al eliminar la cita')
+    } else {
+      toast.success('Cita eliminada')
+      onClose()
+    }
+  }
+
   function handleWhatsApp() {
     if (!cita?.clientes?.telefono) return
     const tel = cita.clientes.telefono.replace(/\D/g, '')
@@ -170,24 +183,34 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit }: Props) {
         <Separator />
 
         {/* ── Acciones ── */}
-        <div className="px-5 py-3 flex gap-2">
-          <Button onClick={onEdit} className="flex-1 gap-1.5" size="sm">
-            <Pencil className="h-3.5 w-3.5" />
-            Editar
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleAnular}
-            disabled={loading || cita.status === 'cancelada'}
-            size="sm"
-            className="flex-1 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+        <div className="px-5 py-3 space-y-2">
+          <div className="flex gap-2">
+            <Button onClick={onEdit} className="flex-1 gap-1.5" size="sm">
+              <Pencil className="h-3.5 w-3.5" />
+              Editar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleAnular}
+              disabled={loading || cita.status === 'cancelada'}
+              size="sm"
+              className="flex-1 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+            >
+              <X className="h-3.5 w-3.5" />
+              Anular
+            </Button>
+            <Button variant="ghost" onClick={onClose} size="sm" className="px-3">
+              Cerrar
+            </Button>
+          </div>
+          <button
+            type="button"
+            onClick={handleEliminar}
+            disabled={loading}
+            className="w-full text-xs text-muted-foreground hover:text-destructive transition-colors text-center py-0.5"
           >
-            <X className="h-3.5 w-3.5" />
-            Anular
-          </Button>
-          <Button variant="ghost" onClick={onClose} size="sm" className="px-3">
-            Cerrar
-          </Button>
+            Eliminar permanentemente
+          </button>
         </div>
 
       </DialogContent>

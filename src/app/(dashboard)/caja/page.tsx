@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { format, addDays, subDays, startOfDay, isToday } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
-import type { CitaConRelaciones, MovimientoCaja } from '@/types/database'
+import type { CitaConRelaciones, MovimientoCaja, Profesional } from '@/types/database'
+import { CitaDialog } from '@/components/calendario/CitaDialog'
 import { formatPrecio, formatHora } from '@/lib/dates'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,8 +32,8 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
-  CalendarPlus,
-  Download,
+  X,
+  Pencil,
 } from 'lucide-react'
 import { isAdminEmail, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 
@@ -46,22 +47,6 @@ interface CsvRow {
   descripcion: string
   monto: number
   tipo: 'efectivo' | 'mercadopago'
-  valid: boolean
-  errorMsg?: string
-}
-
-interface TurnoRow {
-  fecha: string
-  hora_inicio: string
-  hora_fin: string
-  profesional_name: string
-  profesional_id: string | null
-  cliente_name: string
-  servicio_name: string
-  servicio_id: string | null
-  monto: number
-  metodo_pago: 'efectivo' | 'mercadopago' | 'transferencia'
-  notas: string
   valid: boolean
   errorMsg?: string
 }
@@ -85,18 +70,17 @@ export default function CajaDiariaPage() {
   const [saving, setSaving] = useState(false)
 
   const [syncing, setSyncing] = useState(false)
+  const [profesionales, setProfesionales] = useState<Profesional[]>([])
+
+  // Edit cita state
+  const [citaDialogOpen, setCitaDialogOpen] = useState(false)
+  const [editingCita, setEditingCita] = useState<CitaConRelaciones | null>(null)
 
   // CSV import movimientos state
   const [csvDialogOpen, setCsvDialogOpen] = useState(false)
   const [csvPreview, setCsvPreview] = useState<CsvRow[]>([])
   const [csvImporting, setCsvImporting] = useState(false)
   const csvInputRef = useRef<HTMLInputElement>(null)
-
-  // CSV import turnos state
-  const [turnosDialogOpen, setTurnosDialogOpen] = useState(false)
-  const [turnosPreview, setTurnosPreview] = useState<TurnoRow[]>([])
-  const [turnosImporting, setTurnosImporting] = useState(false)
-  const turnosInputRef = useRef<HTMLInputElement>(null)
 
   // Excluir solo las comisiones por porcentaje (formato viejo "Comisión: PROF - cliente")
   // Los adelantos "Adelanto comisión:" SÍ son movimientos de caja diarios
@@ -123,6 +107,12 @@ export default function CajaDiariaPage() {
       }
     }
     fetchAdminStats()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    supabase.from('profesionales').select('*').eq('activo', true).order('nombre').then(({ data }) => {
+      if (data) setProfesionales(data)
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = useCallback(async () => {
@@ -248,6 +238,22 @@ export default function CajaDiariaPage() {
     }
   }
 
+  async function handleDeleteCita(id: string) {
+    if (!confirm('¿Eliminar este cobro del registro de hoy?')) return
+    const { error } = await supabase.from('citas').delete().eq('id', id)
+    if (error) {
+      toast.error('Error al eliminar')
+    } else {
+      toast.success('Cobro eliminado')
+      fetchData()
+    }
+  }
+
+  function openEditCita(cita: CitaConRelaciones) {
+    setEditingCita(cita)
+    setCitaDialogOpen(true)
+  }
+
   async function handleSyncSheets() {
     setSyncing(true)
     try {
@@ -265,147 +271,6 @@ export default function CajaDiariaPage() {
       toast.error('Error de red al sincronizar')
     }
     setSyncing(false)
-  }
-
-  // ── Turnos CSV import ───────────────────────────────────────
-  async function parseTurnosCsv(text: string): Promise<TurnoRow[]> {
-    const [profsRes, servsRes] = await Promise.all([
-      supabase.from('profesionales').select('id, nombre').eq('activo', true),
-      supabase.from('servicios').select('id, nombre').eq('activo', true),
-    ])
-    const profs = profsRes.data || []
-    const servs = servsRes.data || []
-
-    function matchProf(name: string): string | null {
-      const n = name.toLowerCase().trim()
-      const found = profs.find((p) => {
-        const pn = p.nombre.toLowerCase()
-        return pn === n || pn.startsWith(n) || n.startsWith(pn.split(' ')[0])
-      })
-      return found?.id || null
-    }
-
-    function matchServ(name: string): string | null {
-      const n = name.toLowerCase().trim()
-      const found = servs.find((s) => s.nombre.toLowerCase().includes(n) || n.includes(s.nombre.toLowerCase()))
-      return found?.id || null
-    }
-
-    function mapMetodo(raw: string): 'efectivo' | 'mercadopago' | 'transferencia' {
-      const r = raw.toLowerCase().trim()
-      if (r.includes('mp') || r.includes('mercado')) return 'mercadopago'
-      if (r.includes('trans')) return 'transferencia'
-      return 'efectivo'
-    }
-
-    const lines = text.trim().split(/\r?\n/).filter((l) => l.trim())
-    const sep = lines[0]?.includes(';') ? ';' : ','
-    const firstLower = lines[0]?.toLowerCase() || ''
-    const hasHeader = firstLower.includes('fecha') || firstLower.includes('hora')
-    const data = hasHeader ? lines.slice(1) : lines
-
-    return data.map((line) => {
-      const cols = line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ''))
-      const fechaRaw = cols[0] || ''
-      const hora_inicio = cols[1]?.trim() || ''
-      const hora_fin = cols[2]?.trim() || ''
-      const profesional_name = cols[3]?.trim() || ''
-      const cliente_name = cols[4]?.trim() || ''
-      const servicio_name = cols[5]?.trim() || ''
-      const montoRaw = cols[6] || ''
-      const metodo_pagoRaw = cols[7] || ''
-      const notas = cols[8]?.trim() || ''
-
-      // Parse date DD/MM/YYYY
-      let fecha = ''
-      const parts = fechaRaw.split('/')
-      if (parts.length === 3) {
-        fecha = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
-      } else if (/^\d{4}-\d{2}-\d{2}$/.test(fechaRaw)) {
-        fecha = fechaRaw
-      }
-
-      const monto = parseFloat(montoRaw.replace(/[$\s"]/g, '').replace(',', '.')) || 0
-      const profesional_id = profesional_name ? matchProf(profesional_name) : null
-      const servicio_id = servicio_name ? matchServ(servicio_name) : null
-      const metodo_pago = mapMetodo(metodo_pagoRaw)
-
-      const valid = !!fecha && !!hora_inicio && !!profesional_name && monto > 0
-      const errorMsg = !fecha
-        ? 'Fecha inválida'
-        : !hora_inicio
-          ? 'Hora requerida'
-          : !profesional_name
-            ? 'Profesional requerido'
-            : monto <= 0
-              ? 'Monto requerido'
-              : !profesional_id
-                ? `Profesional "${profesional_name}" no encontrado`
-                : undefined
-
-      return {
-        fecha,
-        hora_inicio,
-        hora_fin: hora_fin || '',
-        profesional_name,
-        profesional_id,
-        cliente_name,
-        servicio_name,
-        servicio_id,
-        monto,
-        metodo_pago,
-        notas,
-        valid: valid && !!profesional_id,
-        errorMsg,
-      }
-    })
-  }
-
-  async function handleTurnosFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const text = await file.text()
-    const rows = await parseTurnosCsv(text)
-    setTurnosPreview(rows)
-  }
-
-  async function handleImportTurnos() {
-    const validRows = turnosPreview.filter((r) => r.valid)
-    if (validRows.length === 0) return
-    setTurnosImporting(true)
-
-    const citas = validRows.map((r) => {
-      const fechaInicio = `${r.fecha}T${r.hora_inicio}:00-03:00`
-      const fechaFin = r.hora_fin
-        ? `${r.fecha}T${r.hora_fin}:00-03:00`
-        : `${r.fecha}T${String(parseInt(r.hora_inicio.split(':')[0]) + 1).padStart(2, '0')}:${r.hora_inicio.split(':')[1]}:00-03:00`
-      return {
-        fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
-        profesional_id: r.profesional_id,
-        servicio_id: r.servicio_id,
-        cliente_id: null,
-        status: 'completada' as const,
-        precio_cobrado: r.monto,
-        metodo_pago: r.metodo_pago,
-        notas: r.cliente_name
-          ? `${r.cliente_name}${r.servicio_name ? ' - ' + r.servicio_name : ''}${r.notas ? ' | ' + r.notas : ''}`
-          : r.notas || null,
-        origen: 'manual' as const,
-      }
-    })
-
-    const { error } = await supabase.from('citas').insert(citas)
-    if (error) {
-      toast.error('Error al importar: ' + error.message)
-    } else {
-      toast.success(`${validRows.length} turno(s) importados`)
-      setTurnosDialogOpen(false)
-      setTurnosPreview([])
-      if (turnosInputRef.current) turnosInputRef.current.value = ''
-      fetchData()
-    }
-    setTurnosImporting(false)
   }
 
   // ── CSV helpers ────────────────────────────────────────────
@@ -523,27 +388,16 @@ export default function CajaDiariaPage() {
         <div className="flex items-center gap-2 shrink-0">
         <h1 className="text-2xl font-bold">Caja Diaria</h1>
         {isAdmin && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={handleSyncSheets}
-              disabled={syncing}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Sincronizando...' : 'Sync Sheets'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => setTurnosDialogOpen(true)}
-            >
-              <CalendarPlus className="h-3.5 w-3.5" />
-              Importar turnos
-            </Button>
-          </>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={handleSyncSheets}
+            disabled={syncing}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Sincronizando...' : 'Sync Sheets'}
+          </Button>
         )}
       </div>
 
@@ -676,12 +530,13 @@ export default function CajaDiariaPage() {
                     <TableHead>Estado</TableHead>
                     <TableHead>Pago</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="w-16"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {citas.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                         Sin cobros este día
                       </TableCell>
                     </TableRow>
@@ -710,6 +565,16 @@ export default function CajaDiariaPage() {
                       </TableCell>
                       <TableCell><MetodoPagoBadge metodo={cita.metodo_pago} /></TableCell>
                       <TableCell className="text-right font-medium">{formatPrecio(cita.precio_cobrado || 0)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openEditCita(cita)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteCita(cita.id)}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                     )
                   })}
@@ -787,113 +652,15 @@ export default function CajaDiariaPage() {
         </>
       )}
 
-      {/* Dialog importar turnos CSV */}
-      <Dialog open={turnosDialogOpen} onOpenChange={(open) => {
-        setTurnosDialogOpen(open)
-        if (!open) { setTurnosPreview([]); if (turnosInputRef.current) turnosInputRef.current.value = '' }
-      }}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Importar turnos desde CSV</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {/* Download template */}
-            <div className="flex items-center justify-between rounded-md border bg-muted/30 p-3">
-              <div className="text-sm">
-                <p className="font-medium">Plantilla de ejemplo</p>
-                <p className="text-xs text-muted-foreground">
-                  Columnas: fecha · hora_inicio · hora_fin · profesional · cliente · servicio · monto · metodo_pago · notas
-                </p>
-              </div>
-              <a href="/templates/turnos-plantilla.csv" download>
-                <Button variant="outline" size="sm" className="gap-2 shrink-0">
-                  <Download className="h-4 w-4" />
-                  Descargar plantilla
-                </Button>
-              </a>
-            </div>
-
-            <div className="rounded-md border bg-muted/10 px-3 py-2 text-xs text-muted-foreground space-y-0.5">
-              <p><span className="font-medium text-foreground">Separador:</span> punto y coma (;) — formato Excel Argentina</p>
-              <p><span className="font-medium text-foreground">Fecha:</span> DD/MM/YYYY · <span className="font-medium text-foreground">Hora:</span> HH:MM (24h) · <span className="font-medium text-foreground">Metodo:</span> efectivo / mp / transferencia</p>
-              <p><span className="font-medium text-foreground">Profesional:</span> Lola, Camila, Denise o Fabi (se mapea automáticamente)</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Seleccionar archivo CSV</Label>
-              <input
-                ref={turnosInputRef}
-                type="file"
-                accept=".csv,.txt"
-                onChange={handleTurnosFileChange}
-                className="block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
-              />
-            </div>
-
-            {turnosPreview.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{turnosPreview.length} turnos detectados</span>
-                  <span className="text-muted-foreground">
-                    {turnosPreview.filter((r) => r.valid).length} válidos ·{' '}
-                    {turnosPreview.filter((r) => !r.valid).length} con error
-                  </span>
-                </div>
-                <div className="max-h-64 overflow-y-auto rounded-md border text-xs">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-background">
-                      <TableRow>
-                        <TableHead className="w-6"></TableHead>
-                        <TableHead>Fecha</TableHead>
-                        <TableHead>Horario</TableHead>
-                        <TableHead>Profesional</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Servicio</TableHead>
-                        <TableHead className="text-right">Monto</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {turnosPreview.map((row, i) => (
-                        <TableRow key={i} className={!row.valid ? 'opacity-50 bg-destructive/5' : ''}>
-                          <TableCell>
-                            {row.valid ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                            ) : (
-                              <XCircle className="h-3.5 w-3.5 text-destructive" aria-label={row.errorMsg} />
-                            )}
-                          </TableCell>
-                          <TableCell>{row.fecha || '—'}</TableCell>
-                          <TableCell>{row.hora_inicio}{row.hora_fin ? `–${row.hora_fin}` : ''}</TableCell>
-                          <TableCell className={!row.profesional_id ? 'text-destructive font-medium' : ''}>
-                            {row.profesional_name || '—'}
-                          </TableCell>
-                          <TableCell>{row.cliente_name || '—'}</TableCell>
-                          <TableCell>{row.servicio_name || '—'}</TableCell>
-                          <TableCell className="text-right">{row.monto > 0 ? formatPrecio(row.monto) : '—'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-                {turnosPreview.some((r) => !r.valid) && (
-                  <p className="text-xs text-muted-foreground">
-                    Las filas con error se omitirán. Revisá los nombres de profesionales.
-                  </p>
-                )}
-                <Button
-                  className="w-full"
-                  onClick={handleImportTurnos}
-                  disabled={turnosImporting || turnosPreview.filter((r) => r.valid).length === 0}
-                >
-                  {turnosImporting
-                    ? 'Importando...'
-                    : `Importar ${turnosPreview.filter((r) => r.valid).length} turno(s)`}
-                </Button>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Dialog editar cita completo */}
+      <CitaDialog
+        open={citaDialogOpen}
+        onClose={() => { setCitaDialogOpen(false); setEditingCita(null); fetchData() }}
+        cita={editingCita}
+        selectedDate={null}
+        selectedProfesionalId={null}
+        profesionales={profesionales}
+      />
 
       {/* Dialog importar CSV */}
       <Dialog open={csvDialogOpen} onOpenChange={(open) => {

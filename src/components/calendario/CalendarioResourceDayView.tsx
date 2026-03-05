@@ -4,6 +4,23 @@ import { useMemo, useEffect, useRef, useState } from 'react'
 import type { CitaConRelaciones, Profesional, Bloqueo, Horario } from '@/types/database'
 import { STATUS_COLORS } from '@/lib/constants'
 import { formatPrecio } from '@/lib/dates'
+import { Clock } from 'lucide-react'
+
+const STATUS_LABELS: Record<string, string> = {
+  pendiente: 'Pendiente',
+  confirmada: 'Confirmada',
+  completada: 'Completada',
+  cancelada: 'Cancelada',
+  no_asistio: 'No asistió',
+}
+
+const METODO_LABELS: Record<string, string> = {
+  efectivo: 'Efectivo',
+  mercadopago: 'MercadoPago',
+  debito: 'Débito',
+  credito: 'Crédito',
+  transferencia: 'Transferencia',
+}
 
 const HORA_INICIO = 8
 const HORA_FIN = 21
@@ -265,11 +282,11 @@ export function CalendarioResourceDayView({
   }
 
   function getTooltipStyle(anchor: DOMRect): React.CSSProperties {
-    const W = 232
+    const W = 260
     let x = anchor.right + 10
     if (x + W > window.innerWidth) x = anchor.left - W - 10
     let y = anchor.top
-    if (y + 160 > window.innerHeight) y = window.innerHeight - 168
+    if (y + 200 > window.innerHeight) y = window.innerHeight - 208
     return { position: 'fixed', left: Math.max(8, x), top: Math.max(8, y), width: W, zIndex: 200 }
   }
 
@@ -450,7 +467,7 @@ export function CalendarioResourceDayView({
                   <div
                     key={bloqueo.id}
                     data-cita
-                    className="absolute left-1 right-1 rounded-md border border-dashed border-gray-400 dark:border-gray-600 bg-gray-200/60 dark:bg-gray-800/60 px-1.5 py-0.5 overflow-hidden cursor-pointer transition-colors z-[1]"
+                    className="absolute left-1 right-1 rounded-md border border-dashed border-red-400 dark:border-red-600 bg-red-100/70 dark:bg-red-900/30 px-1.5 py-0.5 overflow-hidden cursor-pointer transition-colors z-[1]"
                     style={{ top: `${top}px`, height: `${height}px`, pointerEvents: isDragging ? 'none' : 'auto' }}
                     onClick={(e) => {
                       e.stopPropagation()
@@ -458,13 +475,13 @@ export function CalendarioResourceDayView({
                     }}
                   >
                     {isSmall ? (
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate leading-snug">Bloqueado</p>
+                      <p className="text-[12px] font-semibold text-red-600 dark:text-red-400 truncate leading-snug">Bloqueado</p>
                     ) : (
                       <>
-                        <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
+                        <p className="text-[10px] text-red-500 dark:text-red-400 leading-tight">
                           {formatTime(start)} - {formatTime(end)}
                         </p>
-                        <p className="text-[11px] font-medium text-gray-500 dark:text-gray-400 truncate leading-tight mt-0.5">
+                        <p className="text-[13px] font-semibold text-red-600 dark:text-red-400 truncate leading-tight mt-0.5">
                           {bloqueo.motivo || 'Bloqueado'}
                         </p>
                       </>
@@ -567,29 +584,54 @@ export function CalendarioResourceDayView({
       {/* ── Hover tooltip (position: fixed, fuera del scroll) ── */}
       {hoveredCita && tooltipAnchor && !isDragging && (
         <div
-          className="bg-card border rounded-xl shadow-2xl p-3 pointer-events-none text-sm"
+          className="bg-card border rounded-xl shadow-2xl pointer-events-none overflow-hidden text-sm"
           style={getTooltipStyle(tooltipAnchor)}
         >
-          <p className="font-semibold text-foreground leading-tight truncate">
-            {hoveredCita.clientes?.nombre || 'Sin cliente'}
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">
-            {hoveredCita.servicios?.nombre || 'Sin servicio'}
-          </p>
-          <div className="flex items-center justify-between mt-2 pt-2 border-t text-xs gap-2">
-            <span className="text-muted-foreground">
-              {formatTime(new Date(hoveredCita.fecha_inicio))} – {formatTime(new Date(hoveredCita.fecha_fin))}
-            </span>
-            {hoveredCita.precio_cobrado != null && (
-              <span className="font-semibold">{formatPrecio(hoveredCita.precio_cobrado)}</span>
+          {/* Header */}
+          <div className="px-3 pt-2.5 pb-2 border-b bg-muted/40">
+            <p className="font-semibold text-foreground leading-tight truncate">
+              {hoveredCita.clientes?.nombre || 'Sin cliente'}
+            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${STATUS_COLORS[hoveredCita.status] || 'bg-gray-100 text-gray-700'}`}>
+                {STATUS_LABELS[hoveredCita.status] || hoveredCita.status}
+              </span>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="px-3 py-2.5 space-y-1.5 text-xs">
+            <p className="text-foreground font-medium truncate">
+              {hoveredCita.servicios?.nombre || 'Sin servicio'}
+            </p>
+
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span>{formatTime(new Date(hoveredCita.fecha_inicio))} – {formatTime(new Date(hoveredCita.fecha_fin))}</span>
+              <span className="text-muted-foreground/50">
+                ({Math.round((new Date(hoveredCita.fecha_fin).getTime() - new Date(hoveredCita.fecha_inicio).getTime()) / 60000)} min)
+              </span>
+            </div>
+
+            {(hoveredCita.precio_cobrado != null || hoveredCita.metodo_pago) && (
+              <div className="flex items-center justify-between pt-1.5 border-t">
+                {hoveredCita.precio_cobrado != null ? (
+                  <span className="font-semibold text-foreground text-sm">{formatPrecio(hoveredCita.precio_cobrado)}</span>
+                ) : <span />}
+                {hoveredCita.metodo_pago && (
+                  <span className="text-muted-foreground">{METODO_LABELS[hoveredCita.metodo_pago] || hoveredCita.metodo_pago}</span>
+                )}
+              </div>
+            )}
+
+            {hoveredCita.notas && (
+              <p className="text-muted-foreground line-clamp-2 leading-snug pt-1.5 border-t">
+                {hoveredCita.notas}
+              </p>
             )}
           </div>
-          {hoveredCita.notas && (
-            <p className="text-xs text-muted-foreground mt-1.5 pt-1.5 border-t line-clamp-2 leading-snug">
-              {hoveredCita.notas}
-            </p>
-          )}
-          <p className="text-[10px] text-muted-foreground/60 mt-1.5 italic">Clic para ver detalle</p>
+
+          <p className="text-[10px] text-muted-foreground/50 text-center pb-2 italic">Clic para ver detalle</p>
         </div>
       )}
     </div>

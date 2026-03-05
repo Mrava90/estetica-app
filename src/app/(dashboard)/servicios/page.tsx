@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Pencil, Banknote, Smartphone, Upload, Download, Tag } from 'lucide-react'
+import { Plus, Pencil, Banknote, Smartphone, Upload, Download, Tag, TrendingUp, ArrowRight, X, Search } from 'lucide-react'
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([])
@@ -27,7 +27,19 @@ export default function ServiciosPage() {
   const [loading, setLoading] = useState(false)
   const [selectedProfs, setSelectedProfs] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [aumentoDialogOpen, setAumentoDialogOpen] = useState(false)
+  const [porcentaje, setPorcentaje] = useState<string>('15')
+  const [applying, setApplying] = useState(false)
   const supabase = createClient()
+
+  const [busqueda, setBusqueda] = useState('')
+
+  const pct = parseFloat(porcentaje) || 0
+  const aplicarAumento = (precio: number) => Math.round(precio * (1 + pct / 100))
+  const serviciosActivos = servicios.filter((s) => s.activo)
+  const serviciosFiltrados = busqueda.trim()
+    ? servicios.filter((s) => s.nombre.toLowerCase().includes(busqueda.toLowerCase().trim()))
+    : servicios
 
   const {
     register,
@@ -151,6 +163,17 @@ export default function ServiciosPage() {
     }
   }
 
+  async function handleEliminar(servicio: Servicio) {
+    if (!confirm(`¿Eliminar "${servicio.nombre}" permanentemente? Esta acción no se puede deshacer.`)) return
+    const { error } = await supabase.from('servicios').delete().eq('id', servicio.id)
+    if (error) {
+      toast.error('Error al eliminar el servicio')
+    } else {
+      toast.success('Servicio eliminado')
+      fetchServicios()
+    }
+  }
+
   async function handleDownload() {
     const a = document.createElement('a')
     a.href = '/api/servicios'
@@ -188,11 +211,37 @@ export default function ServiciosPage() {
     }
   }
 
+  async function handleAplicarAumento() {
+    if (pct <= 0 || serviciosActivos.length === 0) return
+    setApplying(true)
+    let ok = 0
+    for (const s of serviciosActivos) {
+      const { error } = await supabase
+        .from('servicios')
+        .update({
+          precio_efectivo: aplicarAumento(s.precio_efectivo),
+          precio_mercadopago: aplicarAumento(s.precio_mercadopago),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', s.id)
+      if (!error) ok++
+    }
+    setApplying(false)
+    setAumentoDialogOpen(false)
+    setPorcentaje('15')
+    toast.success(`Precios actualizados en ${ok} servicio(s)`)
+    fetchServicios()
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Servicios</h1>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setAumentoDialogOpen(true)} className="gap-1.5">
+            <TrendingUp className="h-4 w-4" />
+            <span className="hidden sm:inline">Aumentar %</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={handleDownload} className="gap-1.5">
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Descargar</span>
@@ -217,6 +266,16 @@ export default function ServiciosPage() {
         </div>
       </div>
 
+      <div className="relative max-w-xs">
+        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar servicio..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="pl-8"
+        />
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -231,14 +290,14 @@ export default function ServiciosPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {servicios.length === 0 && (
+              {serviciosFiltrados.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    No hay servicios creados. Creá el primero.
+                    {busqueda ? `Sin resultados para "${busqueda}"` : 'No hay servicios creados. Creá el primero.'}
                   </TableCell>
                 </TableRow>
               )}
-              {servicios.map((s) => (
+              {serviciosFiltrados.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="font-medium">
                     <div>
@@ -281,6 +340,9 @@ export default function ServiciosPage() {
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => openEdit(s)}>
                       <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEliminar(s)} className="text-muted-foreground hover:text-destructive">
+                      <X className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -374,6 +436,100 @@ export default function ServiciosPage() {
               {loading ? 'Guardando...' : editingId ? 'Actualizar' : 'Crear'}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog aumento por porcentaje ── */}
+      <Dialog open={aumentoDialogOpen} onOpenChange={(o) => { setAumentoDialogOpen(o); if (!o) setPorcentaje('15') }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5 text-green-600" />
+              Aumentar precios por porcentaje
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Input porcentaje */}
+            <div className="flex items-center gap-3">
+              <Label className="shrink-0">Porcentaje de aumento</Label>
+              <div className="relative w-32">
+                <Input
+                  type="number"
+                  min="0.1"
+                  max="500"
+                  step="0.5"
+                  value={porcentaje}
+                  onChange={(e) => setPorcentaje(e.target.value)}
+                  className="pr-7"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+              </div>
+              {pct > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  Afecta {serviciosActivos.length} servicio(s) activo(s)
+                </span>
+              )}
+            </div>
+
+            {/* Tabla preview */}
+            {pct > 0 && serviciosActivos.length > 0 && (
+              <div className="max-h-80 overflow-y-auto rounded-md border text-xs">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background">
+                    <TableRow>
+                      <TableHead>Servicio</TableHead>
+                      <TableHead className="text-right">
+                        <span className="flex items-center justify-end gap-1">
+                          <Banknote className="h-3 w-3 text-green-600" />
+                          Efectivo
+                        </span>
+                      </TableHead>
+                      <TableHead className="w-4"></TableHead>
+                      <TableHead className="text-right font-semibold text-foreground">Nuevo</TableHead>
+                      <TableHead className="text-right">
+                        <span className="flex items-center justify-end gap-1">
+                          <Smartphone className="h-3 w-3 text-blue-600" />
+                          P. Lista
+                        </span>
+                      </TableHead>
+                      <TableHead className="w-4"></TableHead>
+                      <TableHead className="text-right font-semibold text-foreground">Nuevo</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {serviciosActivos.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-medium">{s.nombre}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatPrecio(s.precio_efectivo)}</TableCell>
+                        <TableCell className="px-0 text-muted-foreground"><ArrowRight className="h-3 w-3" /></TableCell>
+                        <TableCell className="text-right font-semibold text-green-700 dark:text-green-400">
+                          {formatPrecio(aplicarAumento(s.precio_efectivo))}
+                        </TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatPrecio(s.precio_mercadopago)}</TableCell>
+                        <TableCell className="px-0 text-muted-foreground"><ArrowRight className="h-3 w-3" /></TableCell>
+                        <TableCell className="text-right font-semibold text-blue-700 dark:text-blue-400">
+                          {formatPrecio(aplicarAumento(s.precio_mercadopago))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setAumentoDialogOpen(false)}>Cancelar</Button>
+              <Button
+                onClick={handleAplicarAumento}
+                disabled={applying || pct <= 0 || serviciosActivos.length === 0}
+                className="gap-2"
+              >
+                <TrendingUp className="h-4 w-4" />
+                {applying ? 'Aplicando...' : `Aplicar +${pct}% a ${serviciosActivos.length} servicio(s)`}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

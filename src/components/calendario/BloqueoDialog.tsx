@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Bloqueo, Profesional } from '@/types/database'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -13,11 +13,13 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Trash2 } from 'lucide-react'
 
-// Generate time options every 30 min
+// Generate time options every 15 min
 const TIME_OPTIONS: string[] = []
 for (let h = 8; h <= 21; h++) {
-  TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:00`)
-  if (h < 21) TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:30`)
+  for (const m of [0, 15, 30, 45]) {
+    if (h === 21 && m > 0) continue
+    TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+  }
 }
 
 interface Props {
@@ -50,7 +52,8 @@ export function BloqueoDialog({
   const isEditing = !!bloqueo
 
   // Reset form when dialog opens
-  useState(() => {
+  useEffect(() => {
+    if (!open) return
     if (bloqueo) {
       const start = new Date(bloqueo.fecha_inicio)
       const end = new Date(bloqueo.fecha_fin)
@@ -62,7 +65,7 @@ export function BloqueoDialog({
       setHoraFin(defaultEnd || '11:00')
       setMotivo('')
     }
-  })
+  }, [open, bloqueo, defaultStart, defaultEnd])
 
   async function handleCreate() {
     if (!profesionalId) return
@@ -76,8 +79,8 @@ export function BloqueoDialog({
       const dateStr = format(fecha, 'yyyy-MM-dd')
       const { error } = await supabase.from('bloqueos').insert({
         profesional_id: profesionalId,
-        fecha_inicio: `${dateStr}T${horaInicio}:00`,
-        fecha_fin: `${dateStr}T${horaFin}:00`,
+        fecha_inicio: `${dateStr}T${horaInicio}:00-03:00`,
+        fecha_fin: `${dateStr}T${horaFin}:00-03:00`,
         motivo,
       })
       if (error) throw error

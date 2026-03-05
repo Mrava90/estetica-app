@@ -31,9 +31,9 @@ export const profesionalSchema = z.object({
 })
 
 export const citaSchema = z.object({
-  cliente_id: z.string().uuid('Seleccioná un cliente'),
+  cliente_id: z.string().uuid('Seleccioná un cliente').or(z.literal('')),
   profesional_id: z.string().uuid('Seleccioná un profesional'),
-  servicio_id: z.string().uuid('Seleccioná un servicio'),
+  servicio_id: z.string().uuid('Seleccioná un servicio').or(z.literal('')),
   fecha_inicio: z.string().min(1, 'Fecha requerida'),
   metodo_pago: z.enum(['efectivo', 'mercadopago', 'transferencia']),
   notas: z.string().optional(),
