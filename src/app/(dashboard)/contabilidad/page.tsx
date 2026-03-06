@@ -689,19 +689,18 @@ export default function ContabilidadPage() {
           ) : (
             <>
               {/* Resumen por categoría */}
-              <div className="grid gap-2 grid-cols-4">
+              <div className="grid gap-2 grid-cols-3">
                 {([
                   { label: 'Local', value: gastosPorCategoria.local, color: 'text-red-500' },
                   { label: 'Adelantos', value: gastosPorCategoria.adelanto, color: 'text-orange-500' },
                   { label: 'Personal', value: gastosPorCategoria.personal, color: 'text-red-500' },
-                  { label: 'Total', value: gastosPorCategoria.total, color: 'text-red-600' },
                 ]).map(cat => (
                   <div
                     key={cat.label}
-                    className="text-left rounded-lg border border-border px-3 py-2"
+                    className="text-left rounded-lg border border-border px-4 py-3"
                   >
-                    <div className="text-xs text-muted-foreground mb-0.5">{cat.label}</div>
-                    <div className={`text-base font-bold ${cat.color}`}>-${formatMoney(cat.value)}</div>
+                    <div className="text-sm text-muted-foreground mb-1">{cat.label}</div>
+                    <div className={`text-lg font-bold ${cat.color}`}>-${formatMoney(cat.value)}</div>
                   </div>
                 ))}
               </div>
