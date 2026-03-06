@@ -277,15 +277,12 @@ export default function ContabilidadPage() {
         .reduce((sum, m) => sum + Math.abs(m.monto), 0)
 
       const esSueldoFijo = sueldoFijo > 0
-      // Para sueldo fijo sin citas: mostrar sueldo_fijo en columna ventas
-      const ventas = esSueldoFijo && ventasCitas === 0 ? sueldoFijo : ventasCitas
-      // Falta pagar: si tiene fijo → fijo + comisiones (puede tener ambos); si solo comisión → comisiones
-      const faltaPagar = esSueldoFijo
-        ? Math.max(0, sueldoFijo + comisiones - adelantos)
-        : Math.max(0, comisiones - adelantos)
+      const ventas = ventasCitas
+      const aCobar = sueldoFijo + comisiones
+      const faltaPagar = Math.max(0, aCobar - adelantos)
 
-      return { prof, ventas, comisiones, sueldoFijo, adelantos, faltaPagar, esSueldoFijo }
-    }).filter(r => r.ventas > 0 || r.comisiones > 0 || r.adelantos > 0)
+      return { prof, ventas, comisiones, sueldoFijo, aCobar, adelantos, faltaPagar, esSueldoFijo }
+    }).filter(r => r.ventas > 0 || r.sueldoFijo > 0 || r.comisiones > 0 || r.adelantos > 0)
   }, [citas, movimientos, profesionales, year, selectedMonth, getSueldoProf])
 
   // ── TAB 4: Gastos ─────────────────────────────────────────────
@@ -601,6 +598,8 @@ export default function ContabilidadPage() {
                       <TableRow>
                         <TableHead>Profesional</TableHead>
                         <TableHead className="text-right">Ventas</TableHead>
+                        <TableHead className="text-right">Fijo</TableHead>
+                        <TableHead className="text-right">Comisiones</TableHead>
                         <TableHead className="text-right">A cobrar</TableHead>
                         <TableHead className="text-right">Adelantos</TableHead>
                         <TableHead className="text-right">Falta pagar</TableHead>
@@ -609,7 +608,7 @@ export default function ContabilidadPage() {
                     <TableBody>
                       {liquidacionData.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                             Sin datos para este mes
                           </TableCell>
                         </TableRow>
@@ -629,14 +628,20 @@ export default function ContabilidadPage() {
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right">${formatMoney(r.ventas)}</TableCell>
                               <TableCell className="text-right">
-                                {r.comisiones > 0
-                                  ? `$${formatMoney(r.comisiones)}`
-                                  : <span className="text-muted-foreground">—</span>}
+                                {r.ventas > 0 ? `$${formatMoney(r.ventas)}` : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {r.sueldoFijo > 0 ? `$${formatMoney(r.sueldoFijo)}` : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {r.comisiones > 0 ? `$${formatMoney(r.comisiones)}` : <span className="text-muted-foreground">—</span>}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                ${formatMoney(r.aCobar)}
                               </TableCell>
                               <TableCell className="text-right text-orange-500">
-                                {r.adelantos > 0 ? `-$${formatMoney(r.adelantos)}` : '—'}
+                                {r.adelantos > 0 ? `-$${formatMoney(r.adelantos)}` : <span className="text-muted-foreground">—</span>}
                               </TableCell>
                               <TableCell className={`text-right font-semibold ${r.faltaPagar > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                 ${formatMoney(r.faltaPagar)}
@@ -649,7 +654,13 @@ export default function ContabilidadPage() {
                               ${formatMoney(liquidacionData.reduce((s, r) => s + r.ventas, 0))}
                             </TableCell>
                             <TableCell className="text-right">
+                              ${formatMoney(liquidacionData.reduce((s, r) => s + r.sueldoFijo, 0))}
+                            </TableCell>
+                            <TableCell className="text-right">
                               ${formatMoney(liquidacionData.reduce((s, r) => s + r.comisiones, 0))}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              ${formatMoney(liquidacionData.reduce((s, r) => s + r.aCobar, 0))}
                             </TableCell>
                             <TableCell className="text-right text-orange-500">
                               -${formatMoney(liquidacionData.reduce((s, r) => s + r.adelantos, 0))}
