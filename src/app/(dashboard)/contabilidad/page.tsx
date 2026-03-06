@@ -324,7 +324,7 @@ export default function ContabilidadPage() {
     const personal = gastosDelMes
       .filter(m => m.descripcion.startsWith('Gasto personal:'))
       .reduce((s, m) => s + Math.abs(m.monto), 0)
-    return { local, adelanto, personal, total: local + adelanto + personal }
+    return { local, adelanto, personal, total: local + personal }
   }, [gastosDelMes])
 
   // ── Render ────────────────────────────────────────────────────
