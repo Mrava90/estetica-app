@@ -61,6 +61,7 @@ export function CalendarioView() {
   const [recordatoriosOpen, setRecordatoriosOpen] = useState(false)
   const [recordatoriosPendientes, setRecordatoriosPendientes] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
 
   // Mobile
   const [isMobile, setIsMobile] = useState(false)
@@ -90,7 +91,9 @@ export function CalendarioView() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (isAdminEmail(data.user?.email)) setIsAdmin(true)
+      const email = data.user?.email ?? null
+      setUserEmail(email)
+      if (isAdminEmail(email)) setIsAdmin(true)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -391,10 +394,18 @@ export function CalendarioView() {
     }
   }, [fetchData, fetchRecordatoriosPendientes, supabase])
 
+  // Si el usuario logueado tiene email que coincide con un profesional → modo solo-lectura
+  const myProfesional = (!isAdmin && userEmail)
+    ? profesionales.find((p) => p.email === userEmail) ?? null
+    : null
+  const isReadOnly = !!myProfesional
+
   const filteredProfesionales = profesionales.filter((p) => filtrosProfesional.includes(p.id))
-  const effectiveFiltrados = isMobile
-    ? profesionales.filter((p) => p.id === mobileProfId)
-    : filteredProfesionales
+  const effectiveFiltrados = isReadOnly
+    ? [myProfesional!]
+    : isMobile
+      ? profesionales.filter((p) => p.id === mobileProfId)
+      : filteredProfesionales
 
   function handleSlotClick(profesionalId: string, start: Date, end: Date) {
     if (modoBloqueo) {
@@ -416,7 +427,11 @@ export function CalendarioView() {
     setSelectedCita(cita)
     setSelectedDate(null)
     setSelectedProfesionalId(null)
-    setDialogOpen(true)
+    if (isReadOnly) {
+      setDetailOpen(true)
+    } else {
+      setDialogOpen(true)
+    }
   }
 
   function handleEditFromDetail() {
@@ -501,38 +516,42 @@ export function CalendarioView() {
             <ChevronRight className="h-5 w-5" />
           </Button>
         </div>
-        {/* Professional tabs — single select on mobile */}
-        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-          {profesionales.map(prof => (
-            <button
-              key={prof.id}
-              onClick={() => setMobileProfId(prof.id)}
-              className={cn(
-                'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0',
-                mobileProfId === prof.id ? 'text-white border-transparent' : 'border-border bg-card text-muted-foreground'
-              )}
-              style={mobileProfId === prof.id ? { backgroundColor: prof.color } : undefined}
-            >
-              <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: prof.color }} />
-              {prof.nombre}
-            </button>
-          ))}
-        </div>
+        {/* Professional tabs — single select on mobile (hidden in read-only mode) */}
+        {!isReadOnly && (
+          <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {profesionales.map(prof => (
+              <button
+                key={prof.id}
+                onClick={() => setMobileProfId(prof.id)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0',
+                  mobileProfId === prof.id ? 'text-white border-transparent' : 'border-border bg-card text-muted-foreground'
+                )}
+                style={mobileProfId === prof.id ? { backgroundColor: prof.color } : undefined}
+              >
+                <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: prof.color }} />
+                {prof.nombre}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="relative gap-1.5 text-xs flex-1"
-            onClick={() => setRecordatoriosOpen(true)}
-          >
-            <MessageCircle className="h-3.5 w-3.5 text-green-600" />
-            Recordatorios
-            {recordatoriosPendientes > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-bold text-white">
-                {recordatoriosPendientes}
-              </span>
-            )}
-          </Button>
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="relative gap-1.5 text-xs flex-1"
+              onClick={() => setRecordatoriosOpen(true)}
+            >
+              <MessageCircle className="h-3.5 w-3.5 text-green-600" />
+              Recordatorios
+              {recordatoriosPendientes > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-bold text-white">
+                  {recordatoriosPendientes}
+                </span>
+              )}
+            </Button>
+          )}
           {!isToday && (
             <Button variant="ghost" size="sm" className="text-xs" onClick={() => setFecha(new Date())}>
               Hoy
@@ -570,29 +589,33 @@ export function CalendarioView() {
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setFecha(addDays(fecha, 1))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <Button
-            variant={modoBloqueo ? 'destructive' : 'outline'}
-            size="sm"
-            className="gap-1.5 text-xs"
-            onClick={() => setModoBloqueo(!modoBloqueo)}
-          >
-            <Ban className="h-3.5 w-3.5" />
-            Bloquear
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="relative gap-1.5 text-xs"
-            onClick={() => setRecordatoriosOpen(true)}
-          >
-            <MessageCircle className="h-3.5 w-3.5 text-green-600" />
-            Recordatorios
-            {recordatoriosPendientes > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-bold text-white">
-                {recordatoriosPendientes}
-              </span>
-            )}
-          </Button>
+          {!isReadOnly && (
+            <>
+              <Button
+                variant={modoBloqueo ? 'destructive' : 'outline'}
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => setModoBloqueo(!modoBloqueo)}
+              >
+                <Ban className="h-3.5 w-3.5" />
+                Bloquear
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="relative gap-1.5 text-xs"
+                onClick={() => setRecordatoriosOpen(true)}
+              >
+                <MessageCircle className="h-3.5 w-3.5 text-green-600" />
+                Recordatorios
+                {recordatoriosPendientes > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-bold text-white">
+                    {recordatoriosPendientes}
+                  </span>
+                )}
+              </Button>
+            </>
+          )}
           {!isToday && (
             <Button variant="ghost" size="sm" className="ml-1 text-xs" onClick={() => setFecha(new Date())}>
               Hoy
@@ -610,11 +633,13 @@ export function CalendarioView() {
             </Button>
           )}
         </div>
-        <FiltrosProfesional
-          profesionales={profesionales}
-          activos={filtrosProfesional}
-          onChange={setFiltrosProfesional}
-        />
+        {!isReadOnly && (
+          <FiltrosProfesional
+            profesionales={profesionales}
+            activos={filtrosProfesional}
+            onChange={setFiltrosProfesional}
+          />
+        )}
       </div>
 
       {modoBloqueo && (
@@ -631,10 +656,10 @@ export function CalendarioView() {
           profesionales={effectiveFiltrados}
           bloqueos={bloqueos}
           horarios={horarios}
-          onSlotClick={handleSlotClick}
+          onSlotClick={isReadOnly ? () => {} : handleSlotClick}
           onCitaClick={handleCitaClick}
-          onBloqueoClick={handleBloqueoClick}
-          onCitaDrop={handleCitaDrop}
+          onBloqueoClick={isReadOnly ? undefined : handleBloqueoClick}
+          onCitaDrop={isReadOnly ? undefined : handleCitaDrop}
         />
       ) : (
         <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
@@ -646,7 +671,7 @@ export function CalendarioView() {
         open={detailOpen}
         cita={selectedCita}
         onClose={handleDetailClose}
-        onEdit={handleEditFromDetail}
+        onEdit={isReadOnly ? undefined : handleEditFromDetail}
       />
 
       <CitaDialog
@@ -797,18 +822,20 @@ export function CalendarioView() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* FAB mobile — nuevo turno */}
-      <button
-        className="fixed bottom-6 right-6 sm:hidden z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center active:scale-95 transition-transform"
-        onClick={() => {
-          setSelectedCita(null)
-          setSelectedDate(null)
-          setSelectedProfesionalId(mobileProfId)
-          setDialogOpen(true)
-        }}
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {/* FAB mobile — nuevo turno (oculto en modo solo-lectura) */}
+      {!isReadOnly && (
+        <button
+          className="fixed bottom-6 right-6 sm:hidden z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center active:scale-95 transition-transform"
+          onClick={() => {
+            setSelectedCita(null)
+            setSelectedDate(null)
+            setSelectedProfesionalId(mobileProfId)
+            setDialogOpen(true)
+          }}
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
     </div>
   )
 }

@@ -16,7 +16,7 @@ interface Props {
   open: boolean
   cita: CitaConRelaciones | null
   onClose: () => void
-  onEdit: () => void
+  onEdit?: () => void
 }
 
 export function CitaDetailPanel({ open, cita, onClose, onEdit }: Props) {
@@ -185,10 +185,12 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit }: Props) {
         {/* ── Acciones ── */}
         <div className="px-5 py-3 space-y-2">
           <div className="flex gap-2">
-            <Button onClick={onEdit} className="flex-1 gap-1.5" size="sm">
-              <Pencil className="h-3.5 w-3.5" />
-              Editar
-            </Button>
+            {onEdit && (
+              <Button onClick={onEdit} className="flex-1 gap-1.5" size="sm">
+                <Pencil className="h-3.5 w-3.5" />
+                Editar
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={handleAnular}

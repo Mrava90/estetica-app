@@ -55,6 +55,7 @@ export function CalendarioResourceDayView({
   const nowRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ citaId: string; offsetMinutes: number; duration: number } | null>(null)
   const hasDraggedRef = useRef(false)
+  const preventNextClickRef = useRef(false)
   const [isDragging, setIsDragging] = useState(false)
   const [dropPreview, setDropPreview] = useState<{ profId: string; top: number; height: number } | null>(null)
 
@@ -169,7 +170,10 @@ export function CalendarioResourceDayView({
 
   function handleCitaPointerDown(cita: CitaConRelaciones, e: React.PointerEvent) {
     if (e.button !== 0) return
-    e.preventDefault()
+
+    const isTouch = e.pointerType === 'touch'
+    // On desktop prevent default (text selection etc). On touch let browser handle scroll until drag activates.
+    if (!isTouch) e.preventDefault()
     e.stopPropagation()
     ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
 
@@ -180,23 +184,71 @@ export function CalendarioResourceDayView({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     const offsetMinutes = ((e.clientY - rect.top) / HORA_HEIGHT) * 60
 
-    dragRef.current = { citaId: cita.id, offsetMinutes, duration }
     hasDraggedRef.current = false
+    let dragActive = false
 
     const startX = e.clientX
     const startY = e.clientY
+    // Position captured when long press fires – used to measure movement after activation
+    let longPressX = startX
+    let longPressY = startY
 
-    // Attach global listeners SYNCHRONOUSLY – do NOT wait for useEffect
-    // This avoids a race condition where the user releases before React commits the effect
-    cleanupDragRef.current?.() // cancel any previous drag
+    cleanupDragRef.current?.()
+
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null
+
+    if (isTouch) {
+      // Track latest finger position so we can record where long press fired
+      let latestX = startX
+      let latestY = startY
+      function trackLatest(ev: PointerEvent) { latestX = ev.clientX; latestY = ev.clientY }
+      window.addEventListener('pointermove', trackLatest, { passive: true })
+
+      // Long press: activate drag after 2000 ms without significant movement
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null
+        window.removeEventListener('pointermove', trackLatest)
+        longPressX = latestX
+        longPressY = latestY
+        dragRef.current = { citaId: cita.id, offsetMinutes, duration }
+        dragActive = true
+        // hasDraggedRef stays false — real drag requires deliberate movement after long press
+        setIsDragging(true)  // visual feedback (opacity + cursor)
+        if (navigator.vibrate) navigator.vibrate(50)
+      }, 2000)
+    } else {
+      // Desktop: drag-ready immediately, activates after 5 px movement
+      dragRef.current = { citaId: cita.id, offsetMinutes, duration }
+      dragActive = true
+    }
 
     function onMove(ev: PointerEvent) {
+      const dx = ev.clientX - startX
+      const dy = ev.clientY - startY
+      const dist = Math.sqrt(dx * dx + dy * dy)
+
+      if (isTouch && !dragActive) {
+        // Cancel long press if finger moves > 12 px before activation (user is scrolling)
+        if (dist > 12) {
+          if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+          preventNextClickRef.current = true
+          setTimeout(() => { preventNextClickRef.current = false }, 500)
+          cleanup()
+        }
+        return
+      }
+
       if (!dragRef.current) return
-      // Only activate drag after moving 5px (to distinguish from click)
       if (!hasDraggedRef.current) {
-        const dx = ev.clientX - startX
-        const dy = ev.clientY - startY
-        if (Math.sqrt(dx * dx + dy * dy) < 5) return
+        // For touch: require 10 px from where the long press fired (deliberate drag intent)
+        // For mouse: require 5 px from original position
+        if (isTouch) {
+          const ldx = ev.clientX - longPressX
+          const ldy = ev.clientY - longPressY
+          if (Math.sqrt(ldx * ldx + ldy * ldy) < 10) return
+        } else {
+          if (dist < 5) return
+        }
         hasDraggedRef.current = true
         setIsDragging(true)
       }
@@ -207,7 +259,11 @@ export function CalendarioResourceDayView({
     }
 
     function onUp(ev: PointerEvent) {
-      if (!dragRef.current) return
+      if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null }
+      if (!dragRef.current) {
+        cleanup()
+        return
+      }
       if (hasDraggedRef.current && onCitaDropRef.current) {
         const col = getColAt(ev.clientX)
         if (col) {
@@ -517,6 +573,7 @@ export function CalendarioResourceDayView({
                     key={cita.id}
                     data-cita
                     onPointerDown={(e) => handleCitaPointerDown(cita, e)}
+                    onContextMenu={(e) => e.preventDefault()}
                     onMouseEnter={(e) => handleCitaHoverEnter(cita, e)}
                     onMouseLeave={handleCitaHoverLeave}
                     className="absolute left-1 right-1 rounded-md border-l-[3px] bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 px-1.5 py-0.5 overflow-hidden transition-all z-[1] hover:z-[5] hover:shadow-lg hover:ring-2 hover:ring-fuchsia-500/40 shadow-sm select-none"
@@ -530,7 +587,7 @@ export function CalendarioResourceDayView({
                     }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!hasDraggedRef.current) {
+                      if (!hasDraggedRef.current && !preventNextClickRef.current) {
                         handleCitaHoverLeave()
                         onCitaClick(cita)
                       }
