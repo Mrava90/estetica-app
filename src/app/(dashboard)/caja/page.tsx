@@ -421,19 +421,19 @@ export default function CajaDiariaPage() {
         {/* Admin: disponible del mes */}
         {isAdmin && monthlyStats && (
           <div className="flex-1 flex justify-center">
-            <div className="border rounded-md px-4 py-2 bg-background shadow-sm text-xs">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1 text-center">
+            <div className="border rounded-md px-5 py-2.5 bg-background shadow-sm">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 text-center font-medium">
                 Disponible — {new Date().toLocaleString('es-AR', { month: 'long' })}
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-5">
                 <div className="text-center">
-                  <div className="text-[10px] text-muted-foreground mb-0.5">Efectivo</div>
-                  <div className="font-bold text-amber-700 text-sm">{formatPrecio(monthlyStats.efectivo)}</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Efectivo</div>
+                  <div className="font-bold text-white text-base">{formatPrecio(monthlyStats.efectivo)}</div>
                 </div>
-                <div className="w-px h-8 bg-border" />
+                <div className="w-px h-9 bg-border" />
                 <div className="text-center">
-                  <div className="text-[10px] text-muted-foreground mb-0.5">Mercadopago</div>
-                  <div className="font-bold text-blue-700 text-sm">{formatPrecio(monthlyStats.mercadopago)}</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">Mercadopago</div>
+                  <div className="font-bold text-white text-base">{formatPrecio(monthlyStats.mercadopago)}</div>
                 </div>
               </div>
             </div>
