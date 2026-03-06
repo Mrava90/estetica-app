@@ -17,7 +17,8 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, CalendarDays, Ban, MessageCircle, CalendarPlus, Download, CheckCircle2, XCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Ban, MessageCircle, CalendarPlus, Download, CheckCircle2, XCircle, Plus } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { isAdminEmail } from '@/lib/constants'
@@ -61,6 +62,10 @@ export function CalendarioView() {
   const [recordatoriosPendientes, setRecordatoriosPendientes] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
 
+  // Mobile
+  const [isMobile, setIsMobile] = useState(false)
+  const [mobileProfId, setMobileProfId] = useState<string | null>(null)
+
   // CSV import turnos state
   const [turnosDialogOpen, setTurnosDialogOpen] = useState(false)
   const [turnosPreview, setTurnosPreview] = useState<TurnoRow[]>([])
@@ -69,6 +74,19 @@ export function CalendarioView() {
   const turnosInputRef = useRef<HTMLInputElement>(null)
 
   const supabase = createClient()
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  useEffect(() => {
+    if (profesionales.length > 0 && !mobileProfId) {
+      setMobileProfId(profesionales[0].id)
+    }
+  }, [profesionales]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -374,6 +392,9 @@ export function CalendarioView() {
   }, [fetchData, fetchRecordatoriosPendientes, supabase])
 
   const filteredProfesionales = profesionales.filter((p) => filtrosProfesional.includes(p.id))
+  const effectiveFiltrados = isMobile
+    ? profesionales.filter((p) => p.id === mobileProfId)
+    : filteredProfesionales
 
   function handleSlotClick(profesionalId: string, start: Date, end: Date) {
     if (modoBloqueo) {
@@ -457,10 +478,71 @@ export function CalendarioView() {
 
   return (
     <div className="space-y-3">
-      {/* Title */}
-      <h1 className="text-2xl font-bold capitalize">Calendario — {fechaLabel}</h1>
-      {/* Date navigation + availability + filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Title — desktop only */}
+      <h1 className="hidden sm:block text-2xl font-bold capitalize">Calendario — {fechaLabel}</h1>
+
+      {/* ── MOBILE HEADER ── */}
+      <div className="sm:hidden space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => setFecha(subDays(fecha, 1))}>
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <button className="flex-1 text-center">
+                <div className="text-lg font-bold capitalize leading-tight">{fechaLabel}</div>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="center">
+              <Calendar mode="single" selected={fecha} onSelect={(d) => { if (d) { setFecha(d); setCalendarOpen(false) } }} initialFocus />
+            </PopoverContent>
+          </Popover>
+          <Button variant="outline" size="icon" className="h-11 w-11 shrink-0" onClick={() => setFecha(addDays(fecha, 1))}>
+            <ChevronRight className="h-5 w-5" />
+          </Button>
+        </div>
+        {/* Professional tabs — single select on mobile */}
+        <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+          {profesionales.map(prof => (
+            <button
+              key={prof.id}
+              onClick={() => setMobileProfId(prof.id)}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors shrink-0',
+                mobileProfId === prof.id ? 'text-white border-transparent' : 'border-border bg-card text-muted-foreground'
+              )}
+              style={mobileProfId === prof.id ? { backgroundColor: prof.color } : undefined}
+            >
+              <span className="h-2 w-2 rounded-full inline-block" style={{ backgroundColor: prof.color }} />
+              {prof.nombre}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="relative gap-1.5 text-xs flex-1"
+            onClick={() => setRecordatoriosOpen(true)}
+          >
+            <MessageCircle className="h-3.5 w-3.5 text-green-600" />
+            Recordatorios
+            {recordatoriosPendientes > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-bold text-white">
+                {recordatoriosPendientes}
+              </span>
+            )}
+          </Button>
+          {!isToday && (
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => setFecha(new Date())}>
+              Hoy
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ── DESKTOP HEADER ── */}
+      <div className="hidden sm:flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-1">
           <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setFecha(subDays(fecha, 1))}>
             <ChevronLeft className="h-4 w-4" />
@@ -542,11 +624,11 @@ export function CalendarioView() {
       )}
 
       {/* Resource day view */}
-      {filteredProfesionales.length > 0 ? (
+      {effectiveFiltrados.length > 0 ? (
         <CalendarioResourceDayView
           fecha={fecha}
           citas={citas}
-          profesionales={filteredProfesionales}
+          profesionales={effectiveFiltrados}
           bloqueos={bloqueos}
           horarios={horarios}
           onSlotClick={handleSlotClick}
@@ -715,6 +797,18 @@ export function CalendarioView() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* FAB mobile — nuevo turno */}
+      <button
+        className="fixed bottom-6 right-6 sm:hidden z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center active:scale-95 transition-transform"
+        onClick={() => {
+          setSelectedCita(null)
+          setSelectedDate(null)
+          setSelectedProfesionalId(mobileProfId)
+          setDialogOpen(true)
+        }}
+      >
+        <Plus className="h-6 w-6" />
+      </button>
     </div>
   )
 }
