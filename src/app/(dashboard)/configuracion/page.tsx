@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup, ChevronDown, ChevronUp } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { NAV_ITEMS, DIAS_SEMANA, isAdminEmail } from '@/lib/constants'
 const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
@@ -669,58 +669,91 @@ export default function ConfiguracionPage() {
                     </TableHeader>
                     <TableBody>
                       {users.map((u) => (
-                        <TableRow key={u.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              {u.email}
-                              {isAdminEmail(u.email) && (
-                                <Badge variant="secondary" className="text-[10px]">Admin</Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {formatFechaCorta(u.created_at)}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {u.last_sign_in_at ? formatFechaCorta(u.last_sign_in_at) : 'Nunca'}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Cambiar contraseña"
-                                onClick={() => { setChangePasswordId(changePasswordId === u.id ? null : u.id); setChangePasswordValue('') }}
-                              >
-                                <KeyRound className="h-4 w-4" />
-                              </Button>
-                              {!isAdminEmail(u.email) && (
+                        <>
+                          <TableRow key={u.id}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {u.email}
+                                {isAdminEmail(u.email) && (
+                                  <Badge variant="secondary" className="text-[10px]">Admin</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {formatFechaCorta(u.created_at)}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {u.last_sign_in_at ? formatFechaCorta(u.last_sign_in_at) : 'Nunca'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1">
+                                {!isAdminEmail(u.email) && (
+                                  <Button
+                                    variant={expandedPermUser === u.email ? 'secondary' : 'ghost'}
+                                    size="icon"
+                                    title="Permisos de menú"
+                                    onClick={() => setExpandedPermUser(expandedPermUser === u.email ? null : u.email)}
+                                  >
+                                    <Menu className="h-4 w-4" />
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="text-destructive hover:text-destructive"
-                                  onClick={() => handleDeleteUser(u.id, u.email || '')}
+                                  title="Cambiar contraseña"
+                                  onClick={() => { setChangePasswordId(changePasswordId === u.id ? null : u.id); setChangePasswordValue('') }}
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <KeyRound className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
-                            {changePasswordId === u.id && (
-                              <div className="mt-2 flex gap-2">
-                                <Input
-                                  type="text"
-                                  placeholder="Nueva contraseña"
-                                  value={changePasswordValue}
-                                  onChange={(e) => setChangePasswordValue(e.target.value)}
-                                  className="h-8 text-sm"
-                                />
-                                <Button size="sm" className="h-8 shrink-0" onClick={() => handleChangeUserPassword(u.id)}>
-                                  Guardar
-                                </Button>
+                                {!isAdminEmail(u.email) && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => handleDeleteUser(u.id, u.email || '')}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
+                              {changePasswordId === u.id && (
+                                <div className="mt-2 flex gap-2">
+                                  <Input
+                                    type="text"
+                                    placeholder="Nueva contraseña"
+                                    value={changePasswordValue}
+                                    onChange={(e) => setChangePasswordValue(e.target.value)}
+                                    className="h-8 text-sm"
+                                  />
+                                  <Button size="sm" className="h-8 shrink-0" onClick={() => handleChangeUserPassword(u.id)}>
+                                    Guardar
+                                  </Button>
+                                </div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                          {expandedPermUser === u.email && (
+                            <TableRow key={`${u.id}-permisos`} className="bg-muted/30 hover:bg-muted/30">
+                              <TableCell colSpan={4} className="py-3 px-6">
+                                <p className="text-xs font-medium text-muted-foreground mb-2">Páginas visibles</p>
+                                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                  {NAV_ITEMS.filter(item => !item.adminOnly).map(item => (
+                                    <div key={item.href} className="flex items-center gap-2">
+                                      <Switch
+                                        checked={userNavPermisos[u.email]?.[item.href] !== false}
+                                        onCheckedChange={(v) => toggleUserNavPermiso(u.email, item.href, v)}
+                                      />
+                                      <div className="flex items-center gap-1.5">
+                                        <item.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                                        <span className="text-sm">{item.label}</span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
                       ))}
                     </TableBody>
                   </Table>
@@ -845,58 +878,6 @@ export default function ConfiguracionPage() {
             </CardContent>
           </Card>
 
-          {/* Permisos de menú por usuario */}
-          {isAdmin && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Menu className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <CardTitle>Permisos de menú por usuario</CardTitle>
-                    <CardDescription>Seleccioná qué páginas puede ver cada usuario</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {users.filter(u => !isAdminEmail(u.email)).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No hay usuarios no-administradores.</p>
-                ) : (
-                  <div className="divide-y">
-                    {users.filter(u => !isAdminEmail(u.email)).map(user => (
-                      <div key={user.email}>
-                        <button
-                          className="flex w-full items-center justify-between py-3 px-1 hover:bg-muted/50 rounded transition-colors"
-                          onClick={() => setExpandedPermUser(expandedPermUser === user.email ? null : user.email)}
-                        >
-                          <span className="text-sm font-medium">{user.email}</span>
-                          {expandedPermUser === user.email
-                            ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                            : <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          }
-                        </button>
-                        {expandedPermUser === user.email && (
-                          <div className="ml-4 mb-2 space-y-1 border-l pl-4">
-                            {NAV_ITEMS.filter(item => !item.adminOnly).map(item => (
-                              <div key={item.href} className="flex items-center justify-between py-2 border-b last:border-0">
-                                <div className="flex items-center gap-2">
-                                  <item.icon className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm">{item.label}</span>
-                                </div>
-                                <Switch
-                                  checked={userNavPermisos[user.email]?.[item.href] !== false}
-                                  onCheckedChange={(v) => toggleUserNavPermiso(user.email, item.href, v)}
-                                />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
       </Tabs>
 
