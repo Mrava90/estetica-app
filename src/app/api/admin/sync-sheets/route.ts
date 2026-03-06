@@ -27,6 +27,7 @@ export async function POST() {
         citas: result.citasSkipped,
         movimientos: result.movimientosSkipped,
       },
+      debug: result.debug,
       errors: result.errors.length > 0 ? result.errors : undefined,
       timestamp: new Date().toISOString(),
     })

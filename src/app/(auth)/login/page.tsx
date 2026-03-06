@@ -20,13 +20,6 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState('')
   const [resetSent, setResetSent] = useState(false)
 
-  useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get('code')
-    if (code) {
-      router.replace(`/reset-password?code=${code}`)
-    }
-  }, [])
-
   const {
     register,
     handleSubmit,
@@ -64,7 +57,7 @@ export default function LoginPage() {
     setError('')
     const supabase = createClient()
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${window.location.origin}/auth/confirm?next=/reset-password`,
     })
     if (resetError) {
       setError('Error al enviar el email. Verificá que el email sea correcto.')

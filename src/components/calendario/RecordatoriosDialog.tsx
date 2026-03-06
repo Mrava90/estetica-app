@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { format, addDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
@@ -18,6 +18,14 @@ interface CitaRecordatorio {
   profesionales: { nombre: string } | null
   recordatorio_enviado: boolean
   recordatorio_id: string | null
+}
+
+interface CitaGroup {
+  key: string
+  clienteNombre: string
+  telefono: string | null
+  citas: CitaRecordatorio[]
+  allEnviado: boolean
 }
 
 interface Props {
@@ -40,7 +48,6 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      // Citas de mañana con status pendiente o confirmada
       const inicio = `${mananaStr}T00:00:00`
       const fin = `${mananaStr}T23:59:59`
 
@@ -89,6 +96,26 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
     if (open) fetchData()
   }, [open, fetchData])
 
+  // Agrupar por cliente (teléfono o nombre) para no enviar mensajes duplicados
+  const citaGroups = useMemo((): CitaGroup[] => {
+    const map = new Map<string, CitaGroup>()
+    citas.forEach(cita => {
+      const key = cita.clientes?.telefono || cita.clientes?.nombre || cita.id
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          clienteNombre: cita.clientes?.nombre || '—',
+          telefono: cita.clientes?.telefono || null,
+          citas: [],
+          allEnviado: false,
+        })
+      }
+      map.get(key)!.citas.push(cita)
+    })
+    map.forEach(g => { g.allEnviado = g.citas.every(c => c.recordatorio_enviado) })
+    return Array.from(map.values())
+  }, [citas])
+
   function buildMensaje(cita: CitaRecordatorio): string {
     const fecha = format(new Date(cita.fecha_inicio), "EEEE d 'de' MMMM", { locale: es })
     const hora = format(new Date(cita.fecha_inicio), 'HH:mm')
@@ -100,58 +127,72 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
       .replace('{hora}', hora)
   }
 
-  function abrirWhatsApp(cita: CitaRecordatorio) {
-    const telefono = cita.clientes?.telefono
+  function buildMensajeGrupo(group: CitaGroup): string {
+    if (group.citas.length === 1) return buildMensaje(group.citas[0])
+    // Múltiples turnos: listar todos los servicios/horarios
+    const primera = group.citas[0]
+    const fecha = format(new Date(primera.fecha_inicio), "EEEE d 'de' MMMM", { locale: es })
+    const serviciosDetalle = group.citas
+      .map(c => `${c.servicios?.nombre ?? 'turno'} a las ${format(new Date(c.fecha_inicio), 'HH:mm')}`)
+      .join(' y ')
+    return mensajeTemplate
+      .replace('{cliente}', group.clienteNombre)
+      .replace('{servicio}', serviciosDetalle)
+      .replace('{profesional}', primera.profesionales?.nombre ?? '')
+      .replace('{fecha}', fecha)
+      .replace('{hora}', format(new Date(primera.fecha_inicio), 'HH:mm'))
+  }
+
+  function abrirWhatsAppGrupo(group: CitaGroup) {
+    const telefono = group.telefono
     if (!telefono) {
       toast.error('El cliente no tiene teléfono registrado')
       return
     }
-    // Limpiar número: quitar espacios, guiones, paréntesis. Agregar 54 si es argentino sin código.
     let num = telefono.replace(/[\s\-().+]/g, '')
     if (num.startsWith('0')) num = num.slice(1)
     if (!num.startsWith('54')) num = `54${num}`
-    const mensaje = encodeURIComponent(buildMensaje(cita))
+    const mensaje = encodeURIComponent(buildMensajeGrupo(group))
     window.open(`https://wa.me/${num}?text=${mensaje}`, '_blank')
   }
 
-  async function marcarEnviado(cita: CitaRecordatorio) {
-    if (cita.recordatorio_enviado) {
-      // Desmarcar: eliminar el recordatorio
-      setEnviando(cita.id)
-      const { error } = await supabase
-        .from('recordatorios')
-        .delete()
-        .eq('id', cita.recordatorio_id!)
-      if (error) {
-        toast.error('Error al desmarcar')
-      } else {
+  async function marcarGrupoEnviado(group: CitaGroup) {
+    setEnviando(group.key)
+    try {
+      if (group.allEnviado) {
+        // Desmarcar todos
+        for (const cita of group.citas) {
+          if (cita.recordatorio_enviado && cita.recordatorio_id) {
+            await supabase.from('recordatorios').delete().eq('id', cita.recordatorio_id)
+          }
+        }
         toast.success('Desmarcado')
-        fetchData()
+      } else {
+        // Marcar todos como enviados
+        for (const cita of group.citas) {
+          if (!cita.recordatorio_enviado) {
+            await supabase.from('recordatorios').insert({
+              cita_id: cita.id,
+              tipo: 'whatsapp',
+              status: 'enviado',
+              enviado_at: new Date().toISOString(),
+            })
+          }
+        }
+        toast.success('Marcado como enviado')
       }
-      setEnviando(null)
-      return
-    }
-
-    setEnviando(cita.id)
-    const { error } = await supabase.from('recordatorios').insert({
-      cita_id: cita.id,
-      tipo: 'whatsapp',
-      status: 'enviado',
-      enviado_at: new Date().toISOString(),
-    })
-    if (error) {
-      toast.error('Error al marcar como enviado')
-    } else {
-      toast.success('Marcado como enviado')
       fetchData()
+    } catch {
+      toast.error('Error al actualizar')
+    } finally {
+      setEnviando(null)
     }
-    setEnviando(null)
   }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] w-full max-w-3xl flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-green-600" />
             Recordatorios — <span className="capitalize font-normal text-muted-foreground">{mananaLabel}</span>
@@ -162,14 +203,14 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : citas.length === 0 ? (
+        ) : citaGroups.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
             No hay turnos para mañana.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-background">
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="pb-2 pr-3 font-medium">Cliente</th>
                   <th className="pb-2 pr-3 font-medium">Servicio</th>
@@ -180,24 +221,30 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {citas.map((cita) => (
-                  <tr key={cita.id} className={cita.recordatorio_enviado ? 'opacity-50' : ''}>
+                {citaGroups.map((group) => (
+                  <tr key={group.key} className={group.allEnviado ? 'opacity-50' : ''}>
                     <td className="py-3 pr-3 font-medium">
-                      {cita.clientes?.nombre ?? <span className="text-muted-foreground">—</span>}
+                      {group.clienteNombre}
+                      {group.citas.length > 1 && (
+                        <Badge variant="secondary" className="ml-1.5 text-[10px]">×{group.citas.length}</Badge>
+                      )}
                     </td>
                     <td className="py-3 pr-3 text-muted-foreground">
-                      {cita.servicios?.nombre ?? '—'}
+                      {group.citas.length === 1
+                        ? (group.citas[0].servicios?.nombre ?? '—')
+                        : group.citas.map(c => c.servicios?.nombre ?? '—').join(' + ')
+                      }
                     </td>
                     <td className="py-3 pr-3">
-                      <span className="text-xl font-bold tabular-nums text-slate-800">
-                        {format(new Date(cita.fecha_inicio), 'HH:mm')}
+                      <span className="text-xl font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                        {format(new Date(group.citas[0].fecha_inicio), 'HH:mm')}
                       </span>
                     </td>
                     <td className="py-3 pr-3">
-                      {cita.clientes?.telefono ? (
+                      {group.telefono ? (
                         <span className="flex items-center gap-1 text-muted-foreground">
                           <Phone className="h-3 w-3" />
-                          {cita.clientes.telefono}
+                          {group.telefono}
                         </span>
                       ) : (
                         <Badge variant="outline" className="text-xs text-muted-foreground">Sin tel.</Badge>
@@ -208,8 +255,8 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
                         variant="default"
                         size="sm"
                         className="gap-2 bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => abrirWhatsApp(cita)}
-                        disabled={!cita.clientes?.telefono}
+                        onClick={() => abrirWhatsAppGrupo(group)}
+                        disabled={!group.telefono}
                         title="Abrir chat WhatsApp"
                       >
                         <MessageCircle className="h-5 w-5" />
@@ -218,14 +265,14 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
                     </td>
                     <td className="py-3 text-center">
                       <Button
-                        variant={cita.recordatorio_enviado ? 'default' : 'outline'}
+                        variant={group.allEnviado ? 'default' : 'outline'}
                         size="icon"
-                        className={`h-8 w-8 ${cita.recordatorio_enviado ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                        onClick={() => marcarEnviado(cita)}
-                        disabled={enviando === cita.id}
-                        title={cita.recordatorio_enviado ? 'Desmarcar' : 'Marcar como enviado'}
+                        className={`h-8 w-8 ${group.allEnviado ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                        onClick={() => marcarGrupoEnviado(group)}
+                        disabled={enviando === group.key}
+                        title={group.allEnviado ? 'Desmarcar' : 'Marcar como enviado'}
                       >
-                        {enviando === cita.id ? (
+                        {enviando === group.key ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
                           <Check className="h-3.5 w-3.5" />
@@ -239,6 +286,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
 
             <p className="mt-4 text-xs text-muted-foreground">
               El botón WA abre el chat con el mensaje de recordatorio pre-cargado. Marcá el tick después de enviar.
+              {citaGroups.some(g => g.citas.length > 1) && ' Los clientes con múltiples turnos reciben un único mensaje.'}
             </p>
           </div>
         )}

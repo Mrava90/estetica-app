@@ -24,7 +24,7 @@ const METODO_LABELS: Record<string, string> = {
 
 const HORA_INICIO = 8
 const HORA_FIN = 21
-const HORA_HEIGHT = 64
+const HORA_HEIGHT = 88
 const SLOT_MINUTOS = 30        // resolución para drag-drop
 const SLOT_CLICK_MINUTOS = 15  // resolución para click/hover de nuevo turno
 
@@ -54,6 +54,7 @@ export function CalendarioResourceDayView({
   const gridRef = useRef<HTMLDivElement>(null)
   const nowRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ citaId: string; offsetMinutes: number; duration: number } | null>(null)
+  const hasDraggedRef = useRef(false)
   const [isDragging, setIsDragging] = useState(false)
   const [dropPreview, setDropPreview] = useState<{ profId: string; top: number; height: number } | null>(null)
 
@@ -180,7 +181,10 @@ export function CalendarioResourceDayView({
     const offsetMinutes = ((e.clientY - rect.top) / HORA_HEIGHT) * 60
 
     dragRef.current = { citaId: cita.id, offsetMinutes, duration }
-    setIsDragging(true)
+    hasDraggedRef.current = false
+
+    const startX = e.clientX
+    const startY = e.clientY
 
     // Attach global listeners SYNCHRONOUSLY – do NOT wait for useEffect
     // This avoids a race condition where the user releases before React commits the effect
@@ -188,6 +192,14 @@ export function CalendarioResourceDayView({
 
     function onMove(ev: PointerEvent) {
       if (!dragRef.current) return
+      // Only activate drag after moving 5px (to distinguish from click)
+      if (!hasDraggedRef.current) {
+        const dx = ev.clientX - startX
+        const dy = ev.clientY - startY
+        if (Math.sqrt(dx * dx + dy * dy) < 5) return
+        hasDraggedRef.current = true
+        setIsDragging(true)
+      }
       const col = getColAt(ev.clientX)
       if (!col) { setDropPreview(null); return }
       const { top, height } = calcDropPosition(col.el, ev.clientY)
@@ -196,15 +208,18 @@ export function CalendarioResourceDayView({
 
     function onUp(ev: PointerEvent) {
       if (!dragRef.current) return
-      const col = getColAt(ev.clientX)
-      if (col && onCitaDropRef.current) {
-        const { totalStartMinutes } = calcDropPosition(col.el, ev.clientY)
-        const newStart = new Date(fechaRef.current)
-        newStart.setHours(Math.floor(totalStartMinutes / 60), totalStartMinutes % 60, 0, 0)
-        const newEnd = new Date(newStart.getTime() + dragRef.current.duration * 60000)
-        onCitaDropRef.current(dragRef.current.citaId, newStart, newEnd, col.profId)
+      if (hasDraggedRef.current && onCitaDropRef.current) {
+        const col = getColAt(ev.clientX)
+        if (col) {
+          const { totalStartMinutes } = calcDropPosition(col.el, ev.clientY)
+          const newStart = new Date(fechaRef.current)
+          newStart.setHours(Math.floor(totalStartMinutes / 60), totalStartMinutes % 60, 0, 0)
+          const newEnd = new Date(newStart.getTime() + dragRef.current.duration * 60000)
+          onCitaDropRef.current(dragRef.current.citaId, newStart, newEnd, col.profId)
+        }
       }
       dragRef.current = null
+      hasDraggedRef.current = false
       setIsDragging(false)
       setDropPreview(null)
       cleanup()
@@ -365,12 +380,12 @@ export function CalendarioResourceDayView({
     >
       {/* Header */}
       <div className="flex border-b bg-muted/30 shrink-0">
-        <div className="w-14 shrink-0 border-r" />
+        <div className="w-16 shrink-0 border-r" />
         {profesionales.map((prof) => {
           const count = citasPorProfesional.get(prof.id)?.length || 0
           const avail = getAvailability(prof.id)
           return (
-            <div key={prof.id} className="flex-1 min-w-[140px] px-2 py-1.5 text-center border-r last:border-r-0">
+            <div key={prof.id} className="flex-1 min-w-[180px] px-2 py-1.5 text-center border-r last:border-r-0">
               <div className="flex items-center justify-center gap-1 mb-0.5">
                 {avail ? (
                   <>
@@ -410,7 +425,7 @@ export function CalendarioResourceDayView({
       <div ref={gridRef} className="overflow-y-auto overflow-x-auto flex-1">
         <div className="flex relative" style={{ height: totalHeight }}>
           {/* Time column */}
-          <div className="w-14 shrink-0 border-r relative bg-card">
+          <div className="w-16 shrink-0 border-r relative bg-card">
             {timeSlots.map((hour) => (
               <div
                 key={hour}
@@ -432,7 +447,7 @@ export function CalendarioResourceDayView({
                 if (el) colRefsMap.current.set(prof.id, el)
                 else colRefsMap.current.delete(prof.id)
               }}
-              className="flex-1 min-w-[140px] border-r last:border-r-0 relative"
+              className="flex-1 min-w-[180px] border-r last:border-r-0 relative"
               onClick={(e) => handleGridClick(prof.id, e)}
               onMouseMove={(e) => handleColMouseMove(prof.id, e)}
               onMouseLeave={handleColMouseLeave}
@@ -515,7 +530,7 @@ export function CalendarioResourceDayView({
                     }}
                     onClick={(e) => {
                       e.stopPropagation()
-                      if (!isDragging) {
+                      if (!hasDraggedRef.current) {
                         handleCitaHoverLeave()
                         onCitaClick(cita)
                       }

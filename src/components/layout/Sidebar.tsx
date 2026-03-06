@@ -16,13 +16,17 @@ export function Sidebar() {
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
-      setUserEmail(data.user?.email ?? null)
-    })
-    supabase.from('nav_permisos').select('href, visible_no_admin').then(({ data }) => {
-      if (data) {
-        const map: Record<string, boolean> = {}
-        data.forEach(p => { map[p.href] = p.visible_no_admin })
-        setPermisos(map)
+      const email = data.user?.email ?? null
+      setUserEmail(email)
+      if (email && !isAdminEmail(email)) {
+        supabase.from('user_nav_permisos').select('href, visible').eq('user_email', email)
+          .then(({ data: perms }) => {
+            if (perms) {
+              const map: Record<string, boolean> = {}
+              perms.forEach(p => { map[p.href] = p.visible })
+              setPermisos(map)
+            }
+          })
       }
     })
   }, [])

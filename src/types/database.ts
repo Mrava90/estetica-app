@@ -9,6 +9,7 @@ export interface Profesional {
   email: string | null
   color: string
   comision_porcentaje: number
+  sueldo_fijo: number | null
   activo: boolean
   visible_calendario: boolean
   created_at: string

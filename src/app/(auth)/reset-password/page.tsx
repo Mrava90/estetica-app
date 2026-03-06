@@ -17,32 +17,34 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [ready, setReady] = useState(false)
+  const [linkInvalid, setLinkInvalid] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
 
-    // PKCE flow: Supabase sends ?code=xxx in the URL (default in @supabase/ssr)
-    const code = new URLSearchParams(window.location.search).get('code')
-    if (code) {
-      supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-        if (!error) setReady(true)
-      })
-      return
-    }
-
-    // Implicit flow fallback: listen for PASSWORD_RECOVERY event (hash fragment)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
+    // /auth/confirm already exchanged the code and set the session server-side.
+    // Just check if we have an active session.
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
         setReady(true)
+        return
+      }
+
+      // Fallback: listen for PASSWORD_RECOVERY event (implicit flow)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          setReady(true)
+        }
+      })
+
+      // If no session and no event after 4s, the link is invalid/expired
+      const timeout = setTimeout(() => setLinkInvalid(true), 4000)
+
+      return () => {
+        subscription.unsubscribe()
+        clearTimeout(timeout)
       }
     })
-
-    // Also check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) setReady(true)
-    })
-
-    return () => subscription.unsubscribe()
   }, [])
 
   async function handleUpdatePassword() {
@@ -59,9 +61,7 @@ export default function ResetPasswordPage() {
     setError('')
 
     const supabase = createClient()
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-    })
+    const { error: updateError } = await supabase.auth.updateUser({ password })
 
     if (updateError) {
       setError('Error al actualizar la contraseña. Intentá de nuevo.')
@@ -69,10 +69,10 @@ export default function ResetPasswordPage() {
       return
     }
 
+    // Clear the recovery_pending cookie so middleware allows navigation
+    document.cookie = 'recovery_pending=; Max-Age=0; path=/'
     setSuccess(true)
-    setTimeout(() => {
-      router.push('/calendario')
-    }, 2000)
+    setTimeout(() => router.push('/calendario'), 2000)
   }
 
   if (success) {
@@ -83,10 +83,27 @@ export default function ResetPasswordPage() {
             <Scissors className="h-6 w-6" />
           </div>
           <CardTitle className="text-2xl">Contraseña actualizada</CardTitle>
-          <CardDescription>
-            Tu contraseña fue cambiada exitosamente. Redirigiendo...
-          </CardDescription>
+          <CardDescription>Tu contraseña fue cambiada exitosamente. Redirigiendo...</CardDescription>
         </CardHeader>
+      </Card>
+    )
+  }
+
+  if (linkInvalid) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+            <Scissors className="h-6 w-6" />
+          </div>
+          <CardTitle className="text-2xl">Link inválido o expirado</CardTitle>
+          <CardDescription>El enlace de recuperación ya no es válido. Solicitá uno nuevo.</CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <Button onClick={() => router.push('/login')}>
+            Solicitar nuevo link
+          </Button>
+        </CardContent>
       </Card>
     )
   }
@@ -101,11 +118,6 @@ export default function ResetPasswordPage() {
           <CardTitle className="text-2xl">Verificando...</CardTitle>
           <CardDescription>Estamos verificando tu enlace de recuperación</CardDescription>
         </CardHeader>
-        <CardContent className="text-center">
-          <Button variant="link" onClick={() => router.push('/login')}>
-            Volver al login
-          </Button>
-        </CardContent>
       </Card>
     )
   }

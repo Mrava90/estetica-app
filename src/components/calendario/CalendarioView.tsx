@@ -395,7 +395,7 @@ export function CalendarioView() {
     setSelectedCita(cita)
     setSelectedDate(null)
     setSelectedProfesionalId(null)
-    setDetailOpen(true)
+    setDialogOpen(true)
   }
 
   function handleEditFromDetail() {
@@ -457,6 +457,8 @@ export function CalendarioView() {
 
   return (
     <div className="space-y-3">
+      {/* Title */}
+      <h1 className="text-2xl font-bold capitalize">Calendario — {fechaLabel}</h1>
       {/* Date navigation + availability + filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-1">
@@ -525,7 +527,6 @@ export function CalendarioView() {
               Importar turnos
             </Button>
           )}
-          <span className="ml-2 text-sm font-semibold capitalize">{fechaLabel}</span>
         </div>
         <FiltrosProfesional
           profesionales={profesionales}

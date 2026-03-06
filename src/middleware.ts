@@ -59,6 +59,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // If user came via password recovery link, force them to set a new password first
+  const recoveryPending = request.cookies.get('recovery_pending')
+  if (recoveryPending && !pathname.startsWith('/reset-password')) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/reset-password'
+    return NextResponse.redirect(url)
+  }
+
   // Admin-only routes
   if (pathname.startsWith('/contabilidad') && !isAdminEmail(user.email)) {
     const url = request.nextUrl.clone()

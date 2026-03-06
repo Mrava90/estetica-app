@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup, ChevronDown, ChevronUp } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { NAV_ITEMS, DIAS_SEMANA, isAdminEmail } from '@/lib/constants'
 const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
@@ -48,7 +48,7 @@ export default function ConfiguracionPage() {
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [empDialogOpen, setEmpDialogOpen] = useState(false)
   const [editingEmp, setEditingEmp] = useState<Profesional | null>(null)
-  const [empForm, setEmpForm] = useState({ nombre: '', telefono: '', email: '', color: COLORES_DEFAULT[0], comision_porcentaje: 0 })
+  const [empForm, setEmpForm] = useState({ nombre: '', telefono: '', email: '', color: COLORES_DEFAULT[0], comision_porcentaje: 0, sueldo_fijo: 0 })
   const [empLoading, setEmpLoading] = useState(false)
 
   // Horarios state
@@ -56,8 +56,9 @@ export default function ConfiguracionPage() {
   const [selectedProfId, setSelectedProfId] = useState<string | null>(null)
   const [horarios, setHorarios] = useState<Horario[]>([])
 
-  // Nav permisos state
-  const [navPermisos, setNavPermisos] = useState<Record<string, boolean>>({})
+  // Nav permisos por usuario
+  const [userNavPermisos, setUserNavPermisos] = useState<Record<string, Record<string, boolean>>>({})
+  const [expandedPermUser, setExpandedPermUser] = useState<string | null>(null)
 
   const supabase = createClient()
 
@@ -65,7 +66,7 @@ export default function ConfiguracionPage() {
     fetchConfig()
     checkAdmin()
     fetchProfesionales()
-    fetchNavPermisos()
+    fetchUserNavPermisos()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchConfig() {
@@ -94,23 +95,32 @@ export default function ConfiguracionPage() {
     if (data) setProfesionales(data)
   }
 
-  async function fetchNavPermisos() {
-    const { data } = await supabase.from('nav_permisos').select('href, visible_no_admin')
+  async function fetchUserNavPermisos() {
+    const { data } = await supabase.from('user_nav_permisos').select('user_email, href, visible')
     if (data) {
-      const map: Record<string, boolean> = {}
-      data.forEach(p => { map[p.href] = p.visible_no_admin })
-      setNavPermisos(map)
+      const map: Record<string, Record<string, boolean>> = {}
+      data.forEach(p => {
+        if (!map[p.user_email]) map[p.user_email] = {}
+        map[p.user_email][p.href] = p.visible
+      })
+      setUserNavPermisos(map)
     }
   }
 
-  async function toggleNavPermiso(href: string, value: boolean) {
-    setNavPermisos(prev => ({ ...prev, [href]: value }))
+  async function toggleUserNavPermiso(userEmail: string, href: string, value: boolean) {
+    setUserNavPermisos(prev => ({
+      ...prev,
+      [userEmail]: { ...(prev[userEmail] || {}), [href]: value }
+    }))
     const { error } = await supabase
-      .from('nav_permisos')
-      .upsert({ href, visible_no_admin: value, updated_at: new Date().toISOString() })
+      .from('user_nav_permisos')
+      .upsert({ user_email: userEmail, href, visible: value, updated_at: new Date().toISOString() })
     if (error) {
       toast.error('Error al actualizar permiso')
-      setNavPermisos(prev => ({ ...prev, [href]: !value }))
+      setUserNavPermisos(prev => ({
+        ...prev,
+        [userEmail]: { ...(prev[userEmail] || {}), [href]: !value }
+      }))
     }
   }
 
@@ -259,6 +269,7 @@ export default function ConfiguracionPage() {
       email: '',
       color: COLORES_DEFAULT[profesionales.length % COLORES_DEFAULT.length],
       comision_porcentaje: 0,
+      sueldo_fijo: 0,
     })
     setEmpDialogOpen(true)
   }
@@ -271,6 +282,7 @@ export default function ConfiguracionPage() {
       email: prof.email || '',
       color: prof.color,
       comision_porcentaje: prof.comision_porcentaje ?? 0,
+      sueldo_fijo: prof.sueldo_fijo ?? 0,
     })
     setEmpDialogOpen(true)
   }
@@ -282,24 +294,43 @@ export default function ConfiguracionPage() {
     }
     setEmpLoading(true)
     try {
+      const nuevoSueldo = empForm.sueldo_fijo > 0 ? empForm.sueldo_fijo : null
       const payload = {
         nombre: empForm.nombre.trim(),
         telefono: empForm.telefono || null,
         email: empForm.email || null,
         color: empForm.color,
         comision_porcentaje: empForm.comision_porcentaje,
+        sueldo_fijo: nuevoSueldo,
         updated_at: new Date().toISOString(),
       }
+
+      let profId: string | null = null
 
       if (editingEmp) {
         const { error } = await supabase.from('profesionales').update(payload).eq('id', editingEmp.id)
         if (error) throw error
+        profId = editingEmp.id
         toast.success('Empleado actualizado')
       } else {
-        const { error } = await supabase.from('profesionales').insert(payload)
+        const { data, error } = await supabase.from('profesionales').insert(payload).select('id').single()
         if (error) throw error
+        profId = data.id
         toast.success('Empleado creado')
       }
+
+      // Si sueldo_fijo cambió, registrar en el historial (vigente desde el mes actual)
+      const sueldoAnterior = editingEmp?.sueldo_fijo ?? null
+      if (profId && nuevoSueldo !== sueldoAnterior) {
+        const today = new Date()
+        const vigente_desde = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+        await supabase.from('sueldos_fijos_historico').insert({
+          profesional_id: profId,
+          monto: nuevoSueldo ?? 0,
+          vigente_desde,
+        })
+      }
+
       setEmpDialogOpen(false)
       fetchProfesionales()
     } catch {
@@ -726,6 +757,7 @@ export default function ConfiguracionPage() {
                       <TableHead>Empleado</TableHead>
                       <TableHead>Teléfono</TableHead>
                       <TableHead className="text-center">Comisión %</TableHead>
+                      <TableHead className="text-center">Sueldo fijo</TableHead>
                       <TableHead className="text-center">Estado</TableHead>
                       <TableHead className="text-center">
                         <span className="flex items-center justify-center gap-1">
@@ -757,6 +789,9 @@ export default function ConfiguracionPage() {
                         </TableCell>
                         <TableCell className="text-center">
                           <span className="font-semibold">{prof.comision_porcentaje ?? 0}%</span>
+                        </TableCell>
+                        <TableCell className="text-center text-sm">
+                          {prof.sueldo_fijo ? `$${prof.sueldo_fijo.toLocaleString('es-AR')}` : '-'}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge
@@ -810,33 +845,55 @@ export default function ConfiguracionPage() {
             </CardContent>
           </Card>
 
-          {/* Permisos de menú para no-admins */}
+          {/* Permisos de menú por usuario */}
           {isAdmin && (
             <Card>
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <Menu className="h-4 w-4 text-muted-foreground" />
                   <div>
-                    <CardTitle>Menú para no administradores</CardTitle>
-                    <CardDescription>Activá o desactivá qué páginas pueden ver los usuarios que no son admin</CardDescription>
+                    <CardTitle>Permisos de menú por usuario</CardTitle>
+                    <CardDescription>Seleccioná qué páginas puede ver cada usuario</CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-1">
-                  {NAV_ITEMS.filter(item => !item.adminOnly).map(item => (
-                    <div key={item.href} className="flex items-center justify-between py-2.5 border-b last:border-0">
-                      <div className="flex items-center gap-3">
-                        <item.icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{item.label}</span>
+                {users.filter(u => !isAdminEmail(u.email)).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No hay usuarios no-administradores.</p>
+                ) : (
+                  <div className="divide-y">
+                    {users.filter(u => !isAdminEmail(u.email)).map(user => (
+                      <div key={user.email}>
+                        <button
+                          className="flex w-full items-center justify-between py-3 px-1 hover:bg-muted/50 rounded transition-colors"
+                          onClick={() => setExpandedPermUser(expandedPermUser === user.email ? null : user.email)}
+                        >
+                          <span className="text-sm font-medium">{user.email}</span>
+                          {expandedPermUser === user.email
+                            ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                            : <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          }
+                        </button>
+                        {expandedPermUser === user.email && (
+                          <div className="ml-4 mb-2 space-y-1 border-l pl-4">
+                            {NAV_ITEMS.filter(item => !item.adminOnly).map(item => (
+                              <div key={item.href} className="flex items-center justify-between py-2 border-b last:border-0">
+                                <div className="flex items-center gap-2">
+                                  <item.icon className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-sm">{item.label}</span>
+                                </div>
+                                <Switch
+                                  checked={userNavPermisos[user.email]?.[item.href] !== false}
+                                  onCheckedChange={(v) => toggleUserNavPermiso(user.email, item.href, v)}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <Switch
-                        checked={navPermisos[item.href] !== false}
-                        onCheckedChange={(v) => toggleNavPermiso(item.href, v)}
-                      />
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -939,18 +996,31 @@ export default function ConfiguracionPage() {
                 ))}
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Comisión sobre venta (%)</Label>
-              <div className="flex items-center gap-3">
-                <Input
-                  type="number"
-                  min={0}
-                  max={100}
-                  className="w-24"
-                  value={empForm.comision_porcentaje}
-                  onChange={(e) => setEmpForm({ ...empForm, comision_porcentaje: Number(e.target.value) || 0 })}
-                />
-                <span className="text-sm text-muted-foreground">% sobre precio efectivo del servicio</span>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Comisión sobre venta (%)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={empForm.comision_porcentaje}
+                    onChange={(e) => setEmpForm({ ...empForm, comision_porcentaje: Number(e.target.value) || 0 })}
+                  />
+                  <span className="text-sm text-muted-foreground shrink-0">%</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Sueldo fijo mensual ($)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={empForm.sueldo_fijo}
+                    onChange={(e) => setEmpForm({ ...empForm, sueldo_fijo: Number(e.target.value) || 0 })}
+                    placeholder="0 = no aplica"
+                  />
+                </div>
               </div>
             </div>
             <Button onClick={handleSaveEmpleado} className="w-full" disabled={empLoading}>

@@ -29,6 +29,13 @@ export interface SyncResult {
   citasSkipped: number
   movimientosSkipped: number
   errors: string[]
+  debug: {
+    ssrRows: number
+    kwRows: number
+    ssrCitas: number
+    kwCitas: number
+    kwFirstRows: string[][]
+  }
 }
 
 // ── Google Sheets API ───────────────────────────────────────
@@ -245,7 +252,7 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   // 1. Fetch all sheets via Google Sheets API
   const [ssrRows, kwRows, gastosRows] = await Promise.all([
     fetchSheetData(spreadsheetId, 'SSR'),
-    fetchSheetData(spreadsheetId, 'base datos kw'),
+    fetchSheetData(spreadsheetId, 'KW'),
     fetchSheetData(spreadsheetId, 'Gastos'),
   ])
 
@@ -299,5 +306,12 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     citasSkipped: 0,
     movimientosSkipped: 0,
     errors,
+    debug: {
+      ssrRows: ssrRows.length,
+      kwRows: kwRows.length,
+      ssrCitas: ssrResult.citas.length,
+      kwCitas: kwResult.citas.length,
+      kwFirstRows: kwRows.slice(0, 5),
+    },
   }
 }

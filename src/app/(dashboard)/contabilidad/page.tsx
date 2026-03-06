@@ -131,12 +131,14 @@ export default function ContabilidadPage() {
   // monthStr: 'YYYY-MM'
   const getSueldoProf = useCallback((profId: string, monthStr: string): number => {
     const monthDate = `${monthStr}-01`
-    const historial = sueldosHistorico.filter(
-      s => s.profesional_id === profId && s.vigente_desde <= monthDate
-    )
-    if (historial.length > 0) {
-      return historial[historial.length - 1].monto
+    const profHistory = sueldosHistorico.filter(s => s.profesional_id === profId)
+    if (profHistory.length > 0) {
+      // Hay historial → usar solo el historial (no fallback a sueldo_fijo)
+      // Así los meses anteriores al primer registro quedan en $0
+      const applicable = profHistory.filter(s => s.vigente_desde <= monthDate)
+      return applicable.length > 0 ? applicable[applicable.length - 1].monto : 0
     }
+    // Sin historial → fallback a sueldo_fijo (compatibilidad con datos anteriores)
     const prof = profesionales.find(p => p.id === profId)
     return prof?.sueldo_fijo || 0
   }, [sueldosHistorico, profesionales])
