@@ -279,9 +279,9 @@ export default function ContabilidadPage() {
       const esSueldoFijo = sueldoFijo > 0
       // Para sueldo fijo sin citas: mostrar sueldo_fijo en columna ventas
       const ventas = esSueldoFijo && ventasCitas === 0 ? sueldoFijo : ventasCitas
-      // Falta pagar: sueldo fijo vs adelantos / comisiones vs adelantos
+      // Falta pagar: si tiene fijo → fijo + comisiones (puede tener ambos); si solo comisión → comisiones
       const faltaPagar = esSueldoFijo
-        ? Math.max(0, sueldoFijo - adelantos)
+        ? Math.max(0, sueldoFijo + comisiones - adelantos)
         : Math.max(0, comisiones - adelantos)
 
       return { prof, ventas, comisiones, sueldoFijo, adelantos, faltaPagar, esSueldoFijo }
@@ -631,9 +631,9 @@ export default function ContabilidadPage() {
                               </TableCell>
                               <TableCell className="text-right">${formatMoney(r.ventas)}</TableCell>
                               <TableCell className="text-right">
-                                {r.esSueldoFijo
-                                  ? <span className="text-muted-foreground">—</span>
-                                  : `$${formatMoney(r.comisiones)}`}
+                                {r.comisiones > 0
+                                  ? `$${formatMoney(r.comisiones)}`
+                                  : <span className="text-muted-foreground">—</span>}
                               </TableCell>
                               <TableCell className="text-right text-orange-500">
                                 {r.adelantos > 0 ? `-$${formatMoney(r.adelantos)}` : '—'}
