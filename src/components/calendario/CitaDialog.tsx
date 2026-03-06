@@ -302,10 +302,11 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-lg flex flex-col max-h-[90vh] max-h-[90dvh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{isEditing ? 'Editar cita' : 'Nueva cita'}</DialogTitle>
         </DialogHeader>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-0.5 pb-2">
 
         {isEditing && cita && (
           <div className="flex flex-wrap items-center gap-2">
@@ -597,6 +598,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             </div>
           </>
         )}
+        </div>
       </DialogContent>
     </Dialog>
   )
