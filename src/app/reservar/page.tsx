@@ -45,6 +45,12 @@ export default function ReservarPage() {
     cejas: '/icons/ceja.jpg',
   }
 
+  // Top 5 más solicitados globalmente (rank 0=más popular)
+  const top5RankMap = (() => {
+    const sorted = [...servicios].sort((a, b) => (bookingCounts[b.id] || 0) - (bookingCounts[a.id] || 0))
+    return new Map(sorted.slice(0, 5).map((s, i) => [s.id, i]))
+  })()
+
   const filteredServicios = servicios
     .filter((s) => {
       if (categoria === 'promos') return s.es_promo || /^promo/i.test(s.nombre)
@@ -53,21 +59,20 @@ export default function ReservarPage() {
       return true
     })
     .sort((a, b) => {
-      // 1. Promos primero
-      const aPromo = a.es_promo || /^promo/i.test(a.nombre) ? 1 : 0
-      const bPromo = b.es_promo || /^promo/i.test(b.nombre) ? 1 : 0
-      if (aPromo !== bPromo) return bPromo - aPromo
+      const aRank = top5RankMap.get(a.id)
+      const bRank = top5RankMap.get(b.id)
 
-      // 2. Por demanda (citas últimos 60 días) descendente
-      const aCount = bookingCounts[a.id] || 0
-      const bCount = bookingCounts[b.id] || 0
-      if (bCount !== aCount) return bCount - aCount
+      // 1. Top 5 primero, en orden de demanda
+      if (aRank !== undefined && bRank !== undefined) return aRank - bRank
+      if (aRank !== undefined) return -1
+      if (bRank !== undefined) return 1
 
-      // 3. Nombres que empiezan con 2D/3D al final, resto alfabético
-      const aLast = /^[23]d\b/i.test(a.nombre) ? 1 : 0
-      const bLast = /^[23]d\b/i.test(b.nombre) ? 1 : 0
-      if (aLast !== bLast) return aLast - bLast
+      // 2. Nombres que empiezan con dígito al final
+      const aIsNum = /^\d/.test(a.nombre)
+      const bIsNum = /^\d/.test(b.nombre)
+      if (aIsNum !== bIsNum) return aIsNum ? 1 : -1
 
+      // 3. Alfabético
       return a.nombre.localeCompare(b.nombre, 'es')
     })
 
