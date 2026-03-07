@@ -783,18 +783,20 @@ export default function ConfiguracionPage() {
                                     <Menu className="h-4 w-4" />
                                   </Button>
                                 )}
-                                <Button
-                                  variant={changeUsernameId === u.id ? 'secondary' : 'ghost'}
-                                  size="icon"
-                                  title="Cambiar usuario"
-                                  onClick={() => {
-                                    const current = u.email?.endsWith('@estetica.local') ? u.email.replace('@estetica.local', '') : ''
-                                    setChangeUsernameId(changeUsernameId === u.id ? null : u.id)
-                                    setChangeUsernameValue(current)
-                                  }}
-                                >
-                                  <AtSign className="h-4 w-4" />
-                                </Button>
+                                {!u.is_admin && (
+                                  <Button
+                                    variant={changeUsernameId === u.id ? 'secondary' : 'ghost'}
+                                    size="icon"
+                                    title="Cambiar usuario"
+                                    onClick={() => {
+                                      const current = u.email?.endsWith('@estetica.local') ? u.email.replace('@estetica.local', '') : ''
+                                      setChangeUsernameId(changeUsernameId === u.id ? null : u.id)
+                                      setChangeUsernameValue(current)
+                                    }}
+                                  >
+                                    <AtSign className="h-4 w-4" />
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -923,9 +925,6 @@ export default function ConfiguracionPage() {
                             />
                             <div>
                               <p className="font-medium">{prof.nombre}</p>
-                              {prof.email && (
-                                <p className="text-xs text-muted-foreground">{prof.email}</p>
-                              )}
                             </div>
                           </div>
                         </TableCell>
@@ -1056,22 +1055,12 @@ export default function ConfiguracionPage() {
                 placeholder="Nombre del empleado"
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Teléfono</Label>
-                <Input
-                  value={empForm.telefono}
-                  onChange={(e) => setEmpForm({ ...empForm, telefono: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Email</Label>
-                <Input
-                  type="email"
-                  value={empForm.email}
-                  onChange={(e) => setEmpForm({ ...empForm, email: e.target.value })}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label>Teléfono</Label>
+              <Input
+                value={empForm.telefono}
+                onChange={(e) => setEmpForm({ ...empForm, telefono: e.target.value })}
+              />
             </div>
             <div className="space-y-2">
               <Label>Color</Label>
