@@ -66,6 +66,7 @@ export function CalendarioView() {
   // Mobile
   const [isMobile, setIsMobile] = useState(false)
   const [mobileProfId, setMobileProfId] = useState<string | null>(null)
+  const swipeRef = useRef<{ x: number; y: number; t: number } | null>(null)
 
   // CSV import turnos state
   const [turnosDialogOpen, setTurnosDialogOpen] = useState(false)
@@ -650,6 +651,24 @@ export function CalendarioView() {
 
       {/* Resource day view */}
       {effectiveFiltrados.length > 0 ? (
+        <div
+          onTouchStart={isMobile && !isReadOnly ? (e) => {
+            swipeRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() }
+          } : undefined}
+          onTouchEnd={isMobile && !isReadOnly ? (e) => {
+            if (!swipeRef.current) return
+            const dx = e.changedTouches[0].clientX - swipeRef.current.x
+            const dy = e.changedTouches[0].clientY - swipeRef.current.y
+            const dt = Date.now() - swipeRef.current.t
+            swipeRef.current = null
+            // Solo swipe horizontal rápido (no long press, no scroll vertical)
+            if (dt > 600 || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+            const idx = profesionales.findIndex(p => p.id === mobileProfId)
+            if (idx === -1) return
+            if (dx < 0 && idx < profesionales.length - 1) setMobileProfId(profesionales[idx + 1].id)
+            if (dx > 0 && idx > 0) setMobileProfId(profesionales[idx - 1].id)
+          } : undefined}
+        >
         <CalendarioResourceDayView
           fecha={fecha}
           citas={citas}
@@ -661,6 +680,7 @@ export function CalendarioView() {
           onBloqueoClick={isReadOnly ? undefined : handleBloqueoClick}
           onCitaDrop={isReadOnly ? undefined : handleCitaDrop}
         />
+        </div>
       ) : (
         <div className="rounded-lg border bg-card p-12 text-center text-muted-foreground">
           Seleccioná al menos un profesional para ver el calendario.
@@ -672,6 +692,7 @@ export function CalendarioView() {
         cita={selectedCita}
         onClose={handleDetailClose}
         onEdit={isReadOnly ? undefined : handleEditFromDetail}
+        readOnly={isReadOnly}
       />
 
       <CitaDialog

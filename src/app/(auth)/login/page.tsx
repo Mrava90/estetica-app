@@ -32,9 +32,12 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
+    // Si no tiene @, es un nombre de usuario → convertir a email interno
+    const authEmail = data.email.includes('@') ? data.email : `${data.email}@estetica.local`
+
     const supabase = createClient()
     const { error: authError } = await supabase.auth.signInWithPassword({
-      email: data.email,
+      email: authEmail,
       password: data.password,
     })
 
@@ -139,11 +142,12 @@ export default function LoginPage() {
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">Usuario o email</Label>
             <Input
               id="email"
-              type="email"
-              placeholder="tu@email.com"
+              type="text"
+              placeholder=""
+              autoComplete="username"
               {...register('email')}
             />
             {errors.email && (

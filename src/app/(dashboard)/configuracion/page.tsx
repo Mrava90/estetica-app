@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup, UserCog, AtSign } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { NAV_ITEMS, DIAS_SEMANA, isAdminEmail } from '@/lib/constants'
 const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
@@ -39,6 +39,8 @@ export default function ConfiguracionPage() {
   const [showNewUser, setShowNewUser] = useState(false)
   const [changePasswordId, setChangePasswordId] = useState<string | null>(null)
   const [changePasswordValue, setChangePasswordValue] = useState('')
+  const [changeUsernameId, setChangeUsernameId] = useState<string | null>(null)
+  const [changeUsernameValue, setChangeUsernameValue] = useState('')
   const [myPassword, setMyPassword] = useState('')
   const [myPasswordConfirm, setMyPasswordConfirm] = useState('')
   const [changingMyPassword, setChangingMyPassword] = useState(false)
@@ -50,6 +52,9 @@ export default function ConfiguracionPage() {
   const [editingEmp, setEditingEmp] = useState<Profesional | null>(null)
   const [empForm, setEmpForm] = useState({ nombre: '', telefono: '', email: '', color: COLORES_DEFAULT[0], comision_porcentaje: 0, sueldo_fijo: 0 })
   const [empLoading, setEmpLoading] = useState(false)
+  const [cuentaUsername, setCuentaUsername] = useState('')
+  const [cuentaPassword, setCuentaPassword] = useState('')
+  const [cuentaLoading, setCuentaLoading] = useState(false)
 
   // Horarios state
   const [horarioDialogOpen, setHorarioDialogOpen] = useState(false)
@@ -159,9 +164,17 @@ export default function ConfiguracionPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  function toAuthEmail(value: string) {
+    return value.includes('@') ? value : `${value}@estetica.local`
+  }
+
+  function displayUser(email: string) {
+    return email.endsWith('@estetica.local') ? email.replace('@estetica.local', '') : email
+  }
+
   async function handleCreateUser() {
     if (!newEmail || !newPassword) {
-      toast.error('Completá email y contraseña')
+      toast.error('Completá usuario/email y contraseña')
       return
     }
     if (newPassword.length < 6) {
@@ -173,7 +186,7 @@ export default function ConfiguracionPage() {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newEmail, password: newPassword }),
+        body: JSON.stringify({ email: toAuthEmail(newEmail), password: newPassword }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -233,6 +246,29 @@ export default function ConfiguracionPage() {
     }
   }
 
+  async function handleSetUsername(userId: string) {
+    if (!changeUsernameValue.trim()) {
+      toast.error('Ingresá un nombre de usuario')
+      return
+    }
+    const newEmail = changeUsernameValue.includes('@') ? changeUsernameValue : `${changeUsernameValue.trim()}@estetica.local`
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, newEmail }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      toast.success('Usuario actualizado')
+      setChangeUsernameId(null)
+      setChangeUsernameValue('')
+      fetchUsers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al actualizar usuario')
+    }
+  }
+
   async function handleDeleteUser(userId: string, email: string) {
     if (!confirm(`¿Eliminar al usuario ${email}?`)) return
     try {
@@ -284,6 +320,12 @@ export default function ConfiguracionPage() {
       comision_porcentaje: prof.comision_porcentaje ?? 0,
       sueldo_fijo: prof.sueldo_fijo ?? 0,
     })
+    // Pre-llenar username de cuenta
+    const existingUser = prof.email
+      ? (prof.email.endsWith('@estetica.local') ? prof.email.replace('@estetica.local', '') : prof.email)
+      : prof.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '.')
+    setCuentaUsername(existingUser)
+    setCuentaPassword('')
     setEmpDialogOpen(true)
   }
 
@@ -337,6 +379,49 @@ export default function ConfiguracionPage() {
       toast.error('Error al guardar empleado')
     } finally {
       setEmpLoading(false)
+    }
+  }
+
+  async function handleSaveCuenta() {
+    if (!editingEmp || !cuentaUsername || !cuentaPassword) {
+      toast.error('Completá usuario y contraseña')
+      return
+    }
+    if (cuentaPassword.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    const authEmail = cuentaUsername.includes('@') ? cuentaUsername : `${cuentaUsername}@estetica.local`
+    setCuentaLoading(true)
+    try {
+      const existingUser = users.find(u => u.email === authEmail)
+      if (existingUser) {
+        const res = await fetch('/api/users', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: existingUser.id, password: cuentaPassword }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+      } else {
+        const res = await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: authEmail, password: cuentaPassword }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error)
+      }
+      // Vincular email al profesional
+      await supabase.from('profesionales').update({ email: authEmail, updated_at: new Date().toISOString() }).eq('id', editingEmp.id)
+      toast.success(users.find(u => u.email === authEmail) ? 'Contraseña actualizada' : 'Cuenta creada')
+      setCuentaPassword('')
+      fetchProfesionales()
+      fetchUsers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar cuenta')
+    } finally {
+      setCuentaLoading(false)
     }
   }
 
@@ -629,10 +714,10 @@ export default function ConfiguracionPage() {
                     <div className="rounded-lg border p-4 space-y-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="space-y-2">
-                          <Label>Email</Label>
+                          <Label>Usuario o email</Label>
                           <Input
-                            type="email"
-                            placeholder="usuario@ejemplo.com"
+                            type="text"
+                            placeholder="lola / usuario@ejemplo.com"
                             value={newEmail}
                             onChange={(e) => setNewEmail(e.target.value)}
                           />
@@ -673,7 +758,7 @@ export default function ConfiguracionPage() {
                           <TableRow key={u.id}>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
-                                {u.email}
+                                {displayUser(u.email || '')}
                                 {isAdminEmail(u.email) && (
                                   <Badge variant="secondary" className="text-[10px]">Admin</Badge>
                                 )}
@@ -698,6 +783,18 @@ export default function ConfiguracionPage() {
                                   </Button>
                                 )}
                                 <Button
+                                  variant={changeUsernameId === u.id ? 'secondary' : 'ghost'}
+                                  size="icon"
+                                  title="Cambiar usuario"
+                                  onClick={() => {
+                                    const current = u.email?.endsWith('@estetica.local') ? u.email.replace('@estetica.local', '') : ''
+                                    setChangeUsernameId(changeUsernameId === u.id ? null : u.id)
+                                    setChangeUsernameValue(current)
+                                  }}
+                                >
+                                  <AtSign className="h-4 w-4" />
+                                </Button>
+                                <Button
                                   variant="ghost"
                                   size="icon"
                                   title="Cambiar contraseña"
@@ -716,6 +813,20 @@ export default function ConfiguracionPage() {
                                   </Button>
                                 )}
                               </div>
+                              {changeUsernameId === u.id && (
+                                <div className="mt-2 flex gap-2">
+                                  <Input
+                                    type="text"
+                                    placeholder="nombre de usuario"
+                                    value={changeUsernameValue}
+                                    onChange={(e) => setChangeUsernameValue(e.target.value)}
+                                    className="h-8 text-sm"
+                                  />
+                                  <Button size="sm" className="h-8 shrink-0" onClick={() => handleSetUsername(u.id)}>
+                                    Guardar
+                                  </Button>
+                                </div>
+                              )}
                               {changePasswordId === u.id && (
                                 <div className="mt-2 flex gap-2">
                                   <Input
@@ -1007,6 +1118,48 @@ export default function ConfiguracionPage() {
             <Button onClick={handleSaveEmpleado} className="w-full" disabled={empLoading}>
               {empLoading ? 'Guardando...' : editingEmp ? 'Actualizar' : 'Crear empleado'}
             </Button>
+
+            {/* Cuenta de acceso — solo al editar */}
+            {editingEmp && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <UserCog className="h-4 w-4 text-muted-foreground" />
+                    Cuenta de acceso
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Usuario</Label>
+                      <Input
+                        type="text"
+                        value={cuentaUsername}
+                        onChange={(e) => setCuentaUsername(e.target.value)}
+                        placeholder="nombre de usuario"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Contraseña</Label>
+                      <Input
+                        type="text"
+                        value={cuentaPassword}
+                        onChange={(e) => setCuentaPassword(e.target.value)}
+                        placeholder="mín. 6 caracteres"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveCuenta}
+                    disabled={cuentaLoading || !cuentaPassword}
+                    className="w-full"
+                  >
+                    {cuentaLoading ? 'Guardando...' : users.find(u => u.email === (cuentaUsername.includes('@') ? cuentaUsername : `${cuentaUsername}@estetica.local`)) ? 'Cambiar contraseña' : 'Crear cuenta'}
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

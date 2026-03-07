@@ -17,9 +17,10 @@ interface Props {
   cita: CitaConRelaciones | null
   onClose: () => void
   onEdit?: () => void
+  readOnly?: boolean
 }
 
-export function CitaDetailPanel({ open, cita, onClose, onEdit }: Props) {
+export function CitaDetailPanel({ open, cita, onClose, onEdit, readOnly }: Props) {
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
 
@@ -106,7 +107,7 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit }: Props) {
           </div>
 
           {/* WhatsApp */}
-          {cita.clientes?.telefono && (
+          {!readOnly && cita.clientes?.telefono && (
             <Button
               variant="outline"
               size="sm"
@@ -191,28 +192,32 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit }: Props) {
                 Editar
               </Button>
             )}
-            <Button
-              variant="outline"
-              onClick={handleAnular}
-              disabled={loading || cita.status === 'cancelada'}
-              size="sm"
-              className="flex-1 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
-            >
-              <X className="h-3.5 w-3.5" />
-              Anular
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="outline"
+                onClick={handleAnular}
+                disabled={loading || cita.status === 'cancelada'}
+                size="sm"
+                className="flex-1 gap-1.5 text-destructive border-destructive/30 hover:bg-destructive/5 hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" />
+                Anular
+              </Button>
+            )}
             <Button variant="ghost" onClick={onClose} size="sm" className="px-3">
               Cerrar
             </Button>
           </div>
-          <button
-            type="button"
-            onClick={handleEliminar}
-            disabled={loading}
-            className="w-full text-xs text-muted-foreground hover:text-destructive transition-colors text-center py-0.5"
-          >
-            Eliminar permanentemente
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={handleEliminar}
+              disabled={loading}
+              className="w-full text-xs text-muted-foreground hover:text-destructive transition-colors text-center py-0.5"
+            >
+              Eliminar permanentemente
+            </button>
+          )}
         </div>
 
       </DialogContent>
