@@ -204,7 +204,7 @@ export function CalendarioResourceDayView({
       function trackLatest(ev: PointerEvent) { latestX = ev.clientX; latestY = ev.clientY }
       window.addEventListener('pointermove', trackLatest, { passive: true })
 
-      // Long press: activate drag after 2000 ms without significant movement
+      // Long press: activate drag after 3000 ms without significant movement
       longPressTimer = setTimeout(() => {
         longPressTimer = null
         window.removeEventListener('pointermove', trackLatest)
@@ -215,7 +215,7 @@ export function CalendarioResourceDayView({
         // hasDraggedRef stays false — real drag requires deliberate movement after long press
         setIsDragging(true)  // visual feedback (opacity + cursor)
         if (navigator.vibrate) navigator.vibrate(50)
-      }, 2000)
+      }, 3000)
     } else {
       // Desktop: drag-ready immediately, activates after 5 px movement
       dragRef.current = { citaId: cita.id, offsetMinutes, duration }
