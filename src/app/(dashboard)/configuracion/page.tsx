@@ -25,6 +25,7 @@ interface AppUser {
   email: string
   created_at: string
   last_sign_in_at: string | null
+  is_admin?: boolean
 }
 
 export default function ConfiguracionPage() {
@@ -759,7 +760,7 @@ export default function ConfiguracionPage() {
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 {displayUser(u.email || '')}
-                                {isAdminEmail(u.email) && (
+                                {u.is_admin && (
                                   <Badge variant="secondary" className="text-[10px]">Admin</Badge>
                                 )}
                               </div>
@@ -772,7 +773,7 @@ export default function ConfiguracionPage() {
                             </TableCell>
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1">
-                                {!isAdminEmail(u.email) && (
+                                {!u.is_admin && (
                                   <Button
                                     variant={expandedPermUser === u.email ? 'secondary' : 'ghost'}
                                     size="icon"
@@ -802,7 +803,7 @@ export default function ConfiguracionPage() {
                                 >
                                   <KeyRound className="h-4 w-4" />
                                 </Button>
-                                {!isAdminEmail(u.email) && (
+                                {!u.is_admin && (
                                   <Button
                                     variant="ghost"
                                     size="icon"

@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     email: u.email,
     created_at: u.created_at,
     last_sign_in_at: u.last_sign_in_at,
+    is_admin: isAdminEmail(u.email) || u.app_metadata?.is_admin === true,
   }))
 
   return NextResponse.json({ users })
