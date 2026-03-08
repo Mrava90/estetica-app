@@ -17,8 +17,14 @@ export function WhatsAppButton() {
 
   if (!telefono) return null
 
-  const cleanNumber = telefono.replace(/\D/g, '')
-  const url = `https://wa.me/${cleanNumber}?text=Hola!%20Tengo%20una%20consulta`
+  // Normalizar a formato internacional argentino (549xxxxxxxxxx)
+  let waNumber = telefono.replace(/\D/g, '')
+  if (waNumber.startsWith('0')) {
+    waNumber = '549' + waNumber.slice(1)  // 0115555xxxx → 549115555xxxx
+  } else if (!waNumber.startsWith('54')) {
+    waNumber = '549' + waNumber  // 1155551234 → 5491155551234
+  }
+  const url = `https://wa.me/${waNumber}?text=Hola!%20Tengo%20una%20consulta`
 
   return (
     <a
