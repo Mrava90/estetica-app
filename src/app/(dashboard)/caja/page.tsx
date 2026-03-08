@@ -400,55 +400,55 @@ export default function CajaDiariaPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header with date navigation */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 shrink-0">
-        <h1 className="text-2xl font-bold">Caja Diaria</h1>
-        {isAdmin && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 text-xs"
-            onClick={handleSyncSheets}
-            disabled={syncing}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Sincronizando...' : 'Sync Sheets'}
-          </Button>
-        )}
-      </div>
+      {/* Header */}
+      <div className="space-y-2">
+        {/* Fila 1: Título + Sync */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Caja Diaria</h1>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={handleSyncSheets}
+              disabled={syncing}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Sync'}
+            </Button>
+          )}
+        </div>
 
-        {/* Admin: disponible del mes */}
+        {/* Fila 2 (admin): saldos del mes — ancho completo */}
         {isAdmin && monthlyStats && (
-          <div className="flex-1 flex justify-center">
-            <div className="border rounded-md px-5 py-2.5 bg-background shadow-sm">
-              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 text-center font-medium">
-                Disponible — {new Date().toLocaleString('es-AR', { month: 'long' })}
+          <div className="border rounded-md px-4 py-2.5 bg-background shadow-sm">
+            <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1.5 text-center font-medium">
+              Disponible — {new Date().toLocaleString('es-AR', { month: 'long' })}
+            </div>
+            <div className="flex items-center justify-center gap-5">
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-0.5">Efectivo</div>
+                <div className="font-bold text-white text-base">{formatPrecio(monthlyStats.efectivo)}</div>
               </div>
-              <div className="flex items-center gap-5">
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-0.5">Efectivo</div>
-                  <div className="font-bold text-white text-base">{formatPrecio(monthlyStats.efectivo)}</div>
-                </div>
-                <div className="w-px h-9 bg-border" />
-                <div className="text-center">
-                  <div className="text-xs text-muted-foreground mb-0.5">Mercadopago</div>
-                  <div className="font-bold text-white text-base">{formatPrecio(monthlyStats.mercadopago)}</div>
-                </div>
+              <div className="w-px h-9 bg-border" />
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-0.5">Mercadopago</div>
+                <div className="font-bold text-white text-base">{formatPrecio(monthlyStats.mercadopago)}</div>
               </div>
             </div>
           </div>
         )}
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="icon" onClick={() => setFecha(subDays(fecha, 1))}>
+        {/* Fila 3: Navegación de fecha — ancho completo */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" className="shrink-0" onClick={() => setFecha(subDays(fecha, 1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2 min-w-[200px]">
-                <CalendarDays className="h-4 w-4" />
-                {format(fecha, "EEEE d 'de' MMMM", { locale: es })}
+              <Button variant="outline" className="flex-1 gap-2 min-w-0">
+                <CalendarDays className="h-4 w-4 shrink-0" />
+                <span className="truncate">{format(fecha, "EEEE d 'de' MMMM", { locale: es })}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="center">
@@ -464,11 +464,11 @@ export default function CajaDiariaPage() {
               />
             </PopoverContent>
           </Popover>
-          <Button variant="outline" size="icon" onClick={() => setFecha(addDays(fecha, 1))}>
+          <Button variant="outline" size="icon" className="shrink-0" onClick={() => setFecha(addDays(fecha, 1))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
           {!isToday(fecha) && (
-            <Button variant="outline" size="sm" onClick={() => setFecha(new Date())}>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => setFecha(new Date())}>
               Hoy
             </Button>
           )}
@@ -536,15 +536,15 @@ export default function CajaDiariaPage() {
             <CardHeader>
               <CardTitle className="text-base">Cobros del día</CardTitle>
             </CardHeader>
-            <CardContent className="p-0 max-h-[45vh] overflow-y-auto">
+            <CardContent className="p-0 max-h-[45vh] overflow-y-auto overflow-x-auto">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
-                    <TableHead>Hora</TableHead>
+                    <TableHead className="hidden sm:table-cell">Hora</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Servicio</TableHead>
-                    <TableHead>Profesional</TableHead>
-                    <TableHead>Estado</TableHead>
+                    <TableHead className="hidden md:table-cell">Profesional</TableHead>
+                    <TableHead className="hidden sm:table-cell">Estado</TableHead>
                     <TableHead>Pago</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
                     <TableHead className="w-16"></TableHead>
@@ -564,10 +564,10 @@ export default function CajaDiariaPage() {
                     const servicioDisplay = cita.servicios?.nombre || sheet?.servicio || '—'
                     return (
                     <TableRow key={cita.id}>
-                      <TableCell className="text-sm">{formatHora(cita.fecha_inicio)}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{formatHora(cita.fecha_inicio)}</TableCell>
                       <TableCell className="text-sm font-medium">{clienteDisplay}</TableCell>
                       <TableCell className="text-sm">{servicioDisplay}</TableCell>
-                      <TableCell className="text-sm">
+                      <TableCell className="hidden md:table-cell text-sm">
                         <div className="flex items-center gap-1.5">
                           {cita.profesionales && (
                             <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: cita.profesionales.color }} />
@@ -575,7 +575,7 @@ export default function CajaDiariaPage() {
                           {cita.profesionales?.nombre || '—'}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <Badge className={`${STATUS_COLORS[cita.status]} text-xs`}>
                           {STATUS_LABELS[cita.status]}
                         </Badge>
@@ -641,16 +641,18 @@ export default function CajaDiariaPage() {
           {/* Movimientos manuales */}
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle className="text-base">Movimientos manuales</CardTitle>
                 <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" className="gap-2" onClick={() => setCsvDialogOpen(true)}>
+                  <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCsvDialogOpen(true)}>
                     <Upload className="h-4 w-4" />
-                    Importar CSV
+                    <span className="hidden sm:inline">Importar CSV</span>
+                    <span className="sm:hidden">CSV</span>
                   </Button>
-                  <Button size="sm" className="gap-2" onClick={() => setDialogOpen(true)}>
+                  <Button size="sm" className="gap-1.5" onClick={() => setDialogOpen(true)}>
                     <Plus className="h-4 w-4" />
-                    Nuevo movimiento
+                    <span className="hidden sm:inline">Nuevo movimiento</span>
+                    <span className="sm:hidden">Nuevo</span>
                   </Button>
                 </div>
               </div>
