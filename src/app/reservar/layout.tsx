@@ -1,5 +1,6 @@
 import { ReservarHeader } from '@/components/reservar/ReservarHeader'
 import { WhatsAppButton } from '@/components/reservar/WhatsAppButton'
+import { InstallPrompt } from '@/components/InstallPrompt'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +23,7 @@ export default function ReservarLayout({ children }: { children: React.ReactNode
         </main>
       </div>
       <WhatsAppButton />
+      <InstallPrompt />
     </div>
   )
 }
