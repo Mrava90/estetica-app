@@ -24,7 +24,7 @@ export default function ClientesPage() {
   async function fetchClientes() {
     let query = supabase.from('clientes').select('*').order('nombre').limit(100)
     if (search) {
-      query = query.or(`nombre.ilike.%${search}%,telefono.ilike.%${search}%`)
+      query = query.or(`nombre.ilike.%${search}%,apellido.ilike.%${search}%,telefono.ilike.%${search}%`)
     }
     const { data } = await query
     if (data) setClientes(data)
@@ -82,7 +82,7 @@ export default function ClientesPage() {
           <Card key={c.id} className="transition-colors">
             <CardContent className="flex items-center justify-between p-4">
               <Link href={`/clientes/${c.id}`} className="min-w-0 flex-1">
-                <p className="font-medium truncate">{c.nombre}</p>
+                <p className="font-medium truncate">{c.nombre}{c.apellido ? ` ${c.apellido}` : ''}</p>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Phone className="h-3 w-3 shrink-0" />
                   <span className="truncate">{c.telefono}</span>
@@ -134,7 +134,7 @@ export default function ClientesPage() {
               )}
               {clientes.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.nombre}</TableCell>
+                  <TableCell className="font-medium">{c.nombre}{c.apellido ? ` ${c.apellido}` : ''}</TableCell>
                   <TableCell>{c.telefono}</TableCell>
                   <TableCell>{c.dni || '-'}</TableCell>
                   <TableCell>{c.email || '-'}</TableCell>

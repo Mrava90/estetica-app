@@ -42,6 +42,7 @@ export default function ClienteDetailPage() {
       setCliente(data)
       reset({
         nombre: data.nombre,
+        apellido: data.apellido || '',
         telefono: data.telefono,
         dni: data.dni || '',
         email: data.email || '',
@@ -65,7 +66,7 @@ export default function ClienteDetailPage() {
     try {
       const { error } = await supabase
         .from('clientes')
-        .update({ ...data, dni: data.dni || null, email: data.email || null, notas: data.notas || null, updated_at: new Date().toISOString() })
+        .update({ ...data, apellido: data.apellido || null, dni: data.dni || null, email: data.email || null, notas: data.notas || null, updated_at: new Date().toISOString() })
         .eq('id', params.id)
       if (error) throw error
       toast.success('Cliente actualizado')
@@ -85,7 +86,7 @@ export default function ClienteDetailPage() {
         <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-xl sm:text-2xl font-bold truncate">{cliente.nombre}</h1>
+        <h1 className="text-xl sm:text-2xl font-bold truncate">{cliente.nombre}{cliente.apellido ? ` ${cliente.apellido}` : ''}</h1>
       </div>
 
       <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
@@ -96,10 +97,16 @@ export default function ClienteDetailPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 sm:space-y-4">
-              <div className="space-y-1.5">
-                <Label>Nombre</Label>
-                <Input {...register('nombre')} />
-                {errors.nombre && <p className="text-sm text-destructive">{errors.nombre.message}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Nombre</Label>
+                  <Input {...register('nombre')} />
+                  {errors.nombre && <p className="text-sm text-destructive">{errors.nombre.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Apellido</Label>
+                  <Input {...register('apellido')} placeholder="Opcional" />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Teléfono</Label>

@@ -20,6 +20,7 @@ function ConfirmarContent() {
   const [servicio, setServicio] = useState<Servicio | null>(null)
   const [profesional, setProfesional] = useState<Profesional | null>(null)
   const [nombre, setNombre] = useState('')
+  const [apellido, setApellido] = useState('')
   const [dni, setDni] = useState('')
   const [telefono, setTelefono] = useState('')
   const [loading, setLoading] = useState(false)
@@ -67,12 +68,13 @@ function ConfirmarContent() {
         // Update name and DNI if provided
         await supabase.from('clientes').update({
           nombre,
+          apellido: apellido.trim() || null,
           ...(dni.trim() ? { dni: dni.trim() } : {}),
         }).eq('id', clienteId)
       } else {
         const { data: newCliente, error: clienteError } = await supabase
           .from('clientes')
-          .insert({ nombre, telefono, ...(dni.trim() ? { dni: dni.trim() } : {}) })
+          .insert({ nombre, apellido: apellido.trim() || null, telefono, ...(dni.trim() ? { dni: dni.trim() } : {}) })
           .select('id')
           .single()
         if (clienteError || !newCliente) throw clienteError
@@ -153,15 +155,27 @@ function ConfirmarContent() {
       <div className="rounded-xl border border-gray-900 bg-white p-5 space-y-4">
         <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Tus datos</h2>
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">Nombre completo</label>
-            <input
-              type="text"
-              placeholder="Tu nombre"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Nombre</label>
+              <input
+                type="text"
+                placeholder="Tu nombre"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Apellido</label>
+              <input
+                type="text"
+                placeholder="Tu apellido"
+                value={apellido}
+                onChange={(e) => setApellido(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">DNI</label>

@@ -42,6 +42,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   const [loading, setLoading] = useState(false)
   const [showNewCliente, setShowNewCliente] = useState(false)
   const [newClienteNombre, setNewClienteNombre] = useState('')
+  const [newClienteApellido, setNewClienteApellido] = useState('')
   const [newClienteTelefono, setNewClienteTelefono] = useState('')
 
   // Precio field — always visible, auto-filled, editable
@@ -161,14 +162,15 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
   async function fetchClientes(search: string) {
     let query = supabase.from('clientes').select('*').order('nombre').limit(20)
-    if (search) query = query.or(`nombre.ilike.%${search}%,telefono.ilike.%${search}%`)
+    if (search) query = query.or(`nombre.ilike.%${search}%,apellido.ilike.%${search}%,telefono.ilike.%${search}%`)
     const { data } = await query
     if (data) setClientes(data)
   }
 
   function selectCliente(c: Cliente) {
     setValue('cliente_id', c.id)
-    setClienteLabel(`${c.nombre} — ${c.telefono}`)
+    const nombreCompleto = c.apellido ? `${c.nombre} ${c.apellido}` : c.nombre
+    setClienteLabel(`${nombreCompleto} — ${c.telefono}`)
     setClienteQuery('')
     setClienteOpen(false)
   }
@@ -270,7 +272,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     try {
       const { data, error } = await supabase
         .from('clientes')
-        .insert({ nombre: newClienteNombre, telefono: newClienteTelefono })
+        .insert({ nombre: newClienteNombre, apellido: newClienteApellido || null, telefono: newClienteTelefono })
         .select()
         .single()
       if (error) throw error
@@ -278,6 +280,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
       setClientes((prev) => [data, ...prev])
       setShowNewCliente(false)
       setNewClienteNombre('')
+      setNewClienteApellido('')
       setNewClienteTelefono('')
       toast.success('Cliente creado')
     } catch {
@@ -365,7 +368,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                           onMouseDown={(e) => { e.preventDefault(); selectCliente(c) }}
                         >
                           {c.id === clienteIdValue && <Check className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                          <span className={c.id === clienteIdValue ? 'font-medium' : ''}>{c.nombre}</span>
+                          <span className={c.id === clienteIdValue ? 'font-medium' : ''}>{c.nombre}{c.apellido ? ` ${c.apellido}` : ''}</span>
                           <span className="text-muted-foreground ml-auto shrink-0">{c.telefono}</span>
                         </button>
                       ))}
@@ -384,11 +387,18 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
               </>
             ) : (
               <div className="space-y-2 rounded-lg border p-3">
-                <Input
-                  placeholder="Nombre"
-                  value={newClienteNombre}
-                  onChange={(e) => setNewClienteNombre(e.target.value)}
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Nombre"
+                    value={newClienteNombre}
+                    onChange={(e) => setNewClienteNombre(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Apellido"
+                    value={newClienteApellido}
+                    onChange={(e) => setNewClienteApellido(e.target.value)}
+                  />
+                </div>
                 <Input
                   placeholder="Teléfono (ej: 5491112345678)"
                   value={newClienteTelefono}

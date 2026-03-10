@@ -39,6 +39,7 @@ export interface ProfesionalServicio {
 export interface Cliente {
   id: string
   nombre: string
+  apellido: string | null
   telefono: string
   dni: string | null
   email: string | null
