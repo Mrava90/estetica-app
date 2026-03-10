@@ -293,13 +293,13 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
                       <Button
                         variant={group.allEnviado ? 'default' : 'outline'}
                         size="icon"
-                        className={`h-8 w-8 ${group.allEnviado ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                        className={`h-8 w-8 ${group.allEnviado ? 'bg-green-600 hover:bg-green-700' : 'text-transparent'}`}
                         onClick={() => marcarGrupoEnviado(group)}
                         disabled={enviando === group.key}
                         title={group.allEnviado ? 'Desmarcar' : 'Marcar como enviado'}
                       >
                         {enviando === group.key ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                         ) : (
                           <Check className="h-3.5 w-3.5" />
                         )}
