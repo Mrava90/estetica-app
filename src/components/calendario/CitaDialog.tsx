@@ -110,7 +110,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
       setNewClienteTelefono('')
 
       if (cita) {
-        setClienteLabel(cita.clientes ? `${cita.clientes.nombre} — ${cita.clientes.telefono}` : '')
+        setClienteLabel(cita.clientes ? `${cita.clientes.nombre}${cita.clientes.apellido ? ` ${cita.clientes.apellido}` : ''} — ${cita.clientes.telefono}` : '')
         setServicioLabel(cita.servicios ? `${cita.servicios.nombre} (${cita.servicios.duracion_minutos} min)` : '')
         // Pre-fill precio (keep dirty=true so loading servicios doesn't override)
         setPrecioInput(cita.precio_cobrado != null ? String(cita.precio_cobrado) : '')

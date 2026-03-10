@@ -100,7 +100,7 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit, readOnly }: Props
 
           {/* Nombre + teléfono */}
           <div>
-            <p className="text-xl font-bold leading-tight">{cita.clientes?.nombre || 'Sin cliente'}</p>
+            <p className="text-xl font-bold leading-tight">{cita.clientes ? (cita.clientes.apellido ? `${cita.clientes.nombre} ${cita.clientes.apellido}` : cita.clientes.nombre) : 'Sin cliente'}</p>
             {cita.clientes?.telefono && (
               <p className="text-sm text-muted-foreground mt-0.5">{cita.clientes.telefono}</p>
             )}

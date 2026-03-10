@@ -595,7 +595,7 @@ export function CalendarioResourceDayView({
                   >
                     {isSmall ? (
                       <p className="text-[11px] font-medium truncate leading-snug">
-                        {formatTime(start)} {cita.clientes?.nombre || 'Sin cliente'} - {cita.servicios?.nombre || ''}
+                        {formatTime(start)} {cita.clientes ? (cita.clientes.apellido ? `${cita.clientes.nombre} ${cita.clientes.apellido}` : cita.clientes.nombre) : 'Sin cliente'} - {cita.servicios?.nombre || ''}
                       </p>
                     ) : (
                       <>
@@ -603,7 +603,7 @@ export function CalendarioResourceDayView({
                           {formatTime(start)} - {formatTime(end)}
                         </p>
                         <p className="text-xs font-medium truncate leading-tight mt-0.5">
-                          {cita.clientes?.nombre || 'Sin cliente'}
+                          {cita.clientes ? (cita.clientes.apellido ? `${cita.clientes.nombre} ${cita.clientes.apellido}` : cita.clientes.nombre) : 'Sin cliente'}
                         </p>
                         <p className="text-[11px] font-semibold truncate leading-tight">
                           {cita.servicios?.nombre || 'Sin servicio'}
@@ -662,7 +662,7 @@ export function CalendarioResourceDayView({
           {/* Header */}
           <div className="px-3 pt-2.5 pb-2 border-b bg-muted/40">
             <p className="font-semibold text-foreground leading-tight truncate">
-              {hoveredCita.clientes?.nombre || 'Sin cliente'}
+              {hoveredCita.clientes ? (hoveredCita.clientes.apellido ? `${hoveredCita.clientes.nombre} ${hoveredCita.clientes.apellido}` : hoveredCita.clientes.nombre) : 'Sin cliente'}
             </p>
             <div className="flex items-center gap-1.5 mt-1">
               <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${STATUS_COLORS[hoveredCita.status] || 'bg-gray-100 text-gray-700'}`}>
