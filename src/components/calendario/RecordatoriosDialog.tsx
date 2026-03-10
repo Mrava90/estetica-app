@@ -41,15 +41,15 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
 
   const supabase = createClient()
 
-  const manana = addDays(new Date(), 1)
-  const mananaStr = format(manana, 'yyyy-MM-dd')
-  const mananaLabel = format(manana, "EEEE d 'de' MMMM", { locale: es })
+  const hoy = new Date()
+  const hoyStr = format(hoy, 'yyyy-MM-dd')
+  const hoyLabel = format(hoy, "EEEE d 'de' MMMM", { locale: es })
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const inicio = `${mananaStr}T00:00:00`
-      const fin = `${mananaStr}T23:59:59`
+      const inicio = `${hoyStr}T00:00:00`
+      const fin = `${hoyStr}T23:59:59`
 
       const [citasRes, configRes, recordatoriosRes] = await Promise.all([
         supabase
@@ -90,7 +90,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [mananaStr]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hoyStr]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open) fetchData()
@@ -195,7 +195,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-green-600" />
-            Recordatorios — <span className="capitalize font-normal text-muted-foreground">{mananaLabel}</span>
+            Recordatorios — <span className="capitalize font-normal text-muted-foreground">{hoyLabel}</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -205,7 +205,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
           </div>
         ) : citaGroups.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            No hay turnos para mañana.
+            No hay turnos para hoy.
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
