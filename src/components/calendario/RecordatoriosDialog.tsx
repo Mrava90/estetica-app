@@ -13,7 +13,7 @@ import { MessageCircle, Check, Loader2, Phone } from 'lucide-react'
 interface CitaRecordatorio {
   id: string
   fecha_inicio: string
-  clientes: { nombre: string; telefono: string | null } | null
+  clientes: { nombre: string; apellido: string | null; telefono: string | null } | null
   servicios: { nombre: string } | null
   profesionales: { nombre: string } | null
   recordatorio_enviado: boolean
@@ -23,6 +23,7 @@ interface CitaRecordatorio {
 interface CitaGroup {
   key: string
   clienteNombre: string
+  clienteApellido: string | null
   telefono: string | null
   citas: CitaRecordatorio[]
   allEnviado: boolean
@@ -54,7 +55,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
       const [citasRes, configRes, recordatoriosRes] = await Promise.all([
         supabase
           .from('citas')
-          .select('id, fecha_inicio, clientes(nombre, telefono), servicios(nombre), profesionales(nombre)')
+          .select('id, fecha_inicio, clientes(nombre, apellido, telefono), servicios(nombre), profesionales(nombre)')
           .in('status', ['pendiente', 'confirmada'])
           .gte('fecha_inicio', inicio)
           .lte('fecha_inicio', fin)
@@ -79,7 +80,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
       const citasConEstado: CitaRecordatorio[] = (citasRes.data || []).map((c) => ({
         id: c.id,
         fecha_inicio: c.fecha_inicio,
-        clientes: c.clientes as unknown as { nombre: string; telefono: string | null } | null,
+        clientes: c.clientes as unknown as { nombre: string; apellido: string | null; telefono: string | null } | null,
         servicios: c.servicios as unknown as { nombre: string } | null,
         profesionales: c.profesionales as unknown as { nombre: string } | null,
         recordatorio_enviado: !!recordatoriosMap[c.id],
@@ -105,6 +106,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
         map.set(key, {
           key,
           clienteNombre: cita.clientes?.nombre || '—',
+          clienteApellido: cita.clientes?.apellido || null,
           telefono: cita.clientes?.telefono || null,
           citas: [],
           allEnviado: false,
@@ -237,7 +239,6 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
                   <th className="pb-2 pr-3 font-medium">Cliente</th>
                   <th className="pb-2 pr-3 font-medium">Servicio</th>
                   <th className="pb-2 pr-3 font-medium">Hora</th>
-                  <th className="pb-2 pr-3 font-medium">Teléfono</th>
                   <th className="pb-2 pr-3 font-medium text-center">WhatsApp</th>
                   <th className="pb-2 font-medium text-center">Enviado</th>
                 </tr>
@@ -245,13 +246,26 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
               <tbody className="divide-y">
                 {citaGroups.map((group) => (
                   <tr key={group.key} className={group.allEnviado ? 'opacity-50' : ''}>
-                    <td className="py-3 pr-3 font-medium">
-                      {group.clienteNombre}
-                      {group.citas.length > 1 && (
-                        <Badge variant="secondary" className="ml-1.5 text-[10px]">×{group.citas.length}</Badge>
+                    <td className="py-3 pr-3">
+                      <p className="font-medium leading-tight">
+                        {group.clienteNombre}
+                        {group.citas.length > 1 && (
+                          <Badge variant="secondary" className="ml-1.5 text-[10px]">×{group.citas.length}</Badge>
+                        )}
+                      </p>
+                      {group.clienteApellido && (
+                        <p className="text-xs text-muted-foreground leading-tight">{group.clienteApellido}</p>
+                      )}
+                      {group.telefono ? (
+                        <span className="flex items-center gap-0.5 text-xs text-muted-foreground mt-0.5">
+                          <Phone className="h-2.5 w-2.5" />
+                          {group.telefono}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Sin tel.</span>
                       )}
                     </td>
-                    <td className="py-3 pr-3 text-muted-foreground">
+                    <td className="py-3 pr-3 text-muted-foreground text-xs">
                       {group.citas.length === 1
                         ? (group.citas[0].servicios?.nombre ?? '—')
                         : group.citas.map(c => c.servicios?.nombre ?? '—').join(' + ')
@@ -261,16 +275,6 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
                       <span className="text-xl font-bold tabular-nums text-slate-800 dark:text-slate-200">
                         {format(new Date(group.citas[0].fecha_inicio), 'HH:mm')}
                       </span>
-                    </td>
-                    <td className="py-3 pr-3">
-                      {group.telefono ? (
-                        <span className="flex items-center gap-1 text-muted-foreground">
-                          <Phone className="h-3 w-3" />
-                          {group.telefono}
-                        </span>
-                      ) : (
-                        <Badge variant="outline" className="text-xs text-muted-foreground">Sin tel.</Badge>
-                      )}
                     </td>
                     <td className="py-3 pr-3 text-center">
                       <Button
