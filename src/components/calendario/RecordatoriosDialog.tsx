@@ -143,7 +143,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
       .replace('{hora}', format(new Date(primera.fecha_inicio), 'HH:mm'))
   }
 
-  function abrirWhatsAppGrupo(group: CitaGroup) {
+  async function abrirWhatsAppGrupo(group: CitaGroup) {
     const telefono = group.telefono
     if (!telefono) {
       toast.error('El cliente no tiene teléfono registrado')
@@ -154,6 +154,28 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
     if (!num.startsWith('54')) num = `54${num}`
     const mensaje = encodeURIComponent(buildMensajeGrupo(group))
     window.open(`https://wa.me/${num}?text=${mensaje}`, '_blank')
+
+    // Auto-marcar como enviado al abrir WhatsApp
+    if (!group.allEnviado) {
+      setEnviando(group.key)
+      try {
+        for (const cita of group.citas) {
+          if (!cita.recordatorio_enviado) {
+            await supabase.from('recordatorios').insert({
+              cita_id: cita.id,
+              tipo: 'whatsapp',
+              status: 'enviado',
+              enviado_at: new Date().toISOString(),
+            })
+          }
+        }
+        fetchData()
+      } catch {
+        // fallo silencioso en auto-marcado
+      } finally {
+        setEnviando(null)
+      }
+    }
   }
 
   async function marcarGrupoEnviado(group: CitaGroup) {
@@ -285,7 +307,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
             </table>
 
             <p className="mt-4 text-xs text-muted-foreground">
-              El botón WA abre el chat con el mensaje de recordatorio pre-cargado. Marcá el tick después de enviar.
+              Al hacer clic en WA se abre el chat y se marca automáticamente como enviado. Si el mensaje falló, usá el tick para desmarcarlo y volver a enviarlo.
               {citaGroups.some(g => g.citas.length > 1) && ' Los clientes con múltiples turnos reciben un único mensaje.'}
             </p>
           </div>
