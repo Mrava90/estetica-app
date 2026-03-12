@@ -214,6 +214,9 @@ async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; ca
             <ar:ImpOpEx>0.00</ar:ImpOpEx>
             <ar:ImpIVA>0.00</ar:ImpIVA>
             <ar:ImpTrib>0.00</ar:ImpTrib>
+            <ar:FchServDesde>${p.fecha}</ar:FchServDesde>
+            <ar:FchServHasta>${p.fecha}</ar:FchServHasta>
+            <ar:FchVtoPago>${p.fecha}</ar:FchVtoPago>
             <ar:MonId>PES</ar:MonId>
             <ar:MonCotiz>1</ar:MonCotiz>
           </ar:FECAEDetRequest>
@@ -227,8 +230,9 @@ async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; ca
   const cae = extractTag(xml, 'CAE')
   const caeFch = extractTag(xml, 'CAEFchVto')
   if (!cae) {
-    const obs = extractTag(xml, 'Msg') || extractTag(xml, 'Err') || 'Sin CAE'
-    throw new Error(`ARCA no autorizó el comprobante: ${obs}`)
+    const msgs = extractAllTags(xml, 'Msg')
+    const obs = msgs.join(' | ') || extractTag(xml, 'Err') || 'Sin CAE en respuesta'
+    throw new Error(`ARCA rechazó el comprobante: ${obs}`)
   }
   return { cae, caeFch: caeFch || '', nroCbte: p.nroCbte }
 }
@@ -276,6 +280,15 @@ function extractTag(xml: string, tag: string): string {
   const decoded = decodeEntities(xml)
   const m = decoded.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tag}>`, 'i'))
   return m ? m[1].trim() : ''
+}
+
+function extractAllTags(xml: string, tag: string): string[] {
+  const decoded = decodeEntities(xml)
+  const re = new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tag}>`, 'gi')
+  const results: string[] = []
+  let m
+  while ((m = re.exec(decoded)) !== null) results.push(m[1].trim())
+  return results
 }
 
 // ── Endpoint principal ───────────────────────────────────────────────────
