@@ -177,6 +177,7 @@ interface FacturaParams {
   monto: number           // Total en pesos
   docTipo: number         // 96=DNI, 80=CUIT, 99=Consumidor Final
   docNro: string          // 0 para Consumidor Final
+  condIVA: number         // 5=Consumidor Final, 6=Monotributista, 1=Resp Inscripto (RG 5616, oblig. 01/04/2026)
   descripcion: string
 }
 
@@ -217,6 +218,7 @@ async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; ca
             <ar:FchServDesde>${p.fecha}</ar:FchServDesde>
             <ar:FchServHasta>${p.fecha}</ar:FchServHasta>
             <ar:FchVtoPago>${p.fecha}</ar:FchVtoPago>
+            <ar:CondicionIVAReceptorId>${p.condIVA}</ar:CondicionIVAReceptorId>
             <ar:MonId>PES</ar:MonId>
             <ar:MonCotiz>1</ar:MonCotiz>
           </ar:FECAEDetRequest>
@@ -334,6 +336,9 @@ export async function POST(request: Request) {
   // Determinar tipo/número de documento del receptor
   const docTipo = receptor_dni ? 96 : 99  // 96=DNI, 99=Consumidor Final
   const docNro  = receptor_dni ?? '0'
+  // CondicionIVAReceptor (RG 5616 — obligatorio desde 01/04/2026)
+  // Sin DNI → Consumidor Final (5). Con DNI → asumimos Consumidor Final (5) por default
+  const condIVA = 5
 
   // Fecha en formato YYYYMMDD para ARCA
   const fechaAFIP = fecha.replace(/-/g, '')
@@ -353,6 +358,7 @@ export async function POST(request: Request) {
       monto: parseFloat(monto),
       docTipo,
       docNro,
+      condIVA,
       descripcion,
     })
 
