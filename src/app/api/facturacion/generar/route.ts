@@ -181,8 +181,15 @@ interface FacturaParams {
   descripcion: string
 }
 
+function hoyARCA(): string {
+  // Fecha de hoy en zona horaria Argentina (UTC-3), formato YYYYMMDD
+  const now = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  return now.toISOString().slice(0, 10).replace(/-/g, '')
+}
+
 async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; caeFch: string; nroCbte: number }> {
   const montoStr = p.monto.toFixed(2)
+  const fechaEmision = hoyARCA()  // CbteFch = hoy (req. ARCA: dentro de ±10 días)
 
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
@@ -208,7 +215,7 @@ async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; ca
             <ar:DocNro>${p.docNro}</ar:DocNro>
             <ar:CbteDesde>${p.nroCbte}</ar:CbteDesde>
             <ar:CbteHasta>${p.nroCbte}</ar:CbteHasta>
-            <ar:CbteFch>${p.fecha}</ar:CbteFch>
+            <ar:CbteFch>${fechaEmision}</ar:CbteFch>
             <ar:ImpTotal>${montoStr}</ar:ImpTotal>
             <ar:ImpTotConc>0.00</ar:ImpTotConc>
             <ar:ImpNeto>${montoStr}</ar:ImpNeto>
@@ -217,7 +224,7 @@ async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; ca
             <ar:ImpTrib>0.00</ar:ImpTrib>
             <ar:FchServDesde>${p.fecha}</ar:FchServDesde>
             <ar:FchServHasta>${p.fecha}</ar:FchServHasta>
-            <ar:FchVtoPago>${p.fecha}</ar:FchVtoPago>
+            <ar:FchVtoPago>${fechaEmision}</ar:FchVtoPago>
             <ar:CondicionIVAReceptorId>${p.condIVA}</ar:CondicionIVAReceptorId>
             <ar:MonId>PES</ar:MonId>
             <ar:MonCotiz>1</ar:MonCotiz>
