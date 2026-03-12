@@ -145,10 +145,11 @@ export async function backupClientesToSheets(
 
   if (error) throw new Error(`Error fetching clientes: ${error.message}`)
 
-  const header = ['Nombre', 'Teléfono', 'DNI', 'Email', 'Notas', 'Registrado desde', 'ID']
+  const header = ['Nombre', 'Apellido', 'Teléfono', 'DNI', 'Email', 'Notas', 'Registrado desde', 'ID']
 
   const rows = (clientes || []).map((c) => [
     c.nombre,
+    c.apellido ?? '',
     c.telefono ?? '',
     c.dni ?? '',
     c.email ?? '',
