@@ -46,8 +46,10 @@ export function Sidebar() {
   }
 
   const isAdmin = isAdminEmail(userEmail)
+  const STRICT_ADMIN_HREFS = ['/facturacion', '/informes']
   const visibleItems = NAV_ITEMS.filter(item => {
     if (isAdmin) return true
+    if (STRICT_ADMIN_HREFS.includes(item.href)) return false
     if (item.adminOnly) return permisos[item.href] === true
     return permisos[item.href] !== false
   })
