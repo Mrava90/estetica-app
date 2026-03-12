@@ -851,15 +851,20 @@ export default function ConfiguracionPage() {
                               <TableCell colSpan={4} className="py-3 px-6">
                                 <p className="text-xs font-medium text-muted-foreground mb-2">Páginas visibles</p>
                                 <div className="flex flex-wrap gap-x-6 gap-y-2">
-                                  {NAV_ITEMS.filter(item => !item.adminOnly).map(item => (
+                                  {NAV_ITEMS.map(item => (
                                     <div key={item.href} className="flex items-center gap-2">
                                       <Switch
-                                        checked={userNavPermisos[u.email]?.[item.href] !== false}
+                                        checked={item.adminOnly
+                                          ? userNavPermisos[u.email]?.[item.href] === true
+                                          : userNavPermisos[u.email]?.[item.href] !== false}
                                         onCheckedChange={(v) => toggleUserNavPermiso(u.email, item.href, v)}
                                       />
                                       <div className="flex items-center gap-1.5">
                                         <item.icon className="h-3.5 w-3.5 text-muted-foreground" />
                                         <span className="text-sm">{item.label}</span>
+                                        {item.adminOnly && (
+                                          <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1 rounded">Admin</span>
+                                        )}
                                       </div>
                                     </div>
                                   ))}

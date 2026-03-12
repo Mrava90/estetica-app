@@ -5,13 +5,19 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { NAV_ITEMS, isAdminEmail } from '@/lib/constants'
-import { Scissors } from 'lucide-react'
+import { Scissors, ChevronLeft, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export function Sidebar() {
   const pathname = usePathname()
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [permisos, setPermisos] = useState<Record<string, boolean>>({})
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('sidebar-collapsed') === 'true'
+    }
+    return false
+  })
 
   useEffect(() => {
     const supabase = createClient()
@@ -31,42 +37,72 @@ export function Sidebar() {
     })
   }, [])
 
+  function toggleCollapsed() {
+    setCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem('sidebar-collapsed', String(next))
+      return next
+    })
+  }
+
   const isAdmin = isAdminEmail(userEmail)
   const visibleItems = NAV_ITEMS.filter(item => {
     if (isAdmin) return true
-    if (item.adminOnly) return false
+    if (item.adminOnly) return permisos[item.href] === true
     return permisos[item.href] !== false
   })
 
   return (
-    <aside className="hidden w-64 flex-shrink-0 border-r bg-card lg:block">
+    <aside className={cn(
+      'hidden flex-shrink-0 border-r bg-card lg:block transition-all duration-200',
+      collapsed ? 'w-16' : 'w-64'
+    )}>
       <div className="flex h-full flex-col">
-        <div className="flex h-16 items-center border-b px-6">
-          <div className="flex items-center gap-2">
+        <div className={cn(
+          'flex h-16 items-center border-b',
+          collapsed ? 'justify-center px-2' : 'px-6'
+        )}>
+          {collapsed ? (
             <Scissors className="h-6 w-6 text-primary" />
-            <span className="text-lg font-semibold">Estetica SR</span>
-          </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Scissors className="h-6 w-6 text-primary" />
+              <span className="text-lg font-semibold">Estetica SR</span>
+            </div>
+          )}
         </div>
-        <nav className="flex-1 space-y-1 p-4">
+        <nav className="flex-1 space-y-1 p-2">
           {visibleItems.map((item) => {
             const isActive = pathname.startsWith(item.href)
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                title={collapsed ? item.label : undefined}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  collapsed ? 'justify-center gap-0' : 'gap-3',
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
-                <item.icon className="h-4 w-4" />
-                {item.label}
+                <item.icon className="h-4 w-4 shrink-0" />
+                {!collapsed && item.label}
               </Link>
             )
           })}
         </nav>
+        <div className="border-t p-2">
+          <button
+            onClick={toggleCollapsed}
+            className="flex w-full items-center justify-center rounded-lg px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            {!collapsed && <span className="ml-2 text-sm">Colapsar</span>}
+          </button>
+        </div>
       </div>
     </aside>
   )
