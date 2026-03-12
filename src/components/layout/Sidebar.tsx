@@ -12,12 +12,11 @@ export function Sidebar() {
   const pathname = usePathname()
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [permisos, setPermisos] = useState<Record<string, boolean>>({})
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('sidebar-collapsed') === 'true'
-    }
-    return false
-  })
+  const [collapsed, setCollapsed] = useState(false)
+
+  useEffect(() => {
+    setCollapsed(localStorage.getItem('sidebar-collapsed') === 'true')
+  }, [])
 
   useEffect(() => {
     const supabase = createClient()

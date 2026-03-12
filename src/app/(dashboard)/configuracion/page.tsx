@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Configuracion, Profesional, Horario } from '@/types/database'
 import { formatFechaCorta } from '@/lib/dates'
@@ -755,8 +755,8 @@ export default function ConfiguracionPage() {
                     </TableHeader>
                     <TableBody>
                       {users.map((u) => (
-                        <>
-                          <TableRow key={u.id}>
+                        <React.Fragment key={u.id}>
+                          <TableRow>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 {displayUser(u.email || '')}
@@ -847,7 +847,7 @@ export default function ConfiguracionPage() {
                             </TableCell>
                           </TableRow>
                           {expandedPermUser === u.email && (
-                            <TableRow key={`${u.id}-permisos`} className="bg-muted/30 hover:bg-muted/30">
+                            <TableRow className="bg-muted/30 hover:bg-muted/30">
                               <TableCell colSpan={4} className="py-3 px-6">
                                 <p className="text-xs font-medium text-muted-foreground mb-2">Páginas visibles</p>
                                 <div className="flex flex-wrap gap-x-6 gap-y-2">
@@ -872,7 +872,7 @@ export default function ConfiguracionPage() {
                               </TableCell>
                             </TableRow>
                           )}
-                        </>
+                        </React.Fragment>
                       ))}
                     </TableBody>
                   </Table>
