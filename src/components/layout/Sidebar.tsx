@@ -13,6 +13,7 @@ export function Sidebar() {
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [permisos, setPermisos] = useState<Record<string, boolean>>({})
   const [collapsed, setCollapsed] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
   useEffect(() => {
     setCollapsed(localStorage.getItem('sidebar-collapsed') === 'true')
@@ -53,24 +54,30 @@ export function Sidebar() {
     return permisos[item.href] !== false
   })
 
+  const isExpanded = !collapsed || hovered
+
   return (
-    <aside className={cn(
-      'hidden flex-shrink-0 border-r bg-card lg:block transition-all duration-200',
-      collapsed ? 'w-16' : 'w-64'
-    )}>
+    <aside
+      className={cn(
+        'hidden flex-shrink-0 border-r bg-card lg:block transition-all duration-200',
+        isExpanded ? 'w-64' : 'w-16'
+      )}
+      onMouseEnter={() => collapsed && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div className="flex h-full flex-col">
-        <div className={cn(
-          'flex h-16 items-center border-b',
-          collapsed ? 'justify-center px-2' : 'px-6'
-        )}>
-          {collapsed ? (
-            <Scissors className="h-6 w-6 text-primary" />
-          ) : (
-            <div className="flex items-center gap-2">
-              <Scissors className="h-6 w-6 text-primary" />
-              <span className="text-lg font-semibold">Estetica SR</span>
-            </div>
+        <div className="flex h-16 items-center border-b px-3 gap-2">
+          <Scissors className="h-6 w-6 text-primary shrink-0" />
+          {isExpanded && (
+            <span className="text-lg font-semibold flex-1 truncate">Estetica SR</span>
           )}
+          <button
+            onClick={toggleCollapsed}
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors shrink-0"
+            title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
+          >
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
         <nav className="flex-1 space-y-1 p-2">
           {visibleItems.map((item) => {
@@ -79,31 +86,21 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                title={collapsed ? item.label : undefined}
+                title={!isExpanded ? item.label : undefined}
                 className={cn(
                   'flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                  collapsed ? 'justify-center gap-0' : 'gap-3',
+                  !isExpanded ? 'justify-center' : 'gap-3',
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
-                {!collapsed && item.label}
+                {isExpanded && item.label}
               </Link>
             )
           })}
         </nav>
-        <div className="border-t p-2">
-          <button
-            onClick={toggleCollapsed}
-            className="flex w-full items-center justify-center rounded-lg px-3 py-2 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            title={collapsed ? 'Expandir menú' : 'Colapsar menú'}
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-            {!collapsed && <span className="ml-2 text-sm">Colapsar</span>}
-          </button>
-        </div>
       </div>
     </aside>
   )
