@@ -236,7 +236,6 @@ async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; ca
 </soapenv:Envelope>`
 
   const xml = await soapPost(WSFE_URL, soap, 'http://ar.gov.afip.dif.FEV1/FECAESolicitar')
-  console.log('[ARCA FECAESolicitar] respuesta cruda:', xml.slice(0, 2000))
   const cae = extractTag(xml, 'CAE')
   const caeFch = extractTag(xml, 'CAEFchVto')
   if (!cae) {
