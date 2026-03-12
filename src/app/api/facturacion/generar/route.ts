@@ -21,7 +21,8 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createSign } from 'crypto'
+import { createClient as createServerClient } from '@/lib/supabase/server'
+import forge from 'node-forge'
 import https from 'https'
 import { promisify } from 'util'
 import { gunzip as gunzipCb } from 'zlib'
@@ -56,10 +57,14 @@ function getSupabase() {
  * Genera el LoginTicketRequest XML firmado con la clave privada.
  * ARCA usa CMS (PKCS#7) signed data.
  */
+function toArgTime(d: Date): string {
+  return new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 19) + '-03:00'
+}
+
 function buildLoginTicketRequest(service: string): string {
   const now = new Date()
-  const from = new Date(now.getTime() - 60_000).toISOString().slice(0, 19) + '-03:00'
-  const to   = new Date(now.getTime() + 43_200_000).toISOString().slice(0, 19) + '-03:00'
+  const from = toArgTime(new Date(now.getTime() - 60_000))
+  const to   = toArgTime(new Date(now.getTime() + 43_200_000))
   const uniqueId = Math.floor(Math.random() * 2_000_000_000)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <loginTicketRequest version="1.0">
@@ -73,30 +78,26 @@ function buildLoginTicketRequest(service: string): string {
 }
 
 /**
- * Firma el XML con la clave privada (RSA-SHA256) y lo codifica en base64.
- * ARCA acepta DER-encoded CMS (PKCS#7) pero en la práctica también acepta
- * el XML firmado como base64 usando el flujo simplificado.
- *
- * Para una implementación completa de CMS/PKCS#7 usar la librería `node-forge`.
- * Aquí se implementa la firma directa que funciona con el SDK oficial.
+ * Genera un CMS (PKCS#7) SignedData DER-encoded en base64.
+ * Es el formato que WSAA de ARCA espera en el campo <in0>.
  */
-function signXml(xml: string, privateKeyPem: string, certPem: string): string {
-  const sign = createSign('RSA-SHA256')
-  sign.update(xml)
-  sign.end()
-  const signature = sign.sign(privateKeyPem, 'base64')
+function buildCmsDer(xml: string, certPem: string, keyPem: string): string {
+  const cert = forge.pki.certificateFromPem(certPem)
+  const privateKey = forge.pki.privateKeyFromPem(keyPem)
 
-  // Armamos el CMS simplificado para LoginCms
-  // (En producción usar node-forge para PKCS#7 completo)
-  const xmlB64 = Buffer.from(xml).toString('base64')
-  const certB64 = certPem
-    .replace(/-----BEGIN CERTIFICATE-----/g, '')
-    .replace(/-----END CERTIFICATE-----/g, '')
-    .replace(/\s/g, '')
+  const p7 = forge.pkcs7.createSignedData()
+  p7.content = forge.util.createBuffer(xml, 'utf8')
+  p7.addCertificate(cert)
+  p7.addSigner({
+    key: privateKey,
+    certificate: cert,
+    digestAlgorithm: forge.pki.oids.sha256,
+    authenticatedAttributes: [],
+  })
+  p7.sign()
 
-  return `<cms>
-<![CDATA[${xmlB64}|${certB64}|${signature}]]>
-</cms>`
+  const der = forge.asn1.toDer(p7.toAsn1()).getBytes()
+  return forge.util.encode64(der)
 }
 
 /**
@@ -109,7 +110,7 @@ async function getAuthTicket(): Promise<{ token: string; sign: string }> {
   const key  = process.env.AFIP_KEY!.replace(/\\n/g, '\n')
 
   const xml = buildLoginTicketRequest('wsfe')
-  const signedXml = signXml(xml, key, cert)
+  const cmsBase64 = buildCmsDer(xml, cert, key)
 
   const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
@@ -117,7 +118,7 @@ async function getAuthTicket(): Promise<{ token: string; sign: string }> {
   <soapenv:Header/>
   <soapenv:Body>
     <wsaa:loginCms>
-      <wsaa:in0>${signedXml}</wsaa:in0>
+      <wsaa:in0>${cmsBase64}</wsaa:in0>
     </wsaa:loginCms>
   </soapenv:Body>
 </soapenv:Envelope>`
@@ -260,14 +261,23 @@ function soapPost(url: string, body: string, action: string): Promise<string> {
   })
 }
 
+function decodeEntities(s: string): string {
+  return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"')
+}
+
 function extractTag(xml: string, tag: string): string {
-  const m = xml.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([^<]*)<`, 'i'))
+  const decoded = decodeEntities(xml)
+  const m = decoded.match(new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)<\\/(?:\\w+:)?${tag}>`, 'i'))
   return m ? m[1].trim() : ''
 }
 
 // ── Endpoint principal ───────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  const auth = await createServerClient()
+  const { data: { user } } = await auth.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
   // Verificar credenciales ARCA configuradas
   if (!process.env.AFIP_CUIT || !process.env.AFIP_CERT || !process.env.AFIP_KEY) {
     return NextResponse.json(
