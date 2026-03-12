@@ -1,11 +1,11 @@
 /**
  * GET /api/facturacion/sheet?mes=YYYY-MM
  *
- * Lee la hoja "Afip" del Google Sheet (fuente de verdad para facturación)
- * y la cruza con la tabla `facturas` de Supabase para devolver el estado
+ * Lee las hojas "Afip SSR" y "Afip KW" del Google Sheet, las combina
+ * y las cruza con la tabla `facturas` de Supabase para devolver el estado
  * de cada fila: pendiente / excluida / emitida / error.
  *
- * Formato de la hoja Afip (columnas A-K):
+ * Formato de cada hoja (columnas A-K):
  *   A: Fecha DD/MM (se propaga hacia abajo cuando está vacía)
  *   B: Cliente
  *   C: Servicio
@@ -17,6 +17,10 @@
  *   I: Comisión $
  *   J: Neto local
  *   K: DNI
+ *
+ * Keys:
+ *   afip-ssr-{rowIdx}  → fila de "Afip SSR"
+ *   afip-kw-{rowIdx}   → fila de "Afip KW"
  */
 
 import { NextResponse } from 'next/server'
@@ -58,6 +62,61 @@ function getSupabase() {
   )
 }
 
+interface FilaAfip {
+  afip_row_key: string
+  fecha: string
+  cliente: string
+  servicio: string
+  monto: number
+  dni: string | null
+}
+
+/** Parsea las filas de una hoja y devuelve las del mes objetivo. */
+function parsearFilas(
+  rows: string[][],
+  prefix: string,
+  targetYear: number,
+  targetMonth: number,
+): FilaAfip[] {
+  const filas: FilaAfip[] = []
+  let currentDate: string | null = null
+
+  for (let i = 1; i < rows.length; i++) {  // salteamos fila 0 (encabezado)
+    const row = rows[i]
+    if (!row || row.length < 2) continue
+
+    // Propagación de fecha
+    const dateVal = (row[0] || '').trim()
+    if (dateVal) {
+      const parsed = parseDDMM(dateVal, targetYear)
+      if (parsed) currentDate = parsed
+    }
+    if (!currentDate) continue
+
+    // Filtrar por mes objetivo
+    const [, rowMonthStr] = currentDate.split('-')
+    if (parseInt(rowMonthStr, 10) !== targetMonth) continue
+
+    const cliente = (row[1] || '').trim()
+    const servicio = (row[2] || '').trim()
+    const monto = parseAmount(row[4] || '')  // columna E: ENTRADA
+    const dni = (row[10] || '').trim() || null  // columna K: DNI
+
+    if (!cliente || monto <= 0) continue
+
+    filas.push({
+      afip_row_key: `${prefix}-${i}`,
+      fecha: currentDate,
+      cliente,
+      servicio,
+      monto,
+      dni,
+    })
+  }
+
+  return filas
+}
+
 // ── GET handler ───────────────────────────────────────────────────────────────
 
 export async function GET(request: Request) {
@@ -69,7 +128,7 @@ export async function GET(request: Request) {
   const targetMonth = parseInt(monthStr, 10)
 
   try {
-    // ── 1. Leer hoja "Afip" desde Google Sheets ────────────────────────────
+    // ── 1. Autenticar con Google ───────────────────────────────────────────
     const auth = new GoogleAuth({
       credentials: {
         client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -81,62 +140,28 @@ export async function GET(request: Request) {
     const tokenRes = await client.getAccessToken()
     const token = tokenRes.token
 
-    const range = encodeURIComponent("'Afip'!A:K")
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueRenderOption=FORMATTED_VALUE`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-    const data = await res.json()
-    const rows: string[][] = data.values || []
-
-    // ── 2. Parsear filas ───────────────────────────────────────────────────
-    let currentDate: string | null = null
-
-    interface FilaAfip {
-      rowIdx: number       // índice en rows[] (0-based)
-      afip_row_key: string // "afip-{rowIdx}"
-      fecha: string        // YYYY-MM-DD
-      cliente: string
-      servicio: string
-      monto: number
-      dni: string | null
+    // ── 2. Leer ambas hojas en paralelo ────────────────────────────────────
+    async function fetchSheet(tabName: string): Promise<string[][]> {
+      const range = encodeURIComponent(`'${tabName}'!A:K`)
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueRenderOption=FORMATTED_VALUE`
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      return data.values || []
     }
 
-    const filas: FilaAfip[] = []
+    const [rowsSSR, rowsKW] = await Promise.all([
+      fetchSheet('Afip SSR'),
+      fetchSheet('Afip KW'),
+    ])
 
-    for (let i = 1; i < rows.length; i++) {  // salteamos fila 0 (encabezado)
-      const row = rows[i]
-      if (!row || row.length < 2) continue
+    // ── 3. Parsear filas de cada hoja ──────────────────────────────────────
+    const filasSSR = parsearFilas(rowsSSR, 'afip-ssr', targetYear, targetMonth)
+    const filasKW  = parsearFilas(rowsKW,  'afip-kw',  targetYear, targetMonth)
 
-      // Propagación de fecha
-      const dateVal = (row[0] || '').trim()
-      if (dateVal) {
-        const parsed = parseDDMM(dateVal, targetYear)
-        if (parsed) currentDate = parsed
-      }
-      if (!currentDate) continue
+    // Combinar y ordenar por fecha
+    const filas = [...filasSSR, ...filasKW].sort((a, b) => a.fecha.localeCompare(b.fecha))
 
-      // Filtrar por mes objetivo
-      const [, rowMonthStr] = currentDate.split('-')
-      if (parseInt(rowMonthStr, 10) !== targetMonth) continue
-
-      const cliente = (row[1] || '').trim()
-      const servicio = (row[2] || '').trim()
-      const monto = parseAmount(row[4] || '')  // columna E: ENTRADA
-      const dni = (row[10] || '').trim() || null  // columna K: DNI
-
-      if (!cliente || monto <= 0) continue
-
-      filas.push({
-        rowIdx: i,
-        afip_row_key: `afip-${i}`,
-        fecha: currentDate,
-        cliente,
-        servicio,
-        monto,
-        dni,
-      })
-    }
-
-    // ── 3. Cruzar con tabla facturas ───────────────────────────────────────
+    // ── 4. Cruzar con tabla facturas ───────────────────────────────────────
     const supabase = getSupabase()
     const keys = filas.map(f => f.afip_row_key)
 
@@ -151,7 +176,7 @@ export async function GET(request: Request) {
       if (f.afip_row_key) facturaMap[f.afip_row_key] = f
     }
 
-    // ── 4. Combinar y devolver ─────────────────────────────────────────────
+    // ── 5. Combinar y devolver ─────────────────────────────────────────────
     const result = filas.map(fila => {
       const factura = facturaMap[fila.afip_row_key] ?? null
       return {

@@ -20,6 +20,7 @@ import {
   CreditCard,
   Send,
   Search,
+  FileText,
 } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -95,7 +96,9 @@ export default function FacturacionPage() {
   const [testResult, setTestResult] = useState<{ ok: boolean; checks: Record<string, { ok: boolean; detail: string }>; entorno?: string } | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
-  const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'emitida'>('todos')
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'emitida' | 'excluida'>('todos')
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+  const [bulkProgreso, setBulkProgreso] = useState<{ done: number; total: number; errores: number } | null>(null)
 
   async function testConexion() {
     setTestLoading(true)
@@ -250,6 +253,91 @@ export default function FacturacionPage() {
     setMode(item.afip_row_key, 'idle')
   }
 
+  /** Enviar múltiples a ARCA en secuencia */
+  async function handleBulkEnviarARCA() {
+    const keys = [...seleccionados]
+    const itemsAEnviar = pendientes.filter(i => keys.includes(i.afip_row_key))
+    if (itemsAEnviar.length === 0) return
+
+    setSeleccionados(new Set())
+    setBulkProgreso({ done: 0, total: itemsAEnviar.length, errores: 0 })
+
+    let errores = 0
+    for (let i = 0; i < itemsAEnviar.length; i++) {
+      const item = itemsAEnviar[i]
+      setMode(item.afip_row_key, 'loading')
+      clearErr(item.afip_row_key)
+      try {
+        const res = await fetch('/api/facturacion/generar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            afip_row_key:    item.afip_row_key,
+            receptor_nombre: item.cliente_nombre,
+            receptor_dni:    item.cliente_dni,
+            monto:           item.monto,
+            fecha:           item.fecha,
+            descripcion:     item.servicio_nombre || 'Servicio de estética',
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok || json.error) {
+          setErr(item.afip_row_key, json.error || `Error HTTP ${res.status}`)
+          errores++
+        }
+      } catch {
+        setErr(item.afip_row_key, 'No se pudo conectar con el servidor.')
+        errores++
+      }
+      setMode(item.afip_row_key, 'idle')
+      setBulkProgreso({ done: i + 1, total: itemsAEnviar.length, errores })
+    }
+
+    await fetchData()
+    setBulkProgreso(null)
+  }
+
+  /** Eliminar múltiples en secuencia */
+  async function handleBulkExcluir() {
+    const keys = [...seleccionados]
+    const itemsAExcluir = pendientes.filter(i => keys.includes(i.afip_row_key))
+    if (itemsAExcluir.length === 0) return
+
+    setSeleccionados(new Set())
+    setBulkProgreso({ done: 0, total: itemsAExcluir.length, errores: 0 })
+
+    let errores = 0
+    for (let i = 0; i < itemsAExcluir.length; i++) {
+      const item = itemsAExcluir[i]
+      setMode(item.afip_row_key, 'loading')
+      clearErr(item.afip_row_key)
+
+      let dbErr: string | null = null
+      if (item.factura_id) {
+        const { error } = await supabase.from('facturas').update({ estado: 'excluida' }).eq('id', item.factura_id)
+        if (error) dbErr = error.message
+      } else {
+        const { error } = await supabase.from('facturas').insert({
+          afip_row_key:    item.afip_row_key,
+          fecha:           item.fecha,
+          monto:           item.monto,
+          descripcion:     item.servicio_nombre,
+          receptor_nombre: item.cliente_nombre,
+          receptor_dni:    item.cliente_dni,
+          estado:          'excluida',
+        })
+        if (error) dbErr = error.message
+      }
+
+      if (dbErr) { setErr(item.afip_row_key, dbErr); errores++ }
+      setMode(item.afip_row_key, 'idle')
+      setBulkProgreso({ done: i + 1, total: itemsAExcluir.length, errores })
+    }
+
+    await fetchData()
+    setBulkProgreso(null)
+  }
+
   /** Restaurar excluida */
   async function handleRestaurar(item: ItemFacturacion) {
     if (!item.factura_id) return
@@ -272,10 +360,11 @@ export default function FacturacionPage() {
       !busqueda || i.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase())
     )
   }
-  const pendientesFiltrados = filtroEstado !== 'emitida'  ? aplicarFiltros([...pendientes, ...conError]) : []
-  const emitidasFiltradas   = filtroEstado !== 'pendiente' ? aplicarFiltros(emitidas)  : []
+  const pendientesFiltrados = (filtroEstado === 'todos' || filtroEstado === 'pendiente') ? aplicarFiltros([...pendientes, ...conError]) : []
+  const emitidasFiltradas   = (filtroEstado === 'todos' || filtroEstado === 'emitida')   ? aplicarFiltros(emitidas)   : []
+  const excluidasFiltradas  = (filtroEstado === 'todos' || filtroEstado === 'excluida')  ? aplicarFiltros(excluidas)  : []
 
-  const totalMonto     = items.filter(i => i.factura_estado !== 'excluida').reduce((s, i) => s + i.monto, 0)
+  const totalMonto     = items.reduce((s, i) => s + i.monto, 0)
   const montoEmitido   = emitidas.reduce((s, i) => s + i.monto, 0)
   const montoPendiente = [...pendientes, ...conError].reduce((s, i) => s + i.monto, 0)
 
@@ -316,19 +405,32 @@ export default function FacturacionPage() {
           {/* Monto */}
           <p className="font-bold text-sm text-right">{formatPrecio(item.monto)}</p>
           {/* Estado */}
-          <div className="flex flex-col items-end gap-0.5 min-w-[100px]">
-            {item.factura_cae ? (
-              <>
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end gap-0.5 min-w-[100px]">
+              {item.factura_cae ? (
+                <>
+                  <span className="flex items-center gap-1 text-xs font-semibold text-green-700 whitespace-nowrap">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> N°{item.factura_numero}
+                  </span>
+                  <span className="font-mono text-[10px] text-green-600 tracking-tight">{item.factura_cae}</span>
+                </>
+              ) : (
                 <span className="flex items-center gap-1 text-xs font-semibold text-green-700 whitespace-nowrap">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> N°{item.factura_numero}
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Facturada
+                  <span className="rounded bg-green-200 px-1 py-0.5 text-[10px] font-medium text-green-800">Manual</span>
                 </span>
-                <span className="font-mono text-[10px] text-green-600 tracking-tight">{item.factura_cae}</span>
-              </>
-            ) : (
-              <span className="flex items-center gap-1 text-xs font-semibold text-green-700 whitespace-nowrap">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Facturada
-                <span className="rounded bg-green-200 px-1 py-0.5 text-[10px] font-medium text-green-800">Manual</span>
-              </span>
+              )}
+            </div>
+            {item.factura_id && item.factura_cae && (
+              <a
+                href={`/facturacion/comprobante/${item.factura_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Ver / descargar comprobante PDF"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+              </a>
             )}
           </div>
         </li>
@@ -455,7 +557,18 @@ export default function FacturacionPage() {
 
     // ── Pendiente (idle) ─────────────────────────────────────────────────────
     return (
-      <li key={k} className="grid grid-cols-[2.25rem_1fr_auto_auto] md:grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 rounded-xl border bg-card px-4 py-3 hover:bg-muted/20 transition-colors">
+      <li key={k} className="grid grid-cols-[1.25rem_2.25rem_1fr_auto_auto] md:grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 rounded-xl border bg-card px-4 py-3 hover:bg-muted/20 transition-colors">
+
+        {/* Checkbox */}
+        <input type="checkbox"
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+          checked={seleccionados.has(k)}
+          onChange={e => setSeleccionados(prev => {
+            const next = new Set(prev)
+            e.target.checked ? next.add(k) : next.delete(k)
+            return next
+          })}
+        />
 
         {/* Avatar */}
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
@@ -576,13 +689,28 @@ export default function FacturacionPage() {
 
             {/* Filtro de estado */}
             <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
-              {([['todos', 'Todos'], ['pendiente', 'Pendientes'], ['emitida', 'Facturadas']] as const).map(([val, label]) => (
-                <button key={val}
-                  onClick={() => setFiltroEstado(val)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === val ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-                  {label}
+              <button onClick={() => setFiltroEstado('todos')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'todos' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                Todos
+              </button>
+              <button onClick={() => setFiltroEstado('pendiente')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'pendiente' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                Pendientes
+              </button>
+              <button onClick={() => setFiltroEstado('emitida')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'emitida' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                <span className="block">Facturadas</span>
+                {montoEmitido > 0 && (
+                  <span className="block text-[10px] font-normal text-green-600">{formatPrecio(montoEmitido)}</span>
+                )}
+              </button>
+              {excluidas.length > 0 && (
+                <button onClick={() => setFiltroEstado('excluida')}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'excluida' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                  <span className="block">Eliminadas</span>
+                  <span className="block text-[10px] font-normal">{excluidas.length}</span>
                 </button>
-              ))}
+              )}
             </div>
           </div>
 
@@ -592,7 +720,7 @@ export default function FacturacionPage() {
               <div className="rounded-xl border bg-card px-4 py-3">
                 <p className="text-xs text-muted-foreground">Total MP del mes</p>
                 <p className="text-xl font-bold text-blue-700">{formatPrecio(totalMonto)}</p>
-                <p className="text-xs text-muted-foreground">{items.length - excluidas.length} ítems</p>
+                <p className="text-xs text-muted-foreground">{items.length} ítems</p>
               </div>
               <div className="rounded-xl border bg-card px-4 py-3">
                 <p className="text-xs text-muted-foreground">Pendientes</p>
@@ -625,7 +753,7 @@ export default function FacturacionPage() {
               <p className="font-medium">Sin registros en la hoja "Afip"</p>
               <p className="text-sm mt-1">No hay filas para este mes en el Google Sheet.</p>
             </div>
-          ) : (pendientesFiltrados.length === 0 && emitidasFiltradas.length === 0 && excluidas.length === 0) ? (
+          ) : (pendientesFiltrados.length === 0 && emitidasFiltradas.length === 0 && excluidasFiltradas.length === 0) ? (
             <div className="py-12 text-center text-muted-foreground">
               <Search className="h-8 w-8 mx-auto mb-3 opacity-30" />
               <p className="font-medium">Sin resultados</p>
@@ -636,7 +764,20 @@ export default function FacturacionPage() {
 
               {/* Encabezado de columnas (desktop) — pendientes */}
               {pendientesFiltrados.length > 0 && (
-                <div className="hidden md:grid grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="hidden md:grid grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <input type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                    checked={pendientesFiltrados.length > 0 && pendientesFiltrados.every(i => seleccionados.has(i.afip_row_key))}
+                    onChange={e => {
+                      const keys = pendientesFiltrados.map(i => i.afip_row_key)
+                      setSeleccionados(prev => {
+                        const next = new Set(prev)
+                        if (e.target.checked) keys.forEach(k => next.add(k))
+                        else keys.forEach(k => next.delete(k))
+                        return next
+                      })
+                    }}
+                  />
                   <span />
                   <span>Cliente</span>
                   <span>DNI</span>
@@ -672,8 +813,14 @@ export default function FacturacionPage() {
                 </div>
               )}
 
-              {/* Excluidas (colapsable) */}
-              {excluidas.length > 0 && (
+              {/* Excluidas */}
+              {excluidasFiltradas.length > 0 && filtroEstado !== 'todos' && (
+                <div className="space-y-2 pt-1">
+                  <ul className="space-y-2">{excluidasFiltradas.map(item => renderFila(item))}</ul>
+                </div>
+              )}
+              {/* Excluidas colapsable (solo en vista "todos") */}
+              {excluidas.length > 0 && filtroEstado === 'todos' && (
                 <div className="space-y-2 pt-1">
                   <button onClick={() => setMostrarExcluidas(v => !v)}
                     className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1">
@@ -689,6 +836,44 @@ export default function FacturacionPage() {
           )}
         </>
       )}
+
+      {/* Barra de acción bulk */}
+      {bulkProgreso ? (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl bg-gray-900 px-5 py-3 shadow-2xl text-white">
+          <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+          <span className="text-sm font-medium">
+            Procesando {bulkProgreso.done}/{bulkProgreso.total}…
+            {bulkProgreso.errores > 0 && (
+              <span className="text-red-400 ml-2">({bulkProgreso.errores} error{bulkProgreso.errores > 1 ? 'es' : ''})</span>
+            )}
+          </span>
+        </div>
+      ) : seleccionados.size > 0 ? (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-2xl bg-gray-900 px-5 py-3 shadow-2xl text-white">
+          <span className="text-sm font-medium">
+            {seleccionados.size} seleccionada{seleccionados.size > 1 ? 's' : ''}
+            {' · '}
+            {formatPrecio([...seleccionados].reduce((sum, key) => {
+              const it = pendientes.find(i => i.afip_row_key === key)
+              return sum + (it?.monto ?? 0)
+            }, 0))}
+          </span>
+          <button onClick={handleBulkEnviarARCA}
+            className="flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold hover:bg-blue-400 transition-colors">
+            <Send className="h-4 w-4" />
+            Enviar a ARCA
+          </button>
+          <button onClick={handleBulkExcluir}
+            className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-500 transition-colors">
+            <XCircle className="h-4 w-4" />
+            Eliminar
+          </button>
+          <button onClick={() => setSeleccionados(new Set())}
+            className="text-xs text-gray-400 hover:text-white transition-colors">
+            Cancelar
+          </button>
+        </div>
+      ) : null}
 
       {/* ── TAB: Configuración ───────────────────────────────────────────────── */}
       {tab === 'configuracion' && (
