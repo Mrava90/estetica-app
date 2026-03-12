@@ -29,6 +29,12 @@ import { gunzip as gunzipCb } from 'zlib'
 
 const gunzip = promisify(gunzipCb)
 
+// AFIP usa DH de 1024 bits — OpenSSL 3.x lo rechaza con SECLEVEL=2 (default).
+// Bajamos a SECLEVEL=1 para este agente específico.
+const AFIP_AGENT = new https.Agent({
+  ciphers: 'DEFAULT@SECLEVEL=1',
+})
+
 // ── Endpoints ─────────────────────────────────────────────────────────────
 
 const isProd = process.env.AFIP_PROD === 'true'
@@ -237,6 +243,7 @@ function soapPost(url: string, body: string, action: string): Promise<string> {
       hostname: parsed.hostname,
       path: parsed.pathname,
       method: 'POST',
+      agent: AFIP_AGENT,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
         'Content-Length': buf.byteLength,

@@ -16,6 +16,8 @@ import { gunzip as gunzipCb } from 'zlib'
 
 const gunzip = promisify(gunzipCb)
 
+const AFIP_AGENT = new https.Agent({ ciphers: 'DEFAULT@SECLEVEL=1' })
+
 const isProd = process.env.AFIP_PROD === 'true'
 const WSAA_URL = isProd
   ? 'https://wsaa.afip.gov.ar/ws/services/LoginCms'
@@ -66,6 +68,7 @@ function soapPost(url: string, body: string, action: string): Promise<string> {
       hostname: parsed.hostname,
       path: parsed.pathname,
       method: 'POST',
+      agent: AFIP_AGENT,
       headers: {
         'Content-Type': 'text/xml; charset=utf-8',
         'Content-Length': buf.byteLength,
