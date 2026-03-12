@@ -117,6 +117,7 @@ export default function ClientesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
+                <TableHead>Apellido</TableHead>
                 <TableHead>Teléfono</TableHead>
                 <TableHead>DNI</TableHead>
                 <TableHead>Email</TableHead>
@@ -127,14 +128,15 @@ export default function ClientesPage() {
             <TableBody>
               {clientes.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {search ? 'No se encontraron clientes' : 'No hay clientes registrados'}
                   </TableCell>
                 </TableRow>
               )}
               {clientes.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.nombre}{c.apellido ? ` ${c.apellido}` : ''}</TableCell>
+                  <TableCell className="font-medium">{c.nombre}</TableCell>
+                  <TableCell>{c.apellido || '-'}</TableCell>
                   <TableCell>{c.telefono}</TableCell>
                   <TableCell>{c.dni || '-'}</TableCell>
                   <TableCell>{c.email || '-'}</TableCell>
