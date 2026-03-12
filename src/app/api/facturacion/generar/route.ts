@@ -159,7 +159,7 @@ async function getUltimoComprobante(
   </soapenv:Body>
 </soapenv:Envelope>`
 
-  const xml = await soapPost(WSFE_URL, soap, 'FECompUltimoAutorizado')
+  const xml = await soapPost(WSFE_URL, soap, 'http://ar.gov.afip.dif.FEV1/FECompUltimoAutorizado')
   const nro = parseInt(extractTag(xml, 'CbteNro') || '0', 10)
   return nro
 }
@@ -226,13 +226,15 @@ async function autorizarComprobante(p: FacturaParams): Promise<{ cae: string; ca
   </soapenv:Body>
 </soapenv:Envelope>`
 
-  const xml = await soapPost(WSFE_URL, soap, 'FECAESolicitar')
+  const xml = await soapPost(WSFE_URL, soap, 'http://ar.gov.afip.dif.FEV1/FECAESolicitar')
+  console.log('[ARCA FECAESolicitar] respuesta cruda:', xml.slice(0, 2000))
   const cae = extractTag(xml, 'CAE')
   const caeFch = extractTag(xml, 'CAEFchVto')
   if (!cae) {
     const msgs = extractAllTags(xml, 'Msg')
-    const obs = msgs.join(' | ') || extractTag(xml, 'Err') || 'Sin CAE en respuesta'
-    throw new Error(`ARCA rechazó el comprobante: ${obs}`)
+    const fault = extractTag(xml, 'faultstring')
+    const obs = msgs.join(' | ') || fault || extractTag(xml, 'Err') || xml.slice(0, 500)
+    throw new Error(`ARCA rechazó: ${obs}`)
   }
   return { cae, caeFch: caeFch || '', nroCbte: p.nroCbte }
 }
