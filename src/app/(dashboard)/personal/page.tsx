@@ -13,11 +13,13 @@ import { Plus, Minus, Copy, Save } from 'lucide-react'
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const DIAS_MAP = [1, 2, 3, 4, 5, 6, 0] // Lun=1 ... Dom=0
 
-// Generate time options every 30 min from 08:00 to 21:00
+// Generate time options every 15 min from 08:00 to 21:00
 const TIME_OPTIONS: string[] = []
 for (let h = 8; h <= 21; h++) {
-  TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:00`)
-  if (h < 21) TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:30`)
+  for (const m of [0, 15, 30, 45]) {
+    if (h === 21 && m > 0) break
+    TIME_OPTIONS.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+  }
 }
 
 interface DaySchedule {
@@ -167,8 +169,9 @@ export default function PersonalPage() {
 
       toast.success('Horarios guardados')
       setHasChanges(false)
-    } catch {
-      toast.error('Error al guardar horarios')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Error desconocido'
+      toast.error(`Error al guardar: ${msg}`)
     } finally {
       setSaving(false)
     }

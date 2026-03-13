@@ -703,6 +703,7 @@ export function CalendarioView() {
 
       <RecordatoriosDialog
         open={recordatoriosOpen}
+        fecha={fecha}
         onClose={() => {
           setRecordatoriosOpen(false)
           fetchRecordatoriosPendientes()

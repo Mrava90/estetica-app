@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { MessageCircle, Check, Loader2, Phone } from 'lucide-react'
+import { MessageCircle, Check, Loader2, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
+import { addDays, subDays } from 'date-fns'
 
 interface CitaRecordatorio {
   id: string
@@ -31,25 +32,34 @@ interface CitaGroup {
 interface Props {
   open: boolean
   onClose: () => void
+  fecha?: Date
 }
 
-export function RecordatoriosDialog({ open, onClose }: Props) {
+export function RecordatoriosDialog({ open, onClose, fecha: fechaProp }: Props) {
   const [citas, setCitas] = useState<CitaRecordatorio[]>([])
   const [mensajeTemplate, setMensajeTemplate] = useState('')
   const [loading, setLoading] = useState(false)
   const [enviando, setEnviando] = useState<string | null>(null)
+  const [fechaSeleccionada, setFechaSeleccionada] = useState<Date>(fechaProp ?? new Date())
 
   const supabase = createClient()
 
+  useEffect(() => {
+    if (fechaProp) setFechaSeleccionada(fechaProp)
+  }, [fechaProp])
+
+  const fechaStr = format(fechaSeleccionada, 'yyyy-MM-dd')
   const hoy = new Date()
-  const hoyStr = format(hoy, 'yyyy-MM-dd')
-  const hoyLabel = format(hoy, "EEEE d 'de' MMMM", { locale: es })
+  const esHoy = format(fechaSeleccionada, 'yyyy-MM-dd') === format(hoy, 'yyyy-MM-dd')
+  const fechaLabel = esHoy
+    ? `Hoy — ${format(fechaSeleccionada, "EEEE d 'de' MMMM", { locale: es })}`
+    : format(fechaSeleccionada, "EEEE d 'de' MMMM", { locale: es })
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const inicio = `${hoyStr}T00:00:00`
-      const fin = `${hoyStr}T23:59:59`
+      const inicio = `${fechaStr}T00:00:00`
+      const fin = `${fechaStr}T23:59:59`
 
       const [citasRes, configRes] = await Promise.all([
         supabase
@@ -79,11 +89,11 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [hoyStr]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fechaStr]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (open) fetchData()
-  }, [open, fetchData])
+  }, [open, fetchData, fechaSeleccionada])
 
   // Agrupar por cliente (teléfono o nombre) para no enviar mensajes duplicados
   const citaGroups = useMemo((): CitaGroup[] => {
@@ -191,8 +201,31 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-green-600" />
-            Recordatorios — <span className="capitalize font-normal text-muted-foreground">{hoyLabel}</span>
+            Recordatorios
           </DialogTitle>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={() => setFechaSeleccionada(d => subDays(d, 1))}
+              className="rounded p-1 hover:bg-muted transition-colors"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="capitalize text-sm text-muted-foreground flex-1 text-center">{fechaLabel}</span>
+            <button
+              onClick={() => setFechaSeleccionada(d => addDays(d, 1))}
+              className="rounded p-1 hover:bg-muted transition-colors"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            {!esHoy && (
+              <button
+                onClick={() => setFechaSeleccionada(new Date())}
+                className="text-xs text-primary hover:underline ml-1"
+              >
+                Hoy
+              </button>
+            )}
+          </div>
         </DialogHeader>
 
         {loading ? (
@@ -201,7 +234,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
           </div>
         ) : citaGroups.length === 0 ? (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            No hay turnos para hoy.
+            No hay turnos para este día.
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">

@@ -115,6 +115,49 @@ export function CalendarioResourceDayView({
     return result
   }, [citasPorProfesional])
 
+  // Franjas fuera de horario laboral por profesional (para sombrear el calendario)
+  const fueraDeHorarioPorProfesional = useMemo(() => {
+    const diaSemana = fecha.getDay() // 0=Dom, 1=Lun, ...
+    const result = new Map<string, { top: number; height: number }[]>()
+    profesionales.forEach((prof) => {
+      const horariosProf = (horarios[prof.id] || []).filter((h) => h.dia_semana === diaSemana)
+      if (horariosProf.length === 0) {
+        // Día libre: sombrear todo
+        result.set(prof.id, [{ top: 0, height: (HORA_FIN - HORA_INICIO) * HORA_HEIGHT }])
+        return
+      }
+      // Ordenar bloques y calcular huecos
+      const bloques = horariosProf
+        .map((h) => {
+          const [startH, startM] = h.hora_inicio.split(':').map(Number)
+          const [endH, endM] = h.hora_fin.split(':').map(Number)
+          return { start: startH * 60 + startM, end: endH * 60 + endM }
+        })
+        .sort((a, b) => a.start - b.start)
+      const franjas: { top: number; height: number }[] = []
+      const calStart = HORA_INICIO * 60
+      const calEnd = HORA_FIN * 60
+      let cursor = calStart
+      for (const bloque of bloques) {
+        if (bloque.start > cursor) {
+          franjas.push({
+            top: ((cursor - calStart) / 60) * HORA_HEIGHT,
+            height: ((bloque.start - cursor) / 60) * HORA_HEIGHT,
+          })
+        }
+        cursor = Math.max(cursor, bloque.end)
+      }
+      if (cursor < calEnd) {
+        franjas.push({
+          top: ((cursor - calStart) / 60) * HORA_HEIGHT,
+          height: ((calEnd - cursor) / 60) * HORA_HEIGHT,
+        })
+      }
+      result.set(prof.id, franjas)
+    })
+    return result
+  }, [horarios, profesionales, fecha])
+
   const bloqueosPorProfesional = useMemo(() => {
     const map = new Map<string, Bloqueo[]>()
     profesionales.forEach((p) => map.set(p.id, []))
@@ -538,6 +581,20 @@ export function CalendarioResourceDayView({
                   key={`${hour}-half`}
                   className="absolute left-0 right-0 border-t border-border/30 pointer-events-none"
                   style={{ top: (hour - HORA_INICIO) * HORA_HEIGHT + HORA_HEIGHT / 2 }}
+                />
+              ))}
+
+              {/* Fuera de horario laboral */}
+              {fueraDeHorarioPorProfesional.get(prof.id)?.map((franja, i) => (
+                <div
+                  key={`off-${i}`}
+                  className="absolute left-0 right-0 pointer-events-none z-0"
+                  style={{
+                    top: `${franja.top}px`,
+                    height: `${franja.height}px`,
+                    background: 'repeating-linear-gradient(135deg, transparent, transparent 6px, rgba(128,128,128,0.07) 6px, rgba(128,128,128,0.07) 12px)',
+                    backgroundColor: 'rgba(128,128,128,0.06)',
+                  }}
                 />
               ))}
 
