@@ -8,6 +8,11 @@ export const dynamic = 'force-dynamic'
 export const metadata: Metadata = {
   title: 'Ka Wirth Ballester',
   description: 'Reservá tu turno online',
+  openGraph: {
+    title: 'Ka Wirth Ballester',
+    description: 'Reservá tu turno online',
+    type: 'website',
+  },
 }
 
 export default function ReservarLayout({ children }: { children: React.ReactNode }) {
