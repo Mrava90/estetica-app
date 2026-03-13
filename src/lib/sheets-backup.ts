@@ -109,7 +109,7 @@ export async function backupCalendarioToSheets(
     })
     return [
       fecha, hora,
-      c.clientes?.nombre ?? '',
+      c.clientes ? `${c.clientes.nombre}${c.clientes.apellido ? ` ${c.clientes.apellido}` : ''}` : '',
       c.clientes?.telefono ?? '',
       c.clientes?.email ?? '',
       c.servicios?.nombre ?? '',
