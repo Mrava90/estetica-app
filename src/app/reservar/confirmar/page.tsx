@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { formatFechaHora, formatPrecio } from '@/lib/dates'
+import { formatFechaHora, formatPrecio, capitalizeWords } from '@/lib/dates'
 import type { Servicio, Profesional } from '@/types/database'
 import { NailIcon } from '@/components/reservar/ReservarHeader'
 import { ArrowLeft, CalendarDays, User } from 'lucide-react'
@@ -67,21 +67,21 @@ function ConfirmarContent() {
         clienteId = existingCliente.id
         // Update name and DNI if provided
         await supabase.from('clientes').update({
-          nombre,
-          apellido: apellido.trim() || null,
+          nombre: capitalizeWords(nombre),
+          apellido: apellido.trim() ? capitalizeWords(apellido) : null,
           ...(dni.trim() ? { dni: dni.trim() } : {}),
         }).eq('id', clienteId)
       } else {
         const { data: newCliente, error: clienteError } = await supabase
           .from('clientes')
-          .insert({ nombre, apellido: apellido.trim() || null, telefono, ...(dni.trim() ? { dni: dni.trim() } : {}) })
+          .insert({ nombre: capitalizeWords(nombre), apellido: apellido.trim() ? capitalizeWords(apellido) : null, telefono, ...(dni.trim() ? { dni: dni.trim() } : {}) })
           .select('id')
           .single()
         if (clienteError || !newCliente) throw clienteError
         clienteId = newCliente.id
       }
 
-      const { error: citaError } = await supabase.from('citas').insert({
+      const { data: citaData, error: citaError } = await supabase.from('citas').insert({
         cliente_id: clienteId,
         profesional_id: profesionalId,
         servicio_id: servicioId,
@@ -90,11 +90,17 @@ function ConfirmarContent() {
         precio_cobrado: servicio?.precio_efectivo || null,
         origen: 'online',
         status: 'pendiente',
-      })
+      }).select('id').single()
 
       if (citaError) throw citaError
 
-      router.push(`/reservar/exito?fecha=${fechaInicio}`)
+      // Si es reprogramación, cancelar la cita original
+      const reprogramarId = searchParams.get('reprogramar')
+      if (reprogramarId) {
+        await supabase.from('citas').update({ status: 'cancelada' }).eq('id', reprogramarId)
+      }
+
+      router.push(`/reservar/exito?fecha=${fechaInicio}&cita=${citaData.id}`)
     } catch {
       toast.error('Error al confirmar la cita. Intentá de nuevo.')
     } finally {

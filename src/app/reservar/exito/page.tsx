@@ -4,11 +4,12 @@ import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { formatFechaHora } from '@/lib/dates'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Calendar, X } from 'lucide-react'
 
 function ExitoContent() {
   const searchParams = useSearchParams()
   const fecha = searchParams.get('fecha')
+  const citaId = searchParams.get('cita')
 
   return (
     <div className="flex flex-col items-center space-y-6 py-8">
@@ -18,22 +19,38 @@ function ExitoContent() {
 
       <div className="text-center space-y-2">
         <h1 className="text-2xl font-bold text-white drop-shadow-md">¡Turno confirmado!</h1>
-        <p className="text-white/80">
-          Tu turno ha sido reservado exitosamente
-        </p>
+        <p className="text-white/80">Tu turno ha sido reservado exitosamente</p>
       </div>
 
       {fecha && (
-        <div className="rounded-xl border border-gray-900 bg-white p-6 text-center shadow-sm">
+        <div className="rounded-xl border border-gray-900 bg-white p-6 text-center shadow-sm w-full max-w-sm">
           <p className="text-sm text-gray-500">Fecha del turno</p>
           <p className="text-lg font-semibold text-gray-900 mt-1">{formatFechaHora(fecha)}</p>
         </div>
       )}
 
-      <p className="text-sm text-white/70 text-center max-w-sm">
-        Te enviaremos un recordatorio por WhatsApp antes de tu cita.
-        Si necesitás cancelar o cambiar el turno, contactanos.
-      </p>
+      {citaId && (
+        <div className="rounded-xl border border-fuchsia-200 bg-white p-5 w-full max-w-sm space-y-3">
+          <p className="text-sm font-semibold text-gray-700 text-center">¿Necesitás cambiar o cancelar?</p>
+          <div className="flex gap-2">
+            <Link
+              href={`/reservar/mi-turno/${citaId}`}
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all"
+            >
+              <Calendar className="h-4 w-4" />
+              Reprogramar
+            </Link>
+            <Link
+              href={`/reservar/mi-turno/${citaId}`}
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
+            >
+              <X className="h-4 w-4" />
+              Cancelar
+            </Link>
+          </div>
+          <p className="text-xs text-gray-400 text-center">Guardá este link para gestionar tu turno</p>
+        </div>
+      )}
 
       <Link
         href="/reservar"
