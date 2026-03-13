@@ -1,8 +1,14 @@
+import type { Metadata } from 'next'
 import { ReservarHeader } from '@/components/reservar/ReservarHeader'
 import { WhatsAppButton } from '@/components/reservar/WhatsAppButton'
 import { InstallPrompt } from '@/components/InstallPrompt'
 
 export const dynamic = 'force-dynamic'
+
+export const metadata: Metadata = {
+  title: 'Ka Wirth Ballester',
+  description: 'Reservá tu turno online',
+}
 
 export default function ReservarLayout({ children }: { children: React.ReactNode }) {
   return (
