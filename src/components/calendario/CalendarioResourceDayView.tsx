@@ -25,7 +25,7 @@ const METODO_LABELS: Record<string, string> = {
 const HORA_INICIO = 8
 const HORA_FIN = 21
 const HORA_HEIGHT = 88
-const SLOT_MINUTOS = 30        // resolución para drag-drop
+const SLOT_MINUTOS = 15        // resolución para drag-drop
 const SLOT_CLICK_MINUTOS = 15  // resolución para click/hover de nuevo turno
 
 interface Props {
@@ -106,6 +106,14 @@ export function CalendarioResourceDayView({
     })
     return map
   }, [citas, profesionales, fecha])
+
+  const colsMapPorProfesional = useMemo(() => {
+    const result = new Map<string, Map<string, { col: number; totalCols: number }>>()
+    citasPorProfesional.forEach((citasProf, profId) => {
+      result.set(profId, getCitaColumns(citasProf))
+    })
+    return result
+  }, [citasPorProfesional])
 
   const bloqueosPorProfesional = useMemo(() => {
     const map = new Map<string, Bloqueo[]>()
@@ -264,7 +272,8 @@ export function CalendarioResourceDayView({
         cleanup()
         return
       }
-      if (hasDraggedRef.current && onCitaDropRef.current) {
+      const didDrag = hasDraggedRef.current
+      if (didDrag && onCitaDropRef.current) {
         const col = getColAt(ev.clientX)
         if (col) {
           const { totalStartMinutes } = calcDropPosition(col.el, ev.clientY)
@@ -273,6 +282,11 @@ export function CalendarioResourceDayView({
           const newEnd = new Date(newStart.getTime() + dragRef.current.duration * 60000)
           onCitaDropRef.current(dragRef.current.citaId, newStart, newEnd, col.profId)
         }
+      }
+      // Suprimir el click que el browser dispara después del pointerup
+      if (didDrag) {
+        preventNextClickRef.current = true
+        setTimeout(() => { preventNextClickRef.current = false }, 500)
       }
       dragRef.current = null
       hasDraggedRef.current = false
@@ -294,6 +308,7 @@ export function CalendarioResourceDayView({
 
   function handleGridClick(profesionalId: string, e: React.MouseEvent<HTMLDivElement>) {
     if (isDragging) return
+    if (preventNextClickRef.current) return
     if ((e.target as HTMLElement).closest('[data-cita]')) return
     const col = colRefsMap.current.get(profesionalId)
     if (!col) return
@@ -442,22 +457,23 @@ export function CalendarioResourceDayView({
           const avail = getAvailability(prof.id)
           return (
             <div key={prof.id} className="flex-1 min-w-[180px] px-2 py-1.5 text-center border-r last:border-r-0">
-              <div className="flex items-center justify-center gap-1 mb-0.5">
+              <div className="flex flex-wrap items-center justify-center gap-1 mb-1">
                 {avail ? (
-                  <>
-                    <span className="text-[10px] text-muted-foreground">Disponible:</span>
-                    {avail.freeSlots.length === 0 ? (
-                      <span className="text-[10px] text-red-500">Sin disp.</span>
-                    ) : (
-                      avail.freeSlots.map((s, i) => (
-                        <span key={i} className="text-[10px] text-green-600 dark:text-green-400">
-                          {fromMin(s.start)}-{fromMin(s.end)}
-                        </span>
-                      ))
-                    )}
-                  </>
+                  avail.freeSlots.length === 0 ? (
+                    <span className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900/40 px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:text-red-400">
+                      Sin disponibilidad
+                    </span>
+                  ) : (
+                    avail.freeSlots.map((s, i) => (
+                      <span key={i} className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/40 px-2 py-0.5 text-[11px] font-semibold text-green-700 dark:text-green-400 tabular-nums">
+                        {fromMin(s.start)} – {fromMin(s.end)}
+                      </span>
+                    ))
+                  )
                 ) : (
-                  <span className="text-[10px] text-muted-foreground/60 italic">No trabaja</span>
+                  <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground italic">
+                    No trabaja hoy
+                  </span>
                 )}
               </div>
               <div className="flex items-center justify-center gap-1.5">
@@ -568,6 +584,8 @@ export function CalendarioResourceDayView({
                 const end = new Date(cita.fecha_fin)
                 const isSmall = pos.height < 40
                 const isBeingDragged = isDragging && dragRef.current?.citaId === cita.id
+                const colInfo = colsMapPorProfesional.get(prof.id)?.get(cita.id) ?? { col: 0, totalCols: 1 }
+                const colWidth = 100 / colInfo.totalCols
                 return (
                   <div
                     key={cita.id}
@@ -576,10 +594,12 @@ export function CalendarioResourceDayView({
                     onContextMenu={(e) => e.preventDefault()}
                     onMouseEnter={(e) => handleCitaHoverEnter(cita, e)}
                     onMouseLeave={handleCitaHoverLeave}
-                    className="absolute left-1 right-1 rounded-md border-l-[3px] bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 px-1.5 py-0.5 overflow-hidden transition-all z-[1] hover:z-[5] hover:shadow-lg hover:ring-2 hover:ring-fuchsia-500/40 shadow-sm select-none"
+                    className="absolute rounded-md border-l-[3px] bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 px-1.5 py-0.5 overflow-hidden transition-all z-[1] hover:z-[5] hover:shadow-lg hover:ring-2 hover:ring-fuchsia-500/40 shadow-sm select-none"
                     style={{
                       top: `${pos.top}px`,
                       height: `${pos.height}px`,
+                      left: `calc(${colInfo.col * colWidth}% + 2px)`,
+                      width: `calc(${colWidth}% - 4px)`,
                       borderLeftColor: prof.color,
                       cursor: isDragging ? 'grabbing' : 'grab',
                       opacity: isBeingDragged ? 0.35 : 1,
@@ -718,4 +738,38 @@ function getCitaPosition(cita: CitaConRelaciones) {
   const top = ((startMinutes - HORA_INICIO * 60) / 60) * HORA_HEIGHT
   const height = ((endMinutes - startMinutes) / 60) * HORA_HEIGHT
   return { top, height: Math.max(height, 24) }
+}
+
+function getCitaColumns(citas: CitaConRelaciones[]): Map<string, { col: number; totalCols: number }> {
+  const sorted = [...citas].sort(
+    (a, b) => new Date(a.fecha_inicio).getTime() - new Date(b.fecha_inicio).getTime()
+  )
+
+  function overlaps(a: CitaConRelaciones, b: CitaConRelaciones) {
+    return (
+      new Date(a.fecha_inicio).getTime() < new Date(b.fecha_fin).getTime() &&
+      new Date(b.fecha_inicio).getTime() < new Date(a.fecha_fin).getTime()
+    )
+  }
+
+  // Assign greedy column slots
+  const colMap = new Map<string, number>()
+  const colEnds: number[] = []
+
+  for (const cita of sorted) {
+    const start = new Date(cita.fecha_inicio).getTime()
+    let assigned = colEnds.findIndex((end) => end <= start)
+    if (assigned === -1) assigned = colEnds.length
+    colEnds[assigned] = new Date(cita.fecha_fin).getTime()
+    colMap.set(cita.id, assigned)
+  }
+
+  // For each cita, totalCols = max col index among all overlapping citas + 1
+  const result = new Map<string, { col: number; totalCols: number }>()
+  for (const cita of sorted) {
+    const group = sorted.filter((o) => overlaps(cita, o) || o.id === cita.id)
+    const maxCol = Math.max(...group.map((o) => colMap.get(o.id) ?? 0))
+    result.set(cita.id, { col: colMap.get(cita.id)!, totalCols: maxCol + 1 })
+  }
+  return result
 }

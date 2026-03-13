@@ -2,12 +2,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { z } from 'zod'
 
+const MAX_BOOKING_DAYS_AHEAD = 90
+
 const bookingSchema = z.object({
-  cliente_nombre: z.string().min(2),
-  cliente_telefono: z.string().min(8),
+  cliente_nombre: z.string().min(2).max(100),
+  cliente_telefono: z.string().min(8).max(20).regex(/^[\d\s\-+()\+]+$/, 'Teléfono inválido'),
   servicio_id: z.string().uuid(),
   profesional_id: z.string().uuid(),
-  fecha_inicio: z.string().datetime(),
+  fecha_inicio: z.string().datetime().refine((val) => {
+    const date = new Date(val)
+    const now = new Date()
+    const maxDate = new Date(now.getTime() + MAX_BOOKING_DAYS_AHEAD * 24 * 60 * 60 * 1000)
+    return date > now && date <= maxDate
+  }, `La fecha debe ser futura y dentro de los próximos ${MAX_BOOKING_DAYS_AHEAD} días`),
   fecha_fin: z.string().datetime(),
 })
 

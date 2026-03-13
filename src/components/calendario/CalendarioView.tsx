@@ -303,35 +303,21 @@ export function CalendarioView() {
   }
 
   const fetchRecordatoriosPendientes = useCallback(async () => {
-    const manana = addDays(new Date(), 1)
-    const mananaStr = format(manana, 'yyyy-MM-dd')
-    const inicio = `${mananaStr}T00:00:00`
-    const fin = `${mananaStr}T23:59:59`
+    const hoy = new Date()
+    const hoyStr = format(hoy, 'yyyy-MM-dd')
+    const inicio = `${hoyStr}T00:00:00`
+    const fin = `${hoyStr}T23:59:59`
 
-    // Total de citas mañana con status activo
-    const { data: citasManana } = await supabase
+    const { data } = await supabase
       .from('citas')
-      .select('id')
+      .select('id, recordatorio_whatsapp_enviado')
       .in('status', ['pendiente', 'confirmada'])
       .gte('fecha_inicio', inicio)
       .lte('fecha_inicio', fin)
 
-    if (!citasManana || citasManana.length === 0) {
-      setRecordatoriosPendientes(0)
-      return
-    }
-
-    const ids = citasManana.map((c) => c.id)
-
-    // Cuántas ya tienen recordatorio enviado
-    const { data: enviados } = await supabase
-      .from('recordatorios')
-      .select('cita_id')
-      .eq('tipo', 'whatsapp')
-      .eq('status', 'enviado')
-      .in('cita_id', ids)
-
-    const pendientes = citasManana.length - (enviados?.length ?? 0)
+    const pendientes = (data || []).filter(
+      (c) => !(c as unknown as Record<string, unknown>).recordatorio_whatsapp_enviado
+    ).length
     setRecordatoriosPendientes(pendientes > 0 ? pendientes : 0)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

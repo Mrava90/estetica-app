@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { GoogleAuth } from 'google-auth-library'
+import { createClient } from '@/lib/supabase/server'
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
@@ -24,6 +25,10 @@ function parseDDMM(str: string): { day: number; month: number } | null {
 }
 
 export async function GET(request: Request) {
+  const supabaseAuth = await createClient()
+  const { data: { user } } = await supabaseAuth.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
   const { searchParams } = new URL(request.url)
   // mes en formato YYYY-MM (default: mes actual)
   const now = new Date()

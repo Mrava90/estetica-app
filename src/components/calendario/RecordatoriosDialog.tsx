@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { format, addDays } from 'date-fns'
+import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -17,7 +17,6 @@ interface CitaRecordatorio {
   servicios: { nombre: string } | null
   profesionales: { nombre: string } | null
   recordatorio_enviado: boolean
-  recordatorio_id: string | null
 }
 
 interface CitaGroup {
@@ -52,29 +51,19 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
       const inicio = `${hoyStr}T00:00:00`
       const fin = `${hoyStr}T23:59:59`
 
-      const [citasRes, configRes, recordatoriosRes] = await Promise.all([
+      const [citasRes, configRes] = await Promise.all([
         supabase
           .from('citas')
-          .select('id, fecha_inicio, clientes(nombre, apellido, telefono), servicios(nombre), profesionales(nombre)')
+          .select('id, fecha_inicio, recordatorio_whatsapp_enviado, clientes(nombre, apellido, telefono), servicios(nombre), profesionales(nombre)')
           .in('status', ['pendiente', 'confirmada'])
           .gte('fecha_inicio', inicio)
           .lte('fecha_inicio', fin)
           .order('fecha_inicio'),
         supabase.from('configuracion').select('mensaje_recordatorio').single(),
-        supabase
-          .from('recordatorios')
-          .select('id, cita_id, status')
-          .eq('tipo', 'whatsapp')
-          .in('status', ['enviado']),
       ])
 
       if (configRes.data?.mensaje_recordatorio) {
         setMensajeTemplate(configRes.data.mensaje_recordatorio)
-      }
-
-      const recordatoriosMap: Record<string, string> = {}
-      for (const r of recordatoriosRes.data || []) {
-        if (r.cita_id) recordatoriosMap[r.cita_id] = r.id
       }
 
       const citasConEstado: CitaRecordatorio[] = (citasRes.data || []).map((c) => ({
@@ -83,8 +72,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
         clientes: c.clientes as unknown as { nombre: string; apellido: string | null; telefono: string | null } | null,
         servicios: c.servicios as unknown as { nombre: string } | null,
         profesionales: c.profesionales as unknown as { nombre: string } | null,
-        recordatorio_enviado: !!recordatoriosMap[c.id],
-        recordatorio_id: recordatoriosMap[c.id] ?? null,
+        recordatorio_enviado: !!(c as unknown as Record<string, unknown>).recordatorio_whatsapp_enviado,
       }))
 
       setCitas(citasConEstado)
@@ -131,7 +119,6 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
 
   function buildMensajeGrupo(group: CitaGroup): string {
     if (group.citas.length === 1) return buildMensaje(group.citas[0])
-    // Múltiples turnos: listar todos los servicios/horarios
     const primera = group.citas[0]
     const fecha = format(new Date(primera.fecha_inicio), "EEEE d 'de' MMMM", { locale: es })
     const serviciosDetalle = group.citas
@@ -143,6 +130,12 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
       .replace('{profesional}', primera.profesionales?.nombre ?? '')
       .replace('{fecha}', fecha)
       .replace('{hora}', format(new Date(primera.fecha_inicio), 'HH:mm'))
+  }
+
+  async function marcarCitas(ids: string[], enviado: boolean) {
+    for (const id of ids) {
+      await supabase.from('citas').update({ recordatorio_whatsapp_enviado: enviado }).eq('id', id)
+    }
   }
 
   async function abrirWhatsAppGrupo(group: CitaGroup) {
@@ -161,17 +154,9 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
     if (!group.allEnviado) {
       setEnviando(group.key)
       try {
-        for (const cita of group.citas) {
-          if (!cita.recordatorio_enviado) {
-            await supabase.from('recordatorios').insert({
-              cita_id: cita.id,
-              tipo: 'whatsapp',
-              status: 'enviado',
-              enviado_at: new Date().toISOString(),
-            })
-          }
-        }
-        fetchData()
+        const ids = group.citas.filter(c => !c.recordatorio_enviado).map(c => c.id)
+        await marcarCitas(ids, true)
+        await fetchData()
       } catch {
         // fallo silencioso en auto-marcado
       } finally {
@@ -184,28 +169,15 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
     setEnviando(group.key)
     try {
       if (group.allEnviado) {
-        // Desmarcar todos
-        for (const cita of group.citas) {
-          if (cita.recordatorio_enviado && cita.recordatorio_id) {
-            await supabase.from('recordatorios').delete().eq('id', cita.recordatorio_id)
-          }
-        }
+        const ids = group.citas.filter(c => c.recordatorio_enviado).map(c => c.id)
+        await marcarCitas(ids, false)
         toast.success('Desmarcado')
       } else {
-        // Marcar todos como enviados
-        for (const cita of group.citas) {
-          if (!cita.recordatorio_enviado) {
-            await supabase.from('recordatorios').insert({
-              cita_id: cita.id,
-              tipo: 'whatsapp',
-              status: 'enviado',
-              enviado_at: new Date().toISOString(),
-            })
-          }
-        }
+        const ids = group.citas.filter(c => !c.recordatorio_enviado).map(c => c.id)
+        await marcarCitas(ids, true)
         toast.success('Marcado como enviado')
       }
-      fetchData()
+      await fetchData()
     } catch {
       toast.error('Error al actualizar')
     } finally {
@@ -282,7 +254,7 @@ export function RecordatoriosDialog({ open, onClose }: Props) {
                         size="sm"
                         className="gap-2 bg-green-600 hover:bg-green-700 text-white"
                         onClick={() => abrirWhatsAppGrupo(group)}
-                        disabled={!group.telefono}
+                        disabled={!group.telefono || enviando === group.key}
                         title="Abrir chat WhatsApp"
                       >
                         <MessageCircle className="h-5 w-5" />

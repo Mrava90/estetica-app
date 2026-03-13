@@ -43,4 +43,9 @@ export function getEndOfDay(date: Date): Date {
   return endOfDay(date)
 }
 
+/** Capitaliza la primera letra de cada palabra (igual que INITCAP en PostgreSQL) */
+export function capitalizeWords(s: string): string {
+  return s.trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 export { addMinutes, isBefore, parseISO, format }

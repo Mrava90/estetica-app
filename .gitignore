@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+scripts/*.key
+scripts/*.csr
+scripts/*.crt
+scripts/*.json
 
 # debug
 npm-debug.log*
@@ -41,3 +45,5 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+.env*.local

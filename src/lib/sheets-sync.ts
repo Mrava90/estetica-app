@@ -154,6 +154,7 @@ function parseAppointmentSheet(
   rows: string[][],
   sheetName: 'SSR' | 'KW',
   profMap: Record<string, string>,
+  syncFromDate: string,
 ): { citas: CitaInsert[] } {
   const citas: CitaInsert[] = []
   let currentDate: string | null = null
@@ -176,6 +177,7 @@ function parseAppointmentSheet(
     if (parsedDate) currentDate = parsedDate
 
     if (!currentDate || entryAmount <= 0) continue
+    if (currentDate < syncFromDate) continue // saltar registros anteriores al período de sync
 
     if (!dailyCount[currentDate]) dailyCount[currentDate] = 0
     dailyCount[currentDate]++
@@ -200,7 +202,7 @@ function parseAppointmentSheet(
   return { citas }
 }
 
-function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
+function parseGastosSheet(rows: string[][], syncFromDate: string): MovimientoInsert[] {
   const movs: MovimientoInsert[] = []
 
   const sections = [
@@ -223,6 +225,8 @@ function parseGastosSheet(rows: string[][]): MovimientoInsert[] {
 
       const parsedDate = parseSheetDate(dateVal)
       if (parsedDate) lastDate = parsedDate
+
+      if (lastDate && lastDate < syncFromDate) continue // saltar anteriores al período de sync
 
       if (lastDate && desc && amount !== 0) {
         movs.push({
@@ -249,6 +253,11 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     throw new Error('Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY')
   }
 
+  // Período de sync: desde el 1ro del mes anterior
+  const now = new Date()
+  const syncFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const syncFromDate = `${syncFrom.getFullYear()}-${String(syncFrom.getMonth() + 1).padStart(2, '0')}-01`
+
   // 1. Fetch all sheets via Google Sheets API
   const [ssrRows, kwRows, gastosRows] = await Promise.all([
     fetchSheetData(spreadsheetId, 'SSR'),
@@ -263,17 +272,21 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     profMap[p.nombre.toLowerCase()] = p.id
   }
 
-  // 3. Parse sheets
-  const ssrResult = parseAppointmentSheet(ssrRows, 'SSR', profMap)
-  const kwResult = parseAppointmentSheet(kwRows, 'KW', profMap)
+  // 3. Parse sheets (solo registros desde syncFromDate)
+  const ssrResult = parseAppointmentSheet(ssrRows, 'SSR', profMap, syncFromDate)
+  const kwResult = parseAppointmentSheet(kwRows, 'KW', profMap, syncFromDate)
   const allCitas = [...ssrResult.citas, ...kwResult.citas]
-  const allMovimientos = parseGastosSheet(gastosRows)
+  const allMovimientos = parseGastosSheet(gastosRows, syncFromDate)
 
-  // 4. Delete old sheet-synced data
-  const { error: delCitasErr } = await supabase.from('citas').delete().eq('origen', 'sheets')
+  // 4. Borrar solo los datos del período de sync (no toda la historia)
+  const { error: delCitasErr } = await supabase.from('citas').delete()
+    .eq('origen', 'sheets')
+    .gte('fecha_inicio', `${syncFromDate}T00:00:00`)
   if (delCitasErr) errors.push(`Error deleting citas: ${delCitasErr.message}`)
 
-  const { error: delMovsErr } = await supabase.from('movimientos_caja').delete().eq('origen', 'sheets')
+  const { error: delMovsErr } = await supabase.from('movimientos_caja').delete()
+    .eq('origen', 'sheets')
+    .gte('fecha', syncFromDate)
   if (delMovsErr) errors.push(`Error deleting movimientos: ${delMovsErr.message}`)
 
   // 5. Insert all sheet data in batches

@@ -1,10 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-
-const ADMIN_EMAILS = ['ravamartin@gmail.com', 'aye.13.romero@gmail.com']
-function isAdminEmail(email: string | null | undefined) {
-  return !!email && ADMIN_EMAILS.includes(email)
-}
+import { isAdminEmail } from '@/lib/constants'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl

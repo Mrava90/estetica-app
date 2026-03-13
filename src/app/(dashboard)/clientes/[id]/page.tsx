@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient } from '@/lib/supabase/client'
 import { clienteSchema, type ClienteInput } from '@/lib/validators'
 import type { Cliente, CitaConRelaciones } from '@/types/database'
-import { formatFechaHora, formatPrecio } from '@/lib/dates'
+import { formatFechaHora, formatPrecio, capitalizeWords } from '@/lib/dates'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,7 +66,15 @@ export default function ClienteDetailPage() {
     try {
       const { error } = await supabase
         .from('clientes')
-        .update({ ...data, apellido: data.apellido || null, dni: data.dni || null, email: data.email || null, notas: data.notas || null, updated_at: new Date().toISOString() })
+        .update({
+          ...data,
+          nombre: capitalizeWords(data.nombre),
+          apellido: data.apellido ? capitalizeWords(data.apellido) : null,
+          dni: data.dni || null,
+          email: data.email || null,
+          notas: data.notas || null,
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', params.id)
       if (error) throw error
       toast.success('Cliente actualizado')

@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient } from '@/lib/supabase/client'
 import { citaSchema, type CitaInput } from '@/lib/validators'
 import type { CitaConRelaciones, Profesional, Servicio, Cliente, AppointmentStatus } from '@/types/database'
-import { formatFechaHora, formatPrecio, addMinutes } from '@/lib/dates'
+import { formatFechaHora, formatPrecio, addMinutes, capitalizeWords } from '@/lib/dates'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -272,7 +272,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     try {
       const { data, error } = await supabase
         .from('clientes')
-        .insert({ nombre: newClienteNombre, apellido: newClienteApellido || null, telefono: newClienteTelefono })
+        .insert({ nombre: capitalizeWords(newClienteNombre), apellido: newClienteApellido ? capitalizeWords(newClienteApellido) : null, telefono: newClienteTelefono })
         .select()
         .single()
       if (error) throw error
