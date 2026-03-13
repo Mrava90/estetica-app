@@ -650,11 +650,11 @@ export default function FacturacionPage() {
         </div>
         <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
           <button onClick={() => setTab('lista')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
             <Receipt className="h-3.5 w-3.5" /> Lista
           </button>
           <button onClick={() => setTab('configuracion')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'configuracion' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'configuracion' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
             <Settings2 className="h-3.5 w-3.5" /> Config ARCA
           </button>
         </div>
@@ -690,15 +690,15 @@ export default function FacturacionPage() {
             {/* Filtro de estado */}
             <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
               <button onClick={() => setFiltroEstado('todos')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'todos' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                 Todos
               </button>
               <button onClick={() => setFiltroEstado('pendiente')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'pendiente' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'pendiente' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                 Pendientes
               </button>
               <button onClick={() => setFiltroEstado('emitida')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'emitida' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'emitida' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                 <span className="block">Facturadas</span>
                 {montoEmitido > 0 && (
                   <span className="block text-[10px] font-normal text-green-600">{formatPrecio(montoEmitido)}</span>
@@ -706,7 +706,7 @@ export default function FacturacionPage() {
               </button>
               {excluidas.length > 0 && (
                 <button onClick={() => setFiltroEstado('excluida')}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'excluida' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'excluida' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                   <span className="block">Eliminadas</span>
                   <span className="block text-[10px] font-normal">{excluidas.length}</span>
                 </button>
