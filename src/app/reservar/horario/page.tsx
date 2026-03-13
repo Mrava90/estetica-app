@@ -21,6 +21,7 @@ function HorarioContent() {
   const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()))
   const [slots, setSlots] = useState<Record<string, SlotDisponible[]>>({})
   const [selectedSlot, setSelectedSlot] = useState<{ profId: string; slot: SlotDisponible } | null>(null)
+  const [diasAnticipacion, setDiasAnticipacion] = useState(7)
   const supabase = createClient()
 
   useEffect(() => {
@@ -30,6 +31,9 @@ function HorarioContent() {
     }
     fetchServicio()
     fetchProfesionales()
+    supabase.from('configuracion').select('dias_anticipacion_reserva').single().then(({ data }) => {
+      if (data?.dias_anticipacion_reserva) setDiasAnticipacion(data.dias_anticipacion_reserva)
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -142,7 +146,7 @@ function HorarioContent() {
     router.push(`/reservar/confirmar?${params.toString()}`)
   }
 
-  const dates = Array.from({ length: 7 }, (_, i) => addDays(startOfDay(new Date()), i))
+  const dates = Array.from({ length: diasAnticipacion }, (_, i) => addDays(startOfDay(new Date()), i))
 
   return (
     <div className="space-y-6">
