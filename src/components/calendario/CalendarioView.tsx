@@ -322,22 +322,35 @@ export function CalendarioView() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchData = useCallback(async () => {
-    const [citasRes, profRes] = await Promise.all([
+    // Ventana de 60 días atrás y 90 días adelante — cubre todo el uso normal
+    const desde = new Date(); desde.setDate(desde.getDate() - 60)
+    const hasta = new Date(); hasta.setDate(hasta.getDate() + 90)
+    const desdeStr = desde.toISOString().split('T')[0]
+    const hastaStr = hasta.toISOString().split('T')[0]
+
+    const [citasRes, profRes, bloqueosRes] = await Promise.all([
       supabase
         .from('citas')
         .select('*, clientes(*), profesionales(*), servicios(*)')
         .in('status', ['pendiente', 'confirmada'])
+        .gte('fecha_inicio', `${desdeStr}T00:00:00`)
+        .lte('fecha_inicio', `${hastaStr}T23:59:59`)
         .order('fecha_inicio'),
       supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre'),
+      supabase.from('bloqueos').select('*')
+        .gte('fecha_inicio', `${desdeStr}T00:00:00`)
+        .lte('fecha_inicio', `${hastaStr}T23:59:59`)
+        .order('fecha_inicio'),
     ])
 
     if (citasRes.data) setCitas(citasRes.data)
+    if (bloqueosRes.data) setBloqueos(bloqueosRes.data)
+
     if (profRes.data) {
       setProfesionales(profRes.data)
       if (filtrosProfesional.length === 0) {
         setFiltrosProfesional(profRes.data.map((p) => p.id))
       }
-      // Fetch horarios for all professionals
       const { data: horariosData } = await supabase
         .from('horarios')
         .select('*')
@@ -353,13 +366,6 @@ export function CalendarioView() {
         setHorarios(grouped)
       }
     }
-
-    // Fetch bloqueos
-    const { data: bloqueosData } = await supabase
-      .from('bloqueos')
-      .select('*')
-      .order('fecha_inicio')
-    if (bloqueosData) setBloqueos(bloqueosData)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

@@ -29,10 +29,15 @@ function HorarioContent() {
       router.push('/reservar')
       return
     }
-    fetchServicio()
-    fetchProfesionales()
-    supabase.from('configuracion').select('dias_anticipacion_reserva').single().then(({ data }) => {
-      if (data?.dias_anticipacion_reserva) setDiasAnticipacion(data.dias_anticipacion_reserva)
+    // Fetch everything in parallel on mount
+    Promise.all([
+      supabase.from('servicios').select('*').eq('id', servicioId).single(),
+      fetchProfesionalesData(),
+      supabase.from('configuracion').select('dias_anticipacion_reserva').single(),
+    ]).then(([servRes, profs, configRes]) => {
+      if (servRes.data) setServicio(servRes.data)
+      if (profs.length > 0) setProfesionales(profs)
+      if (configRes.data?.dias_anticipacion_reserva) setDiasAnticipacion(configRes.data.dias_anticipacion_reserva)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -42,92 +47,62 @@ function HorarioContent() {
     }
   }, [selectedDate, servicio, profesionales]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchServicio() {
-    const { data } = await supabase.from('servicios').select('*').eq('id', servicioId).single()
-    if (data) setServicio(data)
-  }
-
-  async function fetchProfesionales() {
+  async function fetchProfesionalesData(): Promise<Profesional[]> {
     if (profesionalId) {
       const { data } = await supabase.from('profesionales').select('*').eq('id', profesionalId).single()
-      if (data) setProfesionales([data])
-    } else {
-      // Filter by service relationship
-      const { data: profServData } = await supabase
-        .from('profesional_servicios')
-        .select('profesional_id')
-        .eq('servicio_id', servicioId!)
-
-      if (profServData && profServData.length > 0) {
-        const ids = profServData.map((d) => d.profesional_id)
-        const { data } = await supabase
-          .from('profesionales')
-          .select('*')
-          .eq('activo', true)
-          .eq('visible_calendario', true)
-          .in('id', ids)
-          .order('nombre')
-        if (data) setProfesionales(data)
-      } else {
-        // No records = all professionals (backwards compatible)
-        const { data } = await supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre')
-        if (data) setProfesionales(data)
-      }
+      return data ? [data] : []
     }
+    const { data: profServData } = await supabase
+      .from('profesional_servicios')
+      .select('profesional_id')
+      .eq('servicio_id', servicioId!)
+    if (profServData && profServData.length > 0) {
+      const ids = profServData.map((d) => d.profesional_id)
+      const { data } = await supabase
+        .from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).in('id', ids).order('nombre')
+      return data || []
+    }
+    const { data } = await supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre')
+    return data || []
   }
 
   async function fetchAvailability() {
-    if (!servicio) return
+    if (!servicio || profesionales.length === 0) return
     const diaSemana = selectedDate.getDay()
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
+    const profIds = profesionales.map((p) => p.id)
 
+    // 3 queries en paralelo para todos los profesionales a la vez
+    const [{ data: horariosData }, { data: citasData }, { data: bloqueosData }] = await Promise.all([
+      supabase.from('horarios').select('profesional_id, hora_inicio, hora_fin')
+        .in('profesional_id', profIds).eq('dia_semana', diaSemana).eq('activo', true).order('hora_inicio'),
+      supabase.from('citas').select('profesional_id, fecha_inicio, fecha_fin')
+        .in('profesional_id', profIds).in('status', ['pendiente', 'confirmada'])
+        .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
+      supabase.from('bloqueos').select('profesional_id, fecha_inicio, fecha_fin')
+        .in('profesional_id', profIds)
+        .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
+    ])
+
+    // Agrupar en memoria por profesional
     const newSlots: Record<string, SlotDisponible[]> = {}
-
     for (const prof of profesionales) {
-      const [{ data: horariosData }, { data: citasData }, { data: bloqueosData }] = await Promise.all([
-        supabase
-          .from('horarios')
-          .select('*')
-          .eq('profesional_id', prof.id)
-          .eq('dia_semana', diaSemana)
-          .eq('activo', true)
-          .order('hora_inicio'),
-        supabase
-          .from('citas')
-          .select('fecha_inicio, fecha_fin')
-          .eq('profesional_id', prof.id)
-          .in('status', ['pendiente', 'confirmada'])
-          .gte('fecha_inicio', `${dateStr}T00:00:00`)
-          .lt('fecha_inicio', `${dateStr}T23:59:59`),
-        supabase
-          .from('bloqueos')
-          .select('fecha_inicio, fecha_fin')
-          .eq('profesional_id', prof.id)
-          .gte('fecha_inicio', `${dateStr}T00:00:00`)
-          .lt('fecha_inicio', `${dateStr}T23:59:59`),
-      ])
-
-      // Support multiple schedule blocks per day (split shifts)
+      const horarios = (horariosData || []).filter((h) => h.profesional_id === prof.id)
+      const citas = (citasData || []).filter((c) => c.profesional_id === prof.id)
+      const bloqueos = (bloqueosData || []).filter((b) => b.profesional_id === prof.id)
       const allAvailable: SlotDisponible[] = []
-      if (horariosData && horariosData.length > 0) {
-        for (const horario of horariosData) {
-          const available = calcularSlotsDisponibles(
-            selectedDate,
-            { hora_inicio: horario.hora_inicio, hora_fin: horario.hora_fin },
-            citasData || [],
-            servicio.duracion_minutos,
-            30,
-            bloqueosData || []
-          )
-          allAvailable.push(...available)
-        }
+      for (const horario of horarios) {
+        allAvailable.push(...calcularSlotsDisponibles(
+          selectedDate,
+          { hora_inicio: horario.hora_inicio, hora_fin: horario.hora_fin },
+          citas,
+          servicio.duracion_minutos,
+          30,
+          bloqueos
+        ))
       }
-
-      if (allAvailable.length > 0) {
-        newSlots[prof.id] = allAvailable
-      }
+      if (allAvailable.length > 0) newSlots[prof.id] = allAvailable
     }
-
     setSlots(newSlots)
   }
 
