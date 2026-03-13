@@ -592,8 +592,8 @@ export function CalendarioResourceDayView({
                   style={{
                     top: `${franja.top}px`,
                     height: `${franja.height}px`,
-                    background: 'repeating-linear-gradient(135deg, transparent, transparent 6px, rgba(128,128,128,0.07) 6px, rgba(128,128,128,0.07) 12px)',
-                    backgroundColor: 'rgba(128,128,128,0.06)',
+                    background: 'repeating-linear-gradient(135deg, transparent, transparent 6px, rgba(239,68,68,0.08) 6px, rgba(239,68,68,0.08) 12px)',
+                    backgroundColor: 'rgba(239,68,68,0.05)',
                   }}
                 />
               ))}
