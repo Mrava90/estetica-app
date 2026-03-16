@@ -1,15 +1,55 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import { formatFechaHora } from '@/lib/dates'
-import { CheckCircle, Calendar, X } from 'lucide-react'
+import { CheckCircle, Mail } from 'lucide-react'
 
 function ExitoContent() {
   const searchParams = useSearchParams()
   const fecha = searchParams.get('fecha')
   const citaId = searchParams.get('cita')
+  const emailParam = searchParams.get('email')
+
+  const [enviando, setEnviando] = useState(false)
+  const [linkEnviado, setLinkEnviado] = useState(false)
+  const [error, setError] = useState('')
+  const supabase = createClient()
+
+  // Si vino email desde confirmar, enviar magic link automáticamente
+  useEffect(() => {
+    if (emailParam && citaId) {
+      sendMagicLink(emailParam)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function sendMagicLink(email: string) {
+    setEnviando(true)
+    try {
+      if (citaId) {
+        await fetch('/api/mis-turnos/registrar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, citaId }),
+        })
+      }
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservar/mis-turnos`,
+          shouldCreateUser: true,
+        },
+      })
+      if (otpError) throw otpError
+      setLinkEnviado(true)
+    } catch {
+      setError('No se pudo enviar el link.')
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   return (
     <div className="flex flex-col items-center space-y-6 py-8">
@@ -29,26 +69,31 @@ function ExitoContent() {
         </div>
       )}
 
-      {citaId && (
+      {/* Magic link - solo si ingresó email al reservar */}
+      {emailParam && (
         <div className="rounded-xl border border-fuchsia-200 bg-white p-5 w-full max-w-sm space-y-3">
-          <p className="text-sm font-semibold text-gray-700 text-center">¿Necesitás cambiar o cancelar?</p>
-          <div className="flex gap-2">
-            <Link
-              href={`/reservar/mi-turno/${citaId}`}
-              className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all"
-            >
-              <Calendar className="h-4 w-4" />
-              Reprogramar
-            </Link>
-            <Link
-              href={`/reservar/mi-turno/${citaId}`}
-              className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-all"
-            >
-              <X className="h-4 w-4" />
-              Cancelar
-            </Link>
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-fuchsia-500 shrink-0" />
+            <p className="text-sm font-semibold text-gray-700">Gestionar mis turnos</p>
           </div>
-          <p className="text-xs text-gray-400 text-center">Guardá este link para gestionar tu turno</p>
+          {linkEnviado ? (
+            <div className="space-y-1 py-1">
+              <p className="text-sm font-medium text-green-700">¡Link enviado a {emailParam}!</p>
+              <p className="text-xs text-gray-500">Revisá tu email para ver y cancelar tus turnos</p>
+            </div>
+          ) : enviando ? (
+            <p className="text-sm text-gray-500 py-1">Enviando link...</p>
+          ) : (
+            <div className="space-y-2">
+              {error && <p className="text-xs text-red-500">{error}</p>}
+              <button
+                onClick={() => sendMagicLink(emailParam)}
+                className="text-sm font-medium text-fuchsia-600 hover:underline"
+              >
+                Reenviar link a {emailParam}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

@@ -23,6 +23,7 @@ function ConfirmarContent() {
   const [apellido, setApellido] = useState('')
   const [dni, setDni] = useState('')
   const [telefono, setTelefono] = useState('')
+  const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
 
@@ -70,11 +71,12 @@ function ConfirmarContent() {
           nombre: capitalizeWords(nombre),
           apellido: apellido.trim() ? capitalizeWords(apellido) : null,
           ...(dni.trim() ? { dni: dni.trim() } : {}),
+          ...(email.trim() ? { email: email.trim().toLowerCase() } : {}),
         }).eq('id', clienteId)
       } else {
         const { data: newCliente, error: clienteError } = await supabase
           .from('clientes')
-          .insert({ nombre: capitalizeWords(nombre), apellido: apellido.trim() ? capitalizeWords(apellido) : null, telefono, ...(dni.trim() ? { dni: dni.trim() } : {}) })
+          .insert({ nombre: capitalizeWords(nombre), apellido: apellido.trim() ? capitalizeWords(apellido) : null, telefono, ...(dni.trim() ? { dni: dni.trim() } : {}), ...(email.trim() ? { email: email.trim().toLowerCase() } : {}) })
           .select('id')
           .single()
         if (clienteError || !newCliente) throw clienteError
@@ -100,7 +102,9 @@ function ConfirmarContent() {
         await supabase.from('citas').update({ status: 'cancelada' }).eq('id', reprogramarId)
       }
 
-      router.push(`/reservar/exito?fecha=${fechaInicio}&cita=${citaData.id}`)
+      const exitoParams = new URLSearchParams({ fecha: fechaInicio!, cita: citaData.id })
+      if (email.trim()) exitoParams.set('email', email.trim().toLowerCase())
+      router.push(`/reservar/exito?${exitoParams.toString()}`)
     } catch {
       toast.error('Error al confirmar la cita. Intentá de nuevo.')
     } finally {
@@ -198,13 +202,26 @@ function ConfirmarContent() {
             <label className="text-sm font-medium text-gray-700">Teléfono (WhatsApp)</label>
             <input
               type="tel"
-              placeholder="Ej: 5491112345678"
+              placeholder="Ej: 1112345678"
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
             />
             <p className="text-xs text-gray-400">
               Usaremos este número para confirmar tu turno por WhatsApp
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Email <span className="text-gray-400 font-normal">(opcional)</span></label>
+            <input
+              type="email"
+              placeholder="tu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+            />
+            <p className="text-xs text-gray-400">
+              Para recibir un link y gestionar tus turnos
             </p>
           </div>
         </div>

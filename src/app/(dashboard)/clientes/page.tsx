@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [todosClientes, setTodosClientes] = useState<Cliente[]>([])
   const [search, setSearch] = useState('')
   const supabase = createClient()
 
@@ -22,18 +23,27 @@ export default function ClientesPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchClientes() {
-    let query = supabase.from('clientes').select('*').order('nombre').limit(100)
-    if (search) {
-      query = query.or(`nombre.ilike.%${search}%,apellido.ilike.%${search}%,telefono.ilike.%${search}%`)
+    const { data } = await supabase.from('clientes').select('*').order('nombre')
+    if (data) {
+      setTodosClientes(data)
+      setClientes(data)
     }
-    const { data } = await query
-    if (data) setClientes(data)
   }
 
   useEffect(() => {
-    const timer = setTimeout(fetchClientes, 300)
-    return () => clearTimeout(timer)
-  }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!search.trim()) {
+      setClientes(todosClientes)
+      return
+    }
+    const q = search.toLowerCase()
+    setClientes(todosClientes.filter((c) => {
+      const nombreCompleto = `${c.nombre} ${c.apellido || ''}`.toLowerCase()
+      return (
+        nombreCompleto.includes(q) ||
+        (c.telefono || '').includes(q)
+      )
+    }))
+  }, [search, todosClientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDelete(id: string, nombre: string) {
     if (!confirm(`¿Eliminar a "${nombre}"? Esta acción no se puede deshacer.`)) return

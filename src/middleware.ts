@@ -11,7 +11,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Public routes that don't need auth
-  const publicPaths = ['/login', '/reset-password', '/auth/confirm', '/reservar', '/api/citas', '/api/whatsapp/webhook', '/api/cron']
+  const publicPaths = ['/login', '/reset-password', '/auth/confirm', '/reservar', '/api/citas', '/api/mis-turnos', '/api/whatsapp/webhook', '/api/cron']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
   if (isPublic) return NextResponse.next()
 
@@ -52,6 +52,13 @@ export async function middleware(request: NextRequest) {
   if (!user) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    return NextResponse.redirect(url)
+  }
+
+  // Client users (magic link) can only access /reservar paths, not the admin dashboard
+  if (!isAdminEmail(user.email)) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/reservar/mis-turnos'
     return NextResponse.redirect(url)
   }
 
