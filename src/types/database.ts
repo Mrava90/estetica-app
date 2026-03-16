@@ -110,6 +110,17 @@ export interface Bloqueo {
   created_at: string
 }
 
+export interface AuditLog {
+  id: string
+  tabla: string
+  accion: string
+  registro_id: string | null
+  datos_anteriores: Record<string, unknown> | null
+  datos_nuevos: Record<string, unknown> | null
+  usuario_email: string | null
+  created_at: string
+}
+
 export interface Configuracion {
   id: number
   nombre_salon: string

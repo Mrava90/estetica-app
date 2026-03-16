@@ -9,6 +9,7 @@ import {
   Wallet,
   Calculator,
   Receipt,
+  Activity,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -38,6 +39,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Informes', href: '/informes', icon: BarChart3, adminOnly: true },
   { label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true },
   { label: 'Facturación', href: '/facturacion', icon: Receipt, adminOnly: true },
+  { label: 'Actividad', href: '/actividad', icon: Activity, adminOnly: true },
   { label: 'Configuración', href: '/configuracion', icon: Settings },
 ]
 

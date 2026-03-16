@@ -32,7 +32,7 @@ export function MobileNav({ onClose }: { onClose?: () => void }) {
   }, [])
 
   const isAdmin = isAdminEmail(userEmail)
-  const STRICT_ADMIN_HREFS = ['/facturacion', '/informes']
+  const STRICT_ADMIN_HREFS = ['/facturacion', '/informes', '/actividad']
   const visibleItems = NAV_ITEMS.filter(item => {
     if (isAdmin) return true
     if (STRICT_ADMIN_HREFS.includes(item.href)) return false
