@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Profesional, Horario } from '@/types/database'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from 'sonner'
-import { Plus, Minus, Copy, Save } from 'lucide-react'
+import { Plus, Minus, Copy, Save, Camera } from 'lucide-react'
+import Image from 'next/image'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const DIAS_MAP = [1, 2, 3, 4, 5, 6, 0] // Lun=1 ... Dom=0
@@ -55,6 +56,8 @@ export default function PersonalPage() {
   const [week, setWeek] = useState<WeekSchedule>(emptyWeek())
   const [saving, setSaving] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [uploadingFoto, setUploadingFoto] = useState(false)
+  const fotoInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -177,6 +180,36 @@ export default function PersonalPage() {
     }
   }
 
+  async function handleFotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!selectedProf || !e.target.files?.[0]) return
+    const file = e.target.files[0]
+    setUploadingFoto(true)
+    try {
+      const ext = file.name.split('.').pop()
+      const path = `${selectedProf}.${ext}`
+      const { error: uploadError } = await supabase.storage
+        .from('profesionales-fotos')
+        .upload(path, file, { upsert: true })
+      if (uploadError) throw uploadError
+
+      const { data: { publicUrl } } = supabase.storage.from('profesionales-fotos').getPublicUrl(path)
+      const { error: updateError } = await supabase
+        .from('profesionales')
+        .update({ foto_url: `${publicUrl}?t=${Date.now()}` })
+        .eq('id', selectedProf)
+      if (updateError) throw updateError
+
+      setProfesionales((prev) => prev.map((p) => p.id === selectedProf ? { ...p, foto_url: `${publicUrl}?t=${Date.now()}` } : p))
+      toast.success('Foto actualizada')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al subir foto'
+      toast.error(msg)
+    } finally {
+      setUploadingFoto(false)
+      if (fotoInputRef.current) fotoInputRef.current.value = ''
+    }
+  }
+
   const prof = profesionales.find((p) => p.id === selectedProf)
 
   return (
@@ -190,7 +223,7 @@ export default function PersonalPage() {
       </div>
 
       {/* Professional selector */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-3">
         {profesionales.map((p) => (
           <button
             key={p.id}
@@ -202,11 +235,48 @@ export default function PersonalPage() {
             }`}
             style={selectedProf === p.id ? { backgroundColor: p.color } : undefined}
           >
-            <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+            <div className="h-6 w-6 rounded-full overflow-hidden border border-white/30 shrink-0">
+              {p.foto_url ? (
+                <Image src={p.foto_url} alt={p.nombre} width={24} height={24} className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: p.color }}>
+                  {p.nombre.charAt(0)}
+                </div>
+              )}
+            </div>
             {p.nombre}
           </button>
         ))}
       </div>
+
+      {/* Foto upload */}
+      {prof && (
+        <div className="flex items-center gap-3">
+          <div className="h-16 w-16 rounded-full overflow-hidden border-2" style={{ borderColor: prof.color }}>
+            {prof.foto_url ? (
+              <Image src={prof.foto_url} alt={prof.nombre} width={64} height={64} className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: prof.color }}>
+                {prof.nombre.charAt(0)}
+              </div>
+            )}
+          </div>
+          <div>
+            <p className="text-sm font-medium">{prof.nombre}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 mt-1"
+              onClick={() => fotoInputRef.current?.click()}
+              disabled={uploadingFoto}
+            >
+              <Camera className="h-4 w-4" />
+              {uploadingFoto ? 'Subiendo...' : 'Cambiar foto'}
+            </Button>
+            <input ref={fotoInputRef} type="file" accept="image/*" className="hidden" onChange={handleFotoUpload} />
+          </div>
+        </div>
+      )}
 
       {prof && (
         <Card>

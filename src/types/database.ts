@@ -12,6 +12,7 @@ export interface Profesional {
   sueldo_fijo: number | null
   activo: boolean
   visible_calendario: boolean
+  foto_url: string | null
   created_at: string
   updated_at: string
 }

@@ -129,10 +129,10 @@ export default function ReservarPage() {
     setSelectedProfesional(null)
   }, [selectedServicio, profesionales]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleContinue() {
+  function handleContinue(profId?: string | null) {
     if (!selectedServicio) return
     const params = new URLSearchParams({ servicio: selectedServicio })
-    if (selectedProfesional) params.set('profesional', selectedProfesional)
+    if (profId) params.set('profesional', profId)
     router.push(`/reservar/horario?${params.toString()}`)
   }
 
@@ -286,52 +286,45 @@ export default function ReservarPage() {
             <span className="text-xs text-fuchsia-500 font-medium shrink-0">Cambiar</span>
           </button>
 
-          {/* Professional pills */}
+          {/* Professional cards */}
           <div className="space-y-3">
             <h2 className="text-lg font-semibold text-white drop-shadow-md">Profesional (opcional)</h2>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {/* Sin preferencia */}
               <button
-                onClick={() => setSelectedProfesional(null)}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
-                  !selectedProfesional
-                    ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
-                    : 'border-gray-900 bg-white text-gray-700 hover:border-fuchsia-500'
-                }`}
+                onClick={() => handleContinue(null)}
+                className="flex flex-col items-center gap-2 rounded-2xl border border-gray-900 bg-white p-4 text-center transition-all hover:border-fuchsia-500 hover:shadow-md active:scale-95"
               >
-                Sin preferencia
+                <div className="h-16 w-16 rounded-full bg-fuchsia-100 flex items-center justify-center">
+                  <span className="text-2xl">✨</span>
+                </div>
+                <span className="text-sm font-medium text-gray-700">Sin preferencia</span>
               </button>
+
               {filteredProfs.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => setSelectedProfesional(p.id)}
-                  className={`flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all ${
-                    selectedProfesional === p.id
-                      ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
-                      : 'border-gray-900 bg-white text-gray-700 hover:border-fuchsia-500'
-                  }`}
+                  onClick={() => handleContinue(p.id)}
+                  className="flex flex-col items-center gap-2 rounded-2xl border border-gray-900 bg-white p-4 text-center transition-all hover:border-fuchsia-500 hover:shadow-md active:scale-95"
                 >
-                  <div
-                    className="h-4 w-4 rounded-full border border-white/50"
-                    style={{ backgroundColor: p.color }}
-                  />
-                  {p.nombre}
+                  <div className="h-16 w-16 rounded-full overflow-hidden border-2" style={{ borderColor: p.color }}>
+                    {p.foto_url ? (
+                      <Image
+                        src={p.foto_url}
+                        alt={p.nombre}
+                        width={64}
+                        height={64}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center text-white text-2xl font-bold" style={{ backgroundColor: p.color }}>
+                        {p.nombre.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">{p.nombre}</span>
                 </button>
               ))}
-            </div>
-          </div>
-
-          {/* Spacer for sticky button */}
-          <div className="h-20" />
-
-          {/* Sticky continue button */}
-          <div className="fixed bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/60 to-transparent px-4 pb-5 pt-8">
-            <div className="mx-auto max-w-2xl">
-              <button
-                onClick={handleContinue}
-                className="w-full rounded-xl bg-black py-4 text-center text-base font-semibold text-white transition-all hover:bg-gray-900 shadow-lg"
-              >
-                Continuar
-              </button>
             </div>
           </div>
         </div>
