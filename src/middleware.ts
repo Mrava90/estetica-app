@@ -55,8 +55,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Client users (magic link) can only access /reservar paths, not the admin dashboard
-  if (!isAdminEmail(user.email)) {
+  // Staff users (@estetica.local) and admins can access dashboard
+  // Client users (magic link with external email) go to mis-turnos
+  const isStaff = user.email?.endsWith('@estetica.local') ?? false
+  if (!isAdminEmail(user.email) && !isStaff) {
     const url = request.nextUrl.clone()
     url.pathname = '/reservar/mis-turnos'
     return NextResponse.redirect(url)
@@ -70,7 +72,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Admin-only routes
+  // Admin-only routes (staff can't access these)
   if (pathname.startsWith('/contabilidad') && !isAdminEmail(user.email)) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
