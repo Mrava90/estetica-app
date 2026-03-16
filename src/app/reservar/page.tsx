@@ -84,7 +84,7 @@ export default function ReservarPage() {
 
       const [servRes, profRes, citasRes] = await Promise.all([
         supabase.from('servicios').select('*').eq('activo', true).order('nombre'),
-        supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('nombre'),
+        supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('orden').order('nombre'),
         supabase
           .from('citas')
           .select('servicio_id')
@@ -289,18 +289,7 @@ export default function ReservarPage() {
           {/* Professional cards */}
           <div className="space-y-3">
             <h2 className="text-lg font-semibold text-white drop-shadow-md">Profesional (opcional)</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {/* Sin preferencia */}
-              <button
-                onClick={() => handleContinue(null)}
-                className="flex flex-col items-center gap-2 rounded-2xl border border-gray-900 bg-white p-4 text-center transition-all hover:border-fuchsia-500 hover:shadow-md active:scale-95"
-              >
-                <div className="h-16 w-16 rounded-full bg-fuchsia-100 flex items-center justify-center">
-                  <span className="text-2xl">✨</span>
-                </div>
-                <span className="text-sm font-medium text-gray-700">Sin preferencia</span>
-              </button>
-
+            <div className="grid grid-cols-3 gap-3">
               {filteredProfs.map((p) => (
                 <button
                   key={p.id}
@@ -325,6 +314,15 @@ export default function ReservarPage() {
                   <span className="text-sm font-medium text-gray-700">{p.nombre}</span>
                 </button>
               ))}
+
+              {/* Sin preferencia - full width */}
+              <button
+                onClick={() => handleContinue(null)}
+                className="col-span-3 flex items-center justify-center gap-3 rounded-2xl border border-gray-900 bg-white px-4 py-3 text-center transition-all hover:border-fuchsia-500 hover:shadow-md active:scale-95"
+              >
+                <span className="text-xl">✨</span>
+                <span className="text-sm font-medium text-gray-700">Sin preferencia</span>
+              </button>
             </div>
           </div>
         </div>
