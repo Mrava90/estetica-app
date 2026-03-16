@@ -12,7 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-export const ADMIN_EMAILS = ['ravamartin@gmail.com', 'aye.13.romero@gmail.com']
+export const ADMIN_EMAILS = ['ravamartin@gmail.com', 'aye.13.romero@gmail.com', 'silvina@estetica.local', 'fabiana@estetica.local', 'kwballester@estetica.local', 'lola@estetica.local']
 
 export function isAdminEmail(email: string | null | undefined): boolean {
   return !!email && ADMIN_EMAILS.includes(email)
