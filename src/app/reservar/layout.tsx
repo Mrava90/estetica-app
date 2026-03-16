@@ -6,10 +6,10 @@ import { InstallPrompt } from '@/components/InstallPrompt'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'Ka Wirth Ballester',
+  title: 'Turnos Ballester',
   description: 'Reservá tu turno online',
   openGraph: {
-    title: 'Ka Wirth Ballester',
+    title: 'Turnos Ballester',
     description: 'Reservá tu turno online',
     type: 'website',
   },
