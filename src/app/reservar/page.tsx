@@ -79,30 +79,58 @@ export default function ReservarPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const sixtyDaysAgo = new Date()
-      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
+      const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
 
-      const [servRes, profRes, citasRes] = await Promise.all([
+      // Intentar cargar desde cache primero
+      try {
+        const cached = localStorage.getItem('reservar_cache')
+        if (cached) {
+          const { servicios: cachedServ, profesionales: cachedProf, counts: cachedCounts, ts } = JSON.parse(cached)
+          if (Date.now() - ts < CACHE_TTL) {
+            setServicios(cachedServ)
+            setProfesionales(cachedProf)
+            setBookingCounts(cachedCounts)
+            setLoading(false)
+            return
+          }
+        }
+      } catch {}
+
+      // Cargar servicios y profesionales primero (rápido, muestra la UI)
+      const [servRes, profRes] = await Promise.all([
         supabase.from('servicios').select('*').eq('activo', true).order('nombre'),
         supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('orden').order('nombre'),
-        supabase
-          .from('citas')
-          .select('servicio_id')
-          .gte('fecha_inicio', sixtyDaysAgo.toISOString())
-          .in('status', ['completada', 'confirmada', 'pendiente'])
-          .not('servicio_id', 'is', null),
       ])
 
       if (servRes.data) setServicios(servRes.data)
       if (profRes.data) setProfesionales(profRes.data)
+      setLoading(false)
 
-      // Contar reservas por servicio para ordenar por demanda
+      // Cargar citas en segundo plano (no bloquea la UI)
+      const sixtyDaysAgo = new Date()
+      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
+      const citasRes = await supabase
+        .from('citas')
+        .select('servicio_id')
+        .gte('fecha_inicio', sixtyDaysAgo.toISOString())
+        .in('status', ['completada', 'confirmada', 'pendiente'])
+        .not('servicio_id', 'is', null)
+
       const counts: Record<string, number> = {}
       for (const c of citasRes.data || []) {
         if (c.servicio_id) counts[c.servicio_id] = (counts[c.servicio_id] || 0) + 1
       }
       setBookingCounts(counts)
-      setLoading(false)
+
+      // Guardar en cache
+      try {
+        localStorage.setItem('reservar_cache', JSON.stringify({
+          servicios: servRes.data,
+          profesionales: profRes.data,
+          counts,
+          ts: Date.now(),
+        }))
+      } catch {}
     }
     fetchData()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
