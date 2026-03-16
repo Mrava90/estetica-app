@@ -41,12 +41,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find or create client
-    const { data: existingCliente } = await supabase
+    // Normalizar teléfono: solo dígitos, sin prefijo 54/0
+    const normalizarTelefono = (tel: string) => {
+      const soloDigitos = tel.replace(/\D/g, '')
+      // Quitar prefijo internacional 54
+      if (soloDigitos.startsWith('54') && soloDigitos.length > 10) return soloDigitos.slice(2)
+      // Quitar 0 inicial
+      if (soloDigitos.startsWith('0')) return soloDigitos.slice(1)
+      return soloDigitos
+    }
+    const telefonoNorm = normalizarTelefono(data.cliente_telefono)
+
+    // Find or create client — buscar por teléfono normalizado
+    const { data: todosClientes } = await supabase
       .from('clientes')
-      .select('id')
-      .eq('telefono', data.cliente_telefono)
-      .single()
+      .select('id, telefono')
+    const existingCliente = (todosClientes || []).find(
+      (c) => normalizarTelefono(c.telefono || '') === telefonoNorm
+    )
 
     let clienteId: string
 
@@ -55,7 +67,7 @@ export async function POST(request: NextRequest) {
     } else {
       const { data: newCliente, error: clienteError } = await supabase
         .from('clientes')
-        .insert({ nombre: data.cliente_nombre, telefono: data.cliente_telefono })
+        .insert({ nombre: data.cliente_nombre, telefono: telefonoNorm })
         .select('id')
         .single()
       if (clienteError || !newCliente) {
