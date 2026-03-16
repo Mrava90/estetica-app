@@ -545,6 +545,17 @@ export function CalendarioView() {
               )}
             </Button>
           )}
+          {!isReadOnly && (
+            <Button
+              variant={modoBloqueo ? 'destructive' : 'outline'}
+              size="sm"
+              className="gap-1.5 text-xs flex-1"
+              onClick={() => setModoBloqueo(!modoBloqueo)}
+            >
+              <Ban className="h-3.5 w-3.5" />
+              Bloquear
+            </Button>
+          )}
           {!isToday && (
             <Button variant="ghost" size="sm" className="text-xs" onClick={() => setFecha(new Date())}>
               Hoy
