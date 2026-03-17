@@ -462,11 +462,12 @@ export function CalendarioView() {
     }
   }
 
-  function handleDialogClose() {
+  function handleDialogClose(newDate?: Date) {
     setDialogOpen(false)
     setSelectedCita(null)
     setSelectedDate(null)
     setSelectedProfesionalId(null)
+    if (newDate) setFecha(newDate)
     fetchData()
   }
 

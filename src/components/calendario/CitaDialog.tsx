@@ -21,7 +21,7 @@ import { Phone, Banknote, Smartphone, Building2, Check, RotateCcw } from 'lucide
 
 interface Props {
   open: boolean
-  onClose: () => void
+  onClose: (newDate?: Date) => void
   cita: CitaConRelaciones | null
   selectedDate: { start: Date; end: Date } | null
   selectedProfesionalId?: string | null
@@ -221,6 +221,8 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
         if (error) throw error
         toast.success('Cita actualizada')
+        onClose(fechaInicio)
+        return
       } else {
         const { error } = await supabase.from('citas').insert({
           cliente_id: data.cliente_id || null,
