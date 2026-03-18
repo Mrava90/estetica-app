@@ -14,6 +14,7 @@ function getRpInfo(origin: string) {
 }
 
 export async function POST(request: Request) {
+  try {
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -91,4 +92,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ verified: true })
+  } catch (err) {
+    return NextResponse.json({ error: `Error interno: ${err}` }, { status: 500 })
+  }
 }
