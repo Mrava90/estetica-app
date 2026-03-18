@@ -223,8 +223,9 @@ export function CalendarioResourceDayView({
     if (e.button !== 0) return
 
     const isTouch = e.pointerType === 'touch'
-    // On desktop prevent default (text selection etc). On touch let browser handle scroll until drag activates.
-    if (!isTouch) e.preventDefault()
+    // Drag deshabilitado en móvil/touch — solo permitido desde desktop
+    if (isTouch) return
+    e.preventDefault()
     e.stopPropagation()
     ;(e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
 
