@@ -68,6 +68,7 @@ export function RecordatoriosDialog({ open, onClose, fecha: fechaProp }: Props) 
           .in('status', ['pendiente', 'confirmada'])
           .gte('fecha_inicio', inicio)
           .lte('fecha_inicio', fin)
+          .lt('created_at', inicio) // excluir turnos agendados el mismo día
           .order('fecha_inicio'),
         supabase.from('configuracion').select('mensaje_recordatorio').single(),
       ])
