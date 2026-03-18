@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
   let query = admin
     .from('audit_log')
     .select('*')
+    .not('usuario_email', 'is', null) // excluir entradas del sistema (sync sheets, etc.)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
 

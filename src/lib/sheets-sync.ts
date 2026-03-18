@@ -253,10 +253,9 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     throw new Error('Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY')
   }
 
-  // Período de sync: desde el 1ro del mes anterior
+  // Período de sync: solo desde hoy en adelante
   const now = new Date()
-  const syncFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const syncFromDate = `${syncFrom.getFullYear()}-${String(syncFrom.getMonth() + 1).padStart(2, '0')}-01`
+  const syncFromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
   // 1. Fetch all sheets via Google Sheets API
   const [ssrRows, kwRows, gastosRows] = await Promise.all([
