@@ -1,23 +1,36 @@
 {
-  "name": "Estética SR",
-  "short_name": "Estética SR",
-  "description": "Sistema de gestión de turnos",
-  "start_url": "/",
+  "name": "Kawirth",
+  "short_name": "Kawirth",
+  "description": "Sistema de gestión de turnos Kawirth",
+  "start_url": "/calendario",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#0a0a0a",
+  "theme_color": "#a21caf",
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
