@@ -143,7 +143,8 @@ export default function ServiciosPage() {
       toast.success(editingId ? 'Servicio actualizado' : 'Servicio creado')
       setDialogOpen(false)
       fetchServicios()
-    } catch {
+    } catch (err) {
+      console.error('Error al guardar servicio:', err)
       toast.error('Error al guardar servicio')
     } finally {
       setLoading(false)
