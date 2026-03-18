@@ -70,8 +70,8 @@ export default function LoginPage() {
       })
 
       if (!optRes.ok) {
-        const err = await optRes.json()
-        throw new Error(err.error || 'Error al iniciar autenticación')
+        const err = await optRes.json().catch(() => ({}))
+        throw new Error(err.error || `Error al iniciar autenticación (${optRes.status})`)
       }
 
       const { options, challengeId } = await optRes.json()
@@ -90,8 +90,8 @@ export default function LoginPage() {
       })
 
       if (!verifyRes.ok) {
-        const err = await verifyRes.json()
-        throw new Error(err.error || 'Verificación fallida')
+        const err = await verifyRes.json().catch(() => ({}))
+        throw new Error(err.error || `Verificación fallida (${verifyRes.status})`)
       }
 
       const { tokenHash } = await verifyRes.json()

@@ -32,8 +32,8 @@ export function RegisterFingerprintDialog({ open, onOpenChange }: Props) {
       })
 
       if (!optRes.ok) {
-        const err = await optRes.json()
-        throw new Error(err.error || 'Error al iniciar registro')
+        const err = await optRes.json().catch(() => ({}))
+        throw new Error(err.error || `Error al iniciar registro (${optRes.status})`)
       }
 
       const { options, challengeId } = await optRes.json()
@@ -52,8 +52,8 @@ export function RegisterFingerprintDialog({ open, onOpenChange }: Props) {
       })
 
       if (!verifyRes.ok) {
-        const err = await verifyRes.json()
-        throw new Error(err.error || 'Error al verificar registro')
+        const err = await verifyRes.json().catch(() => ({}))
+        throw new Error(err.error || `Error al verificar registro (${verifyRes.status})`)
       }
 
       setStatus('success')
