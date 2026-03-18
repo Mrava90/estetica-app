@@ -314,6 +314,7 @@ export function CalendarioView() {
       .in('status', ['pendiente', 'confirmada'])
       .gte('fecha_inicio', inicio)
       .lte('fecha_inicio', fin)
+      .lt('created_at', inicio) // excluir turnos agendados el mismo día
 
     const pendientes = (data || []).filter(
       (c) => !(c as unknown as Record<string, unknown>).recordatorio_whatsapp_enviado
