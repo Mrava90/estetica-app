@@ -93,7 +93,7 @@ export function CalendarioResourceDayView({
     const map = new Map<string, CitaConRelaciones[]>()
     profesionales.forEach((p) => map.set(p.id, []))
     citas.forEach((c) => {
-      if (c.profesional_id && map.has(c.profesional_id)) {
+      if (c.profesional_id && map.has(c.profesional_id) && c.status !== 'cancelada') {
         const citaDate = new Date(c.fecha_inicio)
         if (
           citaDate.getFullYear() === fecha.getFullYear() &&
