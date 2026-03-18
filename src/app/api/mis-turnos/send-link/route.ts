@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   const link = `${appUrl}/reservar/mis-turnos?token=${token}`
   const from = process.env.RESEND_FROM || 'Kawirth <noreply@kawirth.com>'
 
-  await resend.emails.send({
+  const { error: resendError } = await resend.emails.send({
     from,
     to: email,
     subject: 'Kawirth - Acceso a tus turnos',
@@ -49,6 +49,11 @@ export async function POST(request: NextRequest) {
       </div>
     `,
   })
+
+  if (resendError) {
+    console.error('Resend error:', resendError)
+    return NextResponse.json({ error: resendError.message }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }
