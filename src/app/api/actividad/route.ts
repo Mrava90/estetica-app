@@ -47,8 +47,9 @@ export async function GET(request: NextRequest) {
       .from('citas')
       .select('id, cliente_id, clientes(nombre, apellido)')
       .in('id', registroIds)
-    ;(citas ?? []).forEach((c: { id: string; clientes: { nombre: string; apellido: string | null } | null }) => {
-      if (c.clientes) clienteMap[c.id] = c.clientes
+    ;(citas ?? []).forEach((c) => {
+      const cl = Array.isArray(c.clientes) ? c.clientes[0] : c.clientes
+      if (cl) clienteMap[c.id] = cl
     })
   }
 

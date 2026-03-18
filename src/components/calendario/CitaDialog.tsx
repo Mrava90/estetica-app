@@ -574,7 +574,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             <Button type="submit" disabled={loading} className="flex-1">
               {loading ? 'Guardando...' : isEditing ? 'Actualizar cita' : 'Crear cita'}
             </Button>
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={() => onClose()}>
               Cancelar
             </Button>
           </div>
