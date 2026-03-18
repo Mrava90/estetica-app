@@ -1,64 +1,77 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSearchParams } from 'next/navigation'
 import { formatFechaHora } from '@/lib/dates'
 import type { CitaConRelaciones } from '@/types/database'
-import { CalendarDays, User, Mail, CheckCircle, X, LogOut } from 'lucide-react'
+import { CalendarDays, Mail, CheckCircle, X } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { Suspense } from 'react'
 
-type Estado = 'loading' | 'sin-sesion' | 'sin-cliente' | 'ok'
+const TOKEN_KEY = 'mt_token'
 
-export default function MisTurnosPage() {
+type Estado = 'loading' | 'sin-token' | 'sin-turnos' | 'ok' | 'expirado'
+
+function MisTurnosContent() {
+  const searchParams = useSearchParams()
   const [estado, setEstado] = useState<Estado>('loading')
   const [citas, setCitas] = useState<CitaConRelaciones[]>([])
-  const [email, setEmail] = useState('')
+  const [clienteEmail, setClienteEmail] = useState('')
+  const [token, setToken] = useState('')
   const [inputEmail, setInputEmail] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [linkEnviado, setLinkEnviado] = useState(false)
   const [errorEmail, setErrorEmail] = useState('')
   const [cancelando, setCancelando] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
-  const supabase = createClient()
 
   useEffect(() => {
-    async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user?.email) {
-        setEstado('sin-sesion')
-        return
-      }
-      setEmail(user.email)
-      const res = await fetch('/api/mis-turnos')
-      if (!res.ok) { setEstado('sin-sesion'); return }
-      const { citas: data } = await res.json()
-      if (!data || data.length === 0) {
-        setEstado('sin-cliente')
-      } else {
-        setCitas(data)
-        setEstado('ok')
-      }
+    const urlToken = searchParams.get('token')
+    const savedToken = localStorage.getItem(TOKEN_KEY)
+    const activeToken = urlToken || savedToken || ''
+
+    if (!activeToken) {
+      setEstado('sin-token')
+      return
     }
-    init()
+
+    if (urlToken) localStorage.setItem(TOKEN_KEY, urlToken)
+    setToken(activeToken)
+    loadCitas(activeToken)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleMagicLink() {
+  async function loadCitas(t: string) {
+    const res = await fetch(`/api/mis-turnos?token=${t}`)
+    if (res.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+      setEstado('expirado')
+      return
+    }
+    const { citas: data, cliente } = await res.json()
+    if (cliente?.email) setClienteEmail(cliente.email)
+    if (!data || data.length === 0) {
+      setEstado('sin-turnos')
+    } else {
+      setCitas(data)
+      setEstado('ok')
+    }
+  }
+
+  async function handleSendLink() {
     if (!inputEmail.trim() || !inputEmail.includes('@')) {
       setErrorEmail('Ingresá un email válido')
       return
     }
     setEnviando(true)
     setErrorEmail('')
-    const { error } = await supabase.auth.signInWithOtp({
-      email: inputEmail.trim().toLowerCase(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservar/mis-turnos`,
-        shouldCreateUser: true,
-      },
+    const res = await fetch('/api/mis-turnos/send-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: inputEmail.trim().toLowerCase() }),
     })
     setEnviando(false)
-    if (error) {
+    if (!res.ok) {
       setErrorEmail('No se pudo enviar el link. Intentá de nuevo.')
     } else {
       setLinkEnviado(true)
@@ -71,7 +84,7 @@ export default function MisTurnosPage() {
     const res = await fetch('/api/mis-turnos/cancelar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ citaId }),
+      body: JSON.stringify({ citaId, token }),
     })
     const data = await res.json()
     setCancelando(null)
@@ -82,18 +95,18 @@ export default function MisTurnosPage() {
     }
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    setEstado('sin-sesion')
-    setEmail('')
+  function handleSalir() {
+    localStorage.removeItem(TOKEN_KEY)
+    setToken('')
     setCitas([])
+    setEstado('sin-token')
   }
 
   if (estado === 'loading') {
     return <div className="text-center text-white/70 py-16">Cargando...</div>
   }
 
-  if (estado === 'sin-sesion') {
+  if (estado === 'sin-token' || estado === 'expirado') {
     return (
       <div className="flex flex-col items-center space-y-6 py-8">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-fuchsia-100">
@@ -101,7 +114,11 @@ export default function MisTurnosPage() {
         </div>
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold text-white drop-shadow-md">Mis turnos</h1>
-          <p className="text-sm text-white/80">Ingresá tu email para ver y gestionar tus turnos</p>
+          <p className="text-sm text-white/80">
+            {estado === 'expirado'
+              ? 'El link expiró. Pedí uno nuevo.'
+              : 'Ingresá tu email para recibir un link de acceso'}
+          </p>
         </div>
         <div className="rounded-xl border border-gray-900 bg-white p-5 w-full max-w-sm space-y-4">
           {linkEnviado ? (
@@ -118,13 +135,13 @@ export default function MisTurnosPage() {
                   placeholder="tu@email.com"
                   value={inputEmail}
                   onChange={(e) => { setInputEmail(e.target.value); setErrorEmail('') }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleMagicLink()}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSendLink()}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
                 />
                 {errorEmail && <p className="text-xs text-red-500">{errorEmail}</p>}
               </div>
               <button
-                onClick={handleMagicLink}
+                onClick={handleSendLink}
                 disabled={enviando}
                 className="w-full rounded-lg bg-fuchsia-600 py-2.5 text-sm font-semibold text-white hover:bg-fuchsia-700 disabled:opacity-50 transition-all"
               >
@@ -140,16 +157,16 @@ export default function MisTurnosPage() {
     )
   }
 
-  if (estado === 'sin-cliente') {
+  if (estado === 'sin-turnos') {
     return (
       <div className="flex flex-col items-center space-y-5 py-8">
         <h1 className="text-2xl font-bold text-white drop-shadow-md">Mis turnos</h1>
         <div className="rounded-xl border border-gray-900 bg-white p-6 text-center w-full max-w-sm space-y-2">
-          <p className="text-sm font-medium text-gray-700">No encontramos turnos para <strong>{email}</strong></p>
-          <p className="text-xs text-gray-500">Si reservaste con otro email, volvé a solicitar acceso con ese email.</p>
+          <p className="text-sm font-medium text-gray-700">No encontramos turnos asociados a tu cuenta.</p>
+          <p className="text-xs text-gray-500">Si reservaste con otro email, solicitá acceso con ese email.</p>
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white">
-          <LogOut className="h-4 w-4" /> Cerrar sesión
+        <button onClick={handleSalir} className="text-sm text-white/70 hover:text-white underline">
+          Usar otro email
         </button>
         <Link href="/reservar" className="rounded-xl bg-black px-8 py-3 text-sm font-semibold text-white hover:bg-gray-900 shadow-lg">
           Reservar un turno
@@ -166,10 +183,10 @@ export default function MisTurnosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white drop-shadow-md">Mis turnos</h1>
-          <p className="text-xs text-white/70 mt-0.5">{email}</p>
+          {clienteEmail && <p className="text-xs text-white/70 mt-0.5">{clienteEmail}</p>}
         </div>
-        <button onClick={handleLogout} className="flex items-center gap-1 text-xs text-white/70 hover:text-white">
-          <LogOut className="h-3.5 w-3.5" /> Salir
+        <button onClick={handleSalir} className="text-xs text-white/70 hover:text-white underline">
+          Salir
         </button>
       </div>
 
@@ -224,7 +241,6 @@ function CitaCard({
   const isPasado = new Date(cita.fecha_inicio) < new Date()
   const isCancelado = cita.status === 'cancelada'
   const isCompletado = cita.status === 'completada'
-
   const horasRestantes = (new Date(cita.fecha_inicio).getTime() - Date.now()) / (1000 * 60 * 60)
   const puedeCancelar = !isPasado && !isCancelado && !isCompletado && horasRestantes >= 24
 
@@ -293,5 +309,13 @@ function CitaCard({
         <p className="text-xs text-gray-400">No se puede cancelar con menos de 24hs de anticipación</p>
       )}
     </div>
+  )
+}
+
+export default function MisTurnosPage() {
+  return (
+    <Suspense fallback={<div className="text-center text-white/70 py-16">Cargando...</div>}>
+      <MisTurnosContent />
+    </Suspense>
   )
 }

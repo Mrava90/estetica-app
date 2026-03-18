@@ -20,14 +20,21 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '200'), 500)
   const offset = parseInt(searchParams.get('offset') ?? '0')
+  const desde = searchParams.get('desde')
+  const hasta = searchParams.get('hasta')
 
   const admin = createAdminClient()
 
-  const { data: logs, error } = await admin
+  let query = admin
     .from('audit_log')
     .select('*')
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1)
+
+  if (desde) query = query.gte('created_at', `${desde}T00:00:00`)
+  if (hasta) query = query.lte('created_at', `${hasta}T23:59:59`)
+
+  const { data: logs, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

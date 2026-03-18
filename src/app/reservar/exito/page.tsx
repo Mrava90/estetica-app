@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { formatFechaHora } from '@/lib/dates'
 import { CheckCircle, Mail } from 'lucide-react'
 
@@ -16,33 +15,23 @@ function ExitoContent() {
   const [enviando, setEnviando] = useState(false)
   const [linkEnviado, setLinkEnviado] = useState(false)
   const [error, setError] = useState('')
-  const supabase = createClient()
 
-  // Si vino email desde confirmar, enviar magic link automáticamente
   useEffect(() => {
     if (emailParam && citaId) {
-      sendMagicLink(emailParam)
+      sendLink(emailParam)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function sendMagicLink(email: string) {
+  async function sendLink(email: string) {
     setEnviando(true)
+    setError('')
     try {
-      if (citaId) {
-        await fetch('/api/mis-turnos/registrar-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, citaId }),
-        })
-      }
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservar/mis-turnos`,
-          shouldCreateUser: true,
-        },
+      const res = await fetch('/api/mis-turnos/send-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
       })
-      if (otpError) throw otpError
+      if (!res.ok) throw new Error()
       setLinkEnviado(true)
     } catch {
       setError('No se pudo enviar el link.')
@@ -69,7 +58,6 @@ function ExitoContent() {
         </div>
       )}
 
-      {/* Magic link - solo si ingresó email al reservar */}
       {emailParam && (
         <div className="rounded-xl border border-fuchsia-200 bg-white p-5 w-full max-w-sm space-y-3">
           <div className="flex items-center gap-2">
@@ -87,7 +75,7 @@ function ExitoContent() {
             <div className="space-y-2">
               {error && <p className="text-xs text-red-500">{error}</p>}
               <button
-                onClick={() => sendMagicLink(emailParam)}
+                onClick={() => sendLink(emailParam)}
                 className="text-sm font-medium text-fuchsia-600 hover:underline"
               >
                 Reenviar link a {emailParam}

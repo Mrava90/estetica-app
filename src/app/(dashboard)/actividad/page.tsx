@@ -85,11 +85,14 @@ function formatDetalle(log: LogEntry): string {
 export default function ActividadPage() {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [desde, setDesde] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [hasta, setHasta] = useState(() => format(new Date(), 'yyyy-MM-dd'))
 
   async function fetchLogs() {
     setLoading(true)
     try {
-      const res = await fetch('/api/actividad?limit=200')
+      const params = new URLSearchParams({ limit: '500', desde, hasta })
+      const res = await fetch(`/api/actividad?${params}`)
       const data = await res.json()
       setLogs(data.logs ?? [])
     } finally {
@@ -97,7 +100,14 @@ export default function ActividadPage() {
     }
   }
 
-  useEffect(() => { fetchLogs() }, [])
+  useEffect(() => { fetchLogs() }, [desde, hasta])
+
+  const resumen = {
+    online: logs.filter(l => l.accion === 'insert' && l.datos_nuevos?.origen === 'online').length,
+    manual: logs.filter(l => l.accion === 'insert' && l.datos_nuevos?.origen !== 'online').length,
+    canceladas: logs.filter(l => l.accion === 'update' && l.datos_nuevos?.status === 'cancelada').length,
+    reprogramadas: logs.filter(l => l.accion === 'update' && l.datos_anteriores?.fecha_inicio !== l.datos_nuevos?.fecha_inicio && l.datos_nuevos?.status !== 'cancelada').length,
+  }
 
   return (
     <div className="space-y-6">
@@ -112,11 +122,53 @@ export default function ActividadPage() {
         </Button>
       </div>
 
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">Desde</label>
+          <input
+            type="date"
+            value={desde}
+            onChange={e => setDesde(e.target.value)}
+            className="text-sm border rounded-md px-2 py-1.5 bg-background"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">Hasta</label>
+          <input
+            type="date"
+            value={hasta}
+            onChange={e => setHasta(e.target.value)}
+            className="text-sm border rounded-md px-2 py-1.5 bg-background"
+          />
+        </div>
+        {logs.length > 0 && (
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded-full">
+              {resumen.online} online
+            </span>
+            <span className="text-[11px] bg-green-100 text-green-700 font-semibold px-2 py-0.5 rounded-full">
+              {resumen.manual} manual{resumen.manual !== 1 ? 'es' : ''}
+            </span>
+            {resumen.canceladas > 0 && (
+              <span className="text-[11px] bg-red-100 text-red-700 font-semibold px-2 py-0.5 rounded-full">
+                {resumen.canceladas} cancelada{resumen.canceladas !== 1 ? 's' : ''}
+              </span>
+            )}
+            {resumen.reprogramadas > 0 && (
+              <span className="text-[11px] bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded-full">
+                {resumen.reprogramadas} reprogramada{resumen.reprogramadas !== 1 ? 's' : ''}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground pl-1">{logs.length} registros</span>
+          </div>
+        )}
+      </div>
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Activity className="h-4 w-4" />
-            Últimas 200 acciones
+            Registro de actividad
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
