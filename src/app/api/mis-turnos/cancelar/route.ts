@@ -1,24 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const MIN_HOURS_TO_CANCEL = 24
 
 export async function POST(request: NextRequest) {
-  const { citaId, token } = await request.json()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  if (!token) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
-  if (!citaId) return NextResponse.json({ error: 'citaId requerido' }, { status: 400 })
+  if (!user?.email) {
+    return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+  }
+
+  const { citaId } = await request.json()
+  if (!citaId) {
+    return NextResponse.json({ error: 'citaId requerido' }, { status: 400 })
+  }
 
   const admin = createAdminClient()
 
   const { data: cliente } = await admin
     .from('clientes')
     .select('id')
-    .eq('access_token', token)
-    .gte('access_token_expires_at', new Date().toISOString())
+    .eq('email', user.email)
     .single()
 
-  if (!cliente) return NextResponse.json({ error: 'Token inválido o expirado' }, { status: 401 })
+  if (!cliente) {
+    return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
+  }
 
   const { data: cita } = await admin
     .from('citas')

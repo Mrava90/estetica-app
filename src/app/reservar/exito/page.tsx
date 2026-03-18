@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 import { formatFechaHora } from '@/lib/dates'
 import { CheckCircle, Mail } from 'lucide-react'
 
@@ -15,23 +16,33 @@ function ExitoContent() {
   const [enviando, setEnviando] = useState(false)
   const [linkEnviado, setLinkEnviado] = useState(false)
   const [error, setError] = useState('')
+  const supabase = createClient()
 
   useEffect(() => {
     if (emailParam && citaId) {
-      sendLink(emailParam)
+      sendMagicLink(emailParam)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function sendLink(email: string) {
+  async function sendMagicLink(email: string) {
     setEnviando(true)
     setError('')
     try {
-      const res = await fetch('/api/mis-turnos/send-link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+      if (citaId) {
+        await fetch('/api/mis-turnos/registrar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, citaId }),
+        })
+      }
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservar/mis-turnos`,
+          shouldCreateUser: true,
+        },
       })
-      if (!res.ok) throw new Error()
+      if (otpError) throw otpError
       setLinkEnviado(true)
     } catch {
       setError('No se pudo enviar el link.')
@@ -75,7 +86,7 @@ function ExitoContent() {
             <div className="space-y-2">
               {error && <p className="text-xs text-red-500">{error}</p>}
               <button
-                onClick={() => sendLink(emailParam)}
+                onClick={() => sendMagicLink(emailParam)}
                 className="text-sm font-medium text-fuchsia-600 hover:underline"
               >
                 Reenviar link a {emailParam}

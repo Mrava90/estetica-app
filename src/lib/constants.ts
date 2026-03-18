@@ -10,6 +10,7 @@ import {
   Calculator,
   Receipt,
   Activity,
+  KeyRound,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -40,6 +41,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true },
   { label: 'Facturación', href: '/facturacion', icon: Receipt, adminOnly: true },
   { label: 'Actividad', href: '/actividad', icon: Activity, adminOnly: true },
+  { label: 'Accesos', href: '/accesos', icon: KeyRound, adminOnly: true },
   { label: 'Configuración', href: '/configuracion', icon: Settings },
 ]
 
