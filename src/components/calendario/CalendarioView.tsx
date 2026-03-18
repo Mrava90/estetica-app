@@ -383,8 +383,15 @@ export function CalendarioView() {
       })
       .subscribe()
 
+    // Polling de respaldo cada 30s por si Realtime no está activo
+    const interval = setInterval(() => {
+      fetchData()
+      fetchRecordatoriosPendientes()
+    }, 30000)
+
     return () => {
       supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [fetchData, fetchRecordatoriosPendientes, supabase])
 
