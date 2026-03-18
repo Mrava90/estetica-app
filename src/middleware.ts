@@ -11,7 +11,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Public routes that don't need auth
-  const publicPaths = ['/login', '/reset-password', '/auth/confirm', '/reservar', '/api/citas', '/api/mis-turnos', '/api/whatsapp/webhook', '/api/cron']
+  const publicPaths = ['/login', '/reset-password', '/auth/confirm', '/reservar', '/api/citas', '/api/mis-turnos', '/api/whatsapp/webhook', '/api/cron', '/api/auth/webauthn']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
   if (isPublic) return NextResponse.next()
 
