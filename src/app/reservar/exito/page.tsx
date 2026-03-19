@@ -39,10 +39,13 @@ function ExitoContent() {
         email,
         options: {
           emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservar/mis-turnos`,
-          shouldCreateUser: true,
+          shouldCreateUser: false,
         },
       })
-      if (otpError) throw otpError
+      // Si el usuario no existe, igual mostramos éxito (no exponemos si existe o no)
+      if (otpError && otpError.message !== 'Signups not allowed for otp') {
+        throw otpError
+      }
       setLinkEnviado(true)
     } catch {
       setError('No se pudo enviar el link.')
