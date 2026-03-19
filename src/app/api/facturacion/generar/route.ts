@@ -132,7 +132,11 @@ async function getAuthTicket(): Promise<{ token: string; sign: string }> {
   const responseXml = await soapPost(WSAA_URL, soapBody, 'loginCms')
   const token = extractTag(responseXml, 'token')
   const sign  = extractTag(responseXml, 'sign')
-  if (!token || !sign) throw new Error('WSAA: no se obtuvo Token/Signature')
+  if (!token || !sign) {
+    const fault = extractTag(responseXml, 'faultstring') || extractTag(responseXml, 'faultcode')
+    const detail = fault || responseXml.slice(0, 400)
+    throw new Error(`WSAA: no se obtuvo Token/Signature — ${detail}`)
+  }
   return { token, sign }
 }
 
