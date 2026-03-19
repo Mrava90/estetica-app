@@ -27,13 +27,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const users = data.users.map((u) => ({
-    id: u.id,
-    email: u.email,
-    created_at: u.created_at,
-    last_sign_in_at: u.last_sign_in_at,
-    is_admin: isAdminEmail(u.email) || u.app_metadata?.is_admin === true,
-  }))
+  // Solo mostrar staff (@estetica.local) y admins — los clientes van a /accesos
+  const users = data.users
+    .filter((u) => u.email && (u.email.endsWith('@estetica.local') || isAdminEmail(u.email) || u.app_metadata?.is_admin === true))
+    .map((u) => ({
+      id: u.id,
+      email: u.email,
+      created_at: u.created_at,
+      last_sign_in_at: u.last_sign_in_at,
+      is_admin: isAdminEmail(u.email) || u.app_metadata?.is_admin === true,
+    }))
 
   return NextResponse.json({ users })
 }
