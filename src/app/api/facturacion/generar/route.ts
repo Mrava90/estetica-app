@@ -110,10 +110,36 @@ function buildCmsDer(xml: string, certPem: string, keyPem: string): string {
  * Llama al WSAA para obtener Token y Signature.
  * Devuelve { token, sign } o lanza error.
  */
+/**
+ * Normaliza un PEM que puede venir con \n literales, con \r\n, o sin saltos.
+ * Reconstruye el PEM con el formato correcto (64 chars por línea).
+ */
+function normalizePem(raw: string, type: 'CERTIFICATE' | 'PRIVATE KEY' | 'RSA PRIVATE KEY'): string {
+  // Reemplazar \n literales y \r\n
+  let pem = raw.replace(/\\n/g, '\n').replace(/\r\n/g, '\n').trim()
+
+  // Extraer base64 puro (sin cabeceras ni espacios)
+  const b64 = pem
+    .replace(/-----BEGIN[^-]+-----/g, '')
+    .replace(/-----END[^-]+-----/g, '')
+    .replace(/\s+/g, '')
+
+  if (!b64) return pem
+
+  // Reconstruir con 64 chars por línea (formato PEM estándar)
+  const wrapped = (b64.match(/.{1,64}/g) || []).join('\n')
+  return `-----BEGIN ${type}-----\n${wrapped}\n-----END ${type}-----`
+}
+
 async function getAuthTicket(): Promise<{ token: string; sign: string }> {
   const cuit = process.env.AFIP_CUIT!
-  const cert = process.env.AFIP_CERT!.replace(/\\n/g, '\n')
-  const key  = process.env.AFIP_KEY!.replace(/\\n/g, '\n')
+  const rawCert = process.env.AFIP_CERT!
+  const rawKey  = process.env.AFIP_KEY!
+
+  // Detectar tipo de clave privada
+  const keyType = rawKey.includes('RSA PRIVATE KEY') ? 'RSA PRIVATE KEY' : 'PRIVATE KEY'
+  const cert = normalizePem(rawCert, 'CERTIFICATE')
+  const key  = normalizePem(rawKey, keyType)
 
   const xml = buildLoginTicketRequest('wsfe')
   const cmsBase64 = buildCmsDer(xml, cert, key)
