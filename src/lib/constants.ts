@@ -11,6 +11,8 @@ import {
   Receipt,
   Activity,
   KeyRound,
+  FileText,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -37,9 +39,11 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Clientes', href: '/clientes', icon: Users },
   { label: 'Servicios', href: '/servicios', icon: Scissors },
   { label: 'Personal', href: '/personal', icon: UserCog },
+  { label: 'Promociones', href: '/promociones', icon: Sparkles, adminOnly: true },
   { label: 'Informes', href: '/informes', icon: BarChart3, adminOnly: true },
   { label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true },
   { label: 'Facturación', href: '/facturacion', icon: Receipt, adminOnly: true },
+  { label: 'AFIP', href: '/afip', icon: FileText, adminOnly: true },
   { label: 'Actividad', href: '/actividad', icon: Activity, adminOnly: true },
   { label: 'Accesos', href: '/accesos', icon: KeyRound, adminOnly: true },
   { label: 'Configuración', href: '/configuracion', icon: Settings },

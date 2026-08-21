@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Servicio, Profesional } from '@/types/database'
+import type { Servicio, Profesional, Promocion } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
-import { Clock, Banknote, ChevronRight, ArrowLeft, Search } from 'lucide-react'
+import { Clock, Banknote, ChevronRight, ArrowLeft, Search, Sparkles, X } from 'lucide-react'
 import Image from 'next/image'
+import { getCategoria } from '@/lib/categorias'
+import { promosDelDia, descripcionDescuento, descripcionHorario, promoAplica, calcularPrecioConPromo } from '@/lib/promociones'
 
 export default function ReservarPage() {
   const router = useRouter()
@@ -17,9 +19,17 @@ export default function ReservarPage() {
   const [filteredProfs, setFilteredProfs] = useState<Profesional[]>([])
   const [categoria, setCategoria] = useState<string>('todos')
   const [busqueda, setBusqueda] = useState('')
-  const [bookingCounts, setBookingCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  const [promos, setPromos] = useState<Promocion[]>([])
+  const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null)
+  const [ahora, setAhora] = useState(() => new Date())
   const supabase = createClient()
+
+  // Re-render cada 60s para que las promos venzan automáticamente al pasar hora_hasta
+  useEffect(() => {
+    const t = setInterval(() => setAhora(new Date()), 60_000)
+    return () => clearInterval(t)
+  }, [])
 
   const categorias = [
     { key: 'todos', label: 'Todos' },
@@ -30,15 +40,6 @@ export default function ReservarPage() {
     { key: 'cejas', label: 'Cejas' },
   ]
 
-  function getCategoria(nombre: string): string {
-    const n = nombre.toLowerCase()
-    if (n.includes('pesta') || n.includes('lifting') || n.includes('botox') || n.includes('rimmel') || n.includes('2d') || n.includes('3d') || n.includes('mega volumen') || n.includes('retirado de maquillaje')) return 'pestanas'
-    if (n.includes('ceja') || n.includes('henna') || n.includes('laminado') || n.includes('perfilado')) return 'cejas'
-    if (n.includes('pies') || n.includes('belleza de pie')) return 'pies'
-    if (n.includes('manos') || n.includes('kapping') || n.includes('semi') || n.includes('esmaltado') || n.includes('remocion') || n.includes('acrilico') || n.includes('gel')) return 'manos'
-    return 'otros'
-  }
-
   const categoriaIcon: Record<string, string> = {
     manos: '/icons/mano.jpg',
     pies: '/icons/pies.jpg',
@@ -46,27 +47,21 @@ export default function ReservarPage() {
     cejas: '/icons/ceja.jpg',
   }
 
-  // Top 5 más solicitados globalmente (rank 0=más popular)
-  const top5RankMap = (() => {
-    const sorted = [...servicios].sort((a, b) => (bookingCounts[b.id] || 0) - (bookingCounts[a.id] || 0))
-    return new Map(sorted.slice(0, 5).map((s, i) => [s.id, i]))
-  })()
-
   const filteredServicios = servicios
     .filter((s) => {
       if (categoria === 'promos') return s.es_promo || /^promo/i.test(s.nombre)
-      if (categoria !== 'todos' && getCategoria(s.nombre) !== categoria) return false
+      if (categoria !== 'todos' && getCategoria(s.nombre, s.categoria) !== categoria) return false
       if (busqueda && !s.nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
       return true
     })
     .sort((a, b) => {
-      const aRank = top5RankMap.get(a.id)
-      const bRank = top5RankMap.get(b.id)
+      const aRank = (a as any).orden_reserva as number | null
+      const bRank = (b as any).orden_reserva as number | null
 
-      // 1. Top 5 primero, en orden de demanda
-      if (aRank !== undefined && bRank !== undefined) return aRank - bRank
-      if (aRank !== undefined) return -1
-      if (bRank !== undefined) return 1
+      // 1. Top 5 primero, en orden precalculado
+      if (aRank != null && bRank != null) return aRank - bRank
+      if (aRank != null) return -1
+      if (bRank != null) return 1
 
       // 2. Nombres que empiezan con dígito al final
       const aIsNum = /^\d/.test(a.nombre)
@@ -79,58 +74,16 @@ export default function ReservarPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const CACHE_TTL = 5 * 60 * 1000 // 5 minutos
-
-      // Intentar cargar desde cache primero
-      try {
-        const cached = localStorage.getItem('reservar_cache')
-        if (cached) {
-          const { servicios: cachedServ, profesionales: cachedProf, counts: cachedCounts, ts } = JSON.parse(cached)
-          if (Date.now() - ts < CACHE_TTL) {
-            setServicios(cachedServ)
-            setProfesionales(cachedProf)
-            setBookingCounts(cachedCounts)
-            setLoading(false)
-            return
-          }
-        }
-      } catch {}
-
-      // Cargar servicios y profesionales primero (rápido, muestra la UI)
-      const [servRes, profRes] = await Promise.all([
-        supabase.from('servicios').select('*').eq('activo', true).order('nombre'),
+      const [servRes, profRes, promosRes] = await Promise.all([
+        supabase.from('servicios').select('*').eq('activo', true).order('orden_reserva', { ascending: true, nullsFirst: false }).order('nombre'),
         supabase.from('profesionales').select('*').eq('activo', true).eq('visible_calendario', true).order('orden').order('nombre'),
+        fetch('/api/promociones/activas').then(r => r.ok ? r.json() : { items: [] }),
       ])
 
       if (servRes.data) setServicios(servRes.data)
+      if (promosRes?.items) setPromos(promosRes.items as Promocion[])
       if (profRes.data) setProfesionales(profRes.data)
       setLoading(false)
-
-      // Cargar citas en segundo plano (no bloquea la UI)
-      const sixtyDaysAgo = new Date()
-      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60)
-      const citasRes = await supabase
-        .from('citas')
-        .select('servicio_id')
-        .gte('fecha_inicio', sixtyDaysAgo.toISOString())
-        .in('status', ['completada', 'confirmada', 'pendiente'])
-        .not('servicio_id', 'is', null)
-
-      const counts: Record<string, number> = {}
-      for (const c of citasRes.data || []) {
-        if (c.servicio_id) counts[c.servicio_id] = (counts[c.servicio_id] || 0) + 1
-      }
-      setBookingCounts(counts)
-
-      // Guardar en cache
-      try {
-        localStorage.setItem('reservar_cache', JSON.stringify({
-          servicios: servRes.data,
-          profesionales: profRes.data,
-          counts,
-          ts: Date.now(),
-        }))
-      } catch {}
     }
     fetchData()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -166,6 +119,24 @@ export default function ReservarPage() {
 
   const selectedServ = servicios.find((s) => s.id === selectedServicio)
 
+  // Promos activas HOY (para banner). Depende de `ahora` para venzan al pasar hora_hasta.
+  const promosHoy = promosDelDia(promos, ahora)
+  const promosHoyConImagen = promosHoy.filter(p => !!p.imagen_url)
+  const promosHoySinImagen = promosHoy.filter(p => !p.imagen_url)
+
+  // Servicios con al menos una promo aplicable en algún horario de hoy
+  const servicioTienePromoHoy = (servicioId: string): boolean => {
+    if (promosHoy.length === 0) return false
+    // Test rápido: si alguna promo del día tiene ese servicio en scope (o aplica a todos)
+    return promosHoy.some(p => {
+      if (p.precios_override && Object.keys(p.precios_override).length > 0) {
+        return servicioId in p.precios_override
+      }
+      if (p.servicios_ids && p.servicios_ids.length > 0) return p.servicios_ids.includes(servicioId)
+      return true
+    })
+  }
+
   return (
     <div className="space-y-6">
       {/* Title */}
@@ -186,7 +157,81 @@ export default function ReservarPage() {
         </p>
       </div>
 
-      {/* Step 1: Service list */}
+      {/* Banner de promos activas HOY sin imagen (banner de texto) */}
+      {!selectedServicio && promosHoySinImagen.length > 0 && (
+        <div className="space-y-2">
+          {promosHoySinImagen.map(p => (
+            <div key={p.id} className="rounded-xl border-2 border-fuchsia-400 bg-gradient-to-r from-fuchsia-500 to-pink-500 px-4 py-3 text-white shadow-lg">
+              <div className="flex items-start gap-2.5">
+                <Sparkles className="h-5 w-5 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                    <p className="font-bold text-sm uppercase tracking-wide">{p.nombre}</p>
+                    <span className="text-xs font-semibold bg-white/20 px-2 py-0.5 rounded-full">
+                      {descripcionDescuento(p)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/90 mt-0.5">
+                    {descripcionHorario(p)}
+                    {p.metodo_pago_requerido && <> · pagando en <strong>{p.metodo_pago_requerido}</strong></>}
+                  </p>
+                  {p.descripcion && <p className="text-[11px] text-white/80 mt-0.5">{p.descripcion}</p>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Imágenes de promos:
+          - Mobile/tablet: van arriba, en el flujo, ancho completo
+          - xl (≥1280px): fijas a la izquierda del contenedor central, sin achicar servicios */}
+      {!selectedServicio && promosHoyConImagen.length > 0 && (
+        <div className="space-y-3 xl:hidden">
+          {promosHoyConImagen.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setImagenAmpliada(p.imagen_url!)}
+              className="block w-full rounded-2xl overflow-hidden border-2 border-fuchsia-400 shadow-lg bg-white transition-transform hover:scale-[1.01] active:scale-95"
+              aria-label={`Ver ${p.nombre} en grande`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={p.imagen_url!}
+                alt={p.nombre}
+                className="w-full h-auto object-contain bg-fuchsia-500"
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Panel fijo a la izquierda en desktop grande — NO achica el contenedor central */}
+      {!selectedServicio && promosHoyConImagen.length > 0 && (
+        <div className="hidden xl:block fixed left-6 top-24 w-[22rem] 2xl:w-[26rem] max-h-[calc(100vh-8rem)] overflow-y-auto space-y-3 z-20">
+          {promosHoyConImagen.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setImagenAmpliada(p.imagen_url!)}
+              className="block w-full rounded-2xl overflow-hidden border-2 border-fuchsia-400 shadow-2xl bg-white transition-transform hover:scale-[1.01] active:scale-95"
+              aria-label={`Ver ${p.nombre} en grande`}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={p.imagen_url!}
+                alt={p.nombre}
+                className="w-full h-auto object-contain bg-fuchsia-500"
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Step 1: Service list — sin achicar */}
       {!selectedServicio && (
         <div className="space-y-4">
           {/* Category filter */}
@@ -236,17 +281,29 @@ export default function ReservarPage() {
               </div>
             </div>
           ))}
-          {!loading && filteredServicios.map((s) => (
+          {!loading && filteredServicios.map((s) => {
+            const tienePromo = servicioTienePromoHoy(s.id)
+            return (
             <button
               key={s.id}
               onClick={() => setSelectedServicio(s.id)}
-              className="w-full rounded-xl border border-gray-900 bg-white p-4 text-left transition-all hover:border-fuchsia-500 hover:shadow-sm"
+              className={`relative w-full rounded-xl border p-4 text-left transition-all hover:shadow-sm ${
+                tienePromo
+                  ? 'border-fuchsia-400 bg-gradient-to-br from-fuchsia-50 to-white hover:border-fuchsia-500'
+                  : 'border-gray-900 bg-white hover:border-fuchsia-500'
+              }`}
             >
+              {tienePromo && (
+                <span className="absolute -top-2 -right-2 flex items-center gap-1 rounded-full bg-fuchsia-500 px-2 py-0.5 text-[10px] font-bold text-white shadow">
+                  <Sparkles className="h-3 w-3" />
+                  PROMO HOY
+                </span>
+              )}
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-50 overflow-hidden">
                   <Image
-                    src={categoriaIcon[getCategoria(s.nombre)] || '/icons/mano.jpg'}
-                    alt={getCategoria(s.nombre)}
+                    src={categoriaIcon[getCategoria(s.nombre, s.categoria)] || '/icons/mano.jpg'}
+                    alt={getCategoria(s.nombre, s.categoria)}
                     width={32}
                     height={32}
                     className="h-8 w-8 object-contain"
@@ -275,8 +332,32 @@ export default function ReservarPage() {
                 <ChevronRight className="h-5 w-5 shrink-0 text-gray-300" />
               </div>
             </button>
-          ))}
+          )})}
           </div>
+        </div>
+      )}
+
+      {/* Lightbox: imagen ampliada al hacer clic */}
+      {imagenAmpliada && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setImagenAmpliada(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setImagenAmpliada(null)}
+            className="absolute top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 text-white p-2 backdrop-blur"
+            aria-label="Cerrar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imagenAmpliada}
+            alt="Promo ampliada"
+            className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
 
@@ -291,8 +372,8 @@ export default function ReservarPage() {
             <ArrowLeft className="h-4 w-4 shrink-0 text-fuchsia-500" />
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fuchsia-100 overflow-hidden">
               <Image
-                src={categoriaIcon[getCategoria(selectedServ?.nombre || '')] || '/icons/mano.jpg'}
-                alt={getCategoria(selectedServ?.nombre || '')}
+                src={categoriaIcon[getCategoria(selectedServ?.nombre || '', selectedServ?.categoria)] || '/icons/mano.jpg'}
+                alt={getCategoria(selectedServ?.nombre || '', selectedServ?.categoria)}
                 width={32}
                 height={32}
                 className="h-8 w-8 object-contain"

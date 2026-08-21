@@ -4,10 +4,11 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatFechaHora, formatPrecio, capitalizeWords } from '@/lib/dates'
-import type { Servicio, Profesional } from '@/types/database'
+import type { Servicio, Profesional, Promocion } from '@/types/database'
 import { NailIcon } from '@/components/reservar/ReservarHeader'
-import { ArrowLeft, CalendarDays, User } from 'lucide-react'
+import { ArrowLeft, CalendarDays, User, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
+import { calcularPrecioConPromo, descripcionDescuento } from '@/lib/promociones'
 
 function ConfirmarContent() {
   const router = useRouter()
@@ -25,7 +26,39 @@ function ConfirmarContent() {
   const [telefono, setTelefono] = useState('')
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
+  const [telLookupLoading, setTelLookupLoading] = useState(false)
+  const [clienteEncontrado, setClienteEncontrado] = useState(false)
+  const [promos, setPromos] = useState<Promocion[]>([])
   const supabase = createClient()
+
+  function normalizarTelefono(tel: string): string {
+    let t = tel.trim().replace(/\D/g, '') // solo dígitos
+    if (t.startsWith('5491'))  t = t.slice(4)   // 5491164... → 164...  (luego agrega 11)
+    else if (t.startsWith('549')) t = t.slice(3) // 549164... → 164...
+    else if (t.startsWith('54'))  t = t.slice(2) // 541164... → 1164...
+    if (t.startsWith('15'))    t = '11' + t.slice(2) // 15... → 11...
+    if (!t.startsWith('11') && t.length === 8) t = '11' + t // 64316074 → 1164316074
+    return t
+  }
+
+  async function buscarPorTelefono(tel: string) {
+    if (tel.length < 8) return
+    setTelLookupLoading(true)
+    setClienteEncontrado(false)
+    try {
+      const res = await fetch(`/api/reservar/booking?telefono=${encodeURIComponent(tel)}`)
+      const data = await res.json()
+      if (data.found) {
+        if (data.nombre)   setNombre(data.nombre)
+        if (data.apellido) setApellido(data.apellido)
+        if (data.email)    setEmail(data.email)
+        if (data.dni)      setDni(data.dni)
+        setClienteEncontrado(true)
+      }
+    } finally {
+      setTelLookupLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!servicioId || !profesionalId || !fechaInicio || !fechaFin) {
@@ -36,12 +69,14 @@ function ConfirmarContent() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchData() {
-    const [servRes, profRes] = await Promise.all([
+    const [servRes, profRes, promosRes] = await Promise.all([
       supabase.from('servicios').select('*').eq('id', servicioId).single(),
       supabase.from('profesionales').select('*').eq('id', profesionalId).single(),
+      fetch('/api/promociones/activas').then(r => r.ok ? r.json() : { items: [] }),
     ])
     if (servRes.data) setServicio(servRes.data)
     if (profRes.data) setProfesional(profRes.data)
+    if (promosRes?.items) setPromos(promosRes.items as Promocion[])
   }
 
   async function handleConfirm() {
@@ -56,53 +91,23 @@ function ConfirmarContent() {
 
     setLoading(true)
     try {
-      const { data: existingCliente } = await supabase
-        .from('clientes')
-        .select('id')
-        .eq('telefono', telefono)
-        .single()
-
-      let clienteId: string
-
-      if (existingCliente) {
-        clienteId = existingCliente.id
-        // Update name and DNI if provided
-        await supabase.from('clientes').update({
-          nombre: capitalizeWords(nombre),
-          apellido: apellido.trim() ? capitalizeWords(apellido) : null,
-          ...(dni.trim() ? { dni: dni.trim() } : {}),
-          ...(email.trim() ? { email: email.trim().toLowerCase() } : {}),
-        }).eq('id', clienteId)
-      } else {
-        const { data: newCliente, error: clienteError } = await supabase
-          .from('clientes')
-          .insert({ nombre: capitalizeWords(nombre), apellido: apellido.trim() ? capitalizeWords(apellido) : null, telefono, ...(dni.trim() ? { dni: dni.trim() } : {}), ...(email.trim() ? { email: email.trim().toLowerCase() } : {}) })
-          .select('id')
-          .single()
-        if (clienteError || !newCliente) throw clienteError
-        clienteId = newCliente.id
-      }
-
-      const { data: citaData, error: citaError } = await supabase.from('citas').insert({
-        cliente_id: clienteId,
-        profesional_id: profesionalId,
-        servicio_id: servicioId,
-        fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
-        precio_cobrado: servicio?.precio_efectivo || null,
-        origen: 'online',
-        status: 'pendiente',
-      }).select('id').single()
-
-      if (citaError) throw citaError
-
-      // Si es reprogramación, cancelar la cita original
       const reprogramarId = searchParams.get('reprogramar')
-      if (reprogramarId) {
-        await supabase.from('citas').update({ status: 'cancelada' }).eq('id', reprogramarId)
+      const res = await fetch('/api/reservar/booking', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre, apellido, telefono, dni, email,
+          servicioId, profesionalId, fechaInicio, fechaFin,
+          ...(reprogramarId ? { reprogramarId } : {}),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.citaId) {
+        toast.error(data.error || 'Error al confirmar la cita.')
+        return
       }
 
-      const exitoParams = new URLSearchParams({ fecha: fechaInicio!, cita: citaData.id })
+      const exitoParams = new URLSearchParams({ fecha: fechaInicio!, cita: data.citaId, nombre: capitalizeWords(nombre) })
       if (email.trim()) exitoParams.set('email', email.trim().toLowerCase())
       router.push(`/reservar/exito?${exitoParams.toString()}`)
     } catch {
@@ -144,7 +149,65 @@ function ConfirmarContent() {
         </div>
       </div>
 
-      {/* Client info form */}
+      {/* Cartel de promo aplicada */}
+      {(() => {
+        if (!servicio || !fechaInicio || promos.length === 0) return null
+        const precioInfo = calcularPrecioConPromo({
+          precioBase: servicio.precio_efectivo || 0,
+          promociones: promos,
+          fechaInicio: fechaInicio,
+          servicioId: servicio.id,
+          profesionalId: profesional.id,
+          metodoPago: 'efectivo',
+        })
+        if (!precioInfo.promocionAplicada || precioInfo.descuento <= 0) return null
+        const p = precioInfo.promocionAplicada
+        return (
+          <div className="rounded-xl border-2 border-fuchsia-400 bg-gradient-to-r from-fuchsia-500 to-pink-500 px-4 py-3 text-white shadow-lg">
+            <div className="flex items-start gap-2.5">
+              <Sparkles className="h-5 w-5 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm">¡Se aplicó una promoción! 🎉</p>
+                <p className="text-xs text-white/90 mt-0.5">
+                  <strong>{p.nombre}</strong> ({descripcionDescuento(p)})
+                </p>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="line-through text-white/70 text-sm">{formatPrecio(precioInfo.precioOriginal)}</span>
+                  <span className="text-2xl font-bold">{formatPrecio(precioInfo.precioFinal)}</span>
+                  <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded">
+                    ahorrás {formatPrecio(precioInfo.descuento)}
+                  </span>
+                </div>
+                {p.metodo_pago_requerido && (
+                  <p className="text-[11px] text-white/80 mt-1.5">
+                    ⚠️ El descuento aplica solo pagando en <strong>{p.metodo_pago_requerido}</strong>
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Teléfono primero */}
+      <div className="rounded-xl border border-gray-900 bg-white px-4 py-3 space-y-1">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Celular</label>
+          {telLookupLoading && <span className="text-[10px] text-fuchsia-500 animate-pulse">Buscando...</span>}
+          {clienteEncontrado && !telLookupLoading && <span className="text-[10px] text-green-600 font-medium">✓ Datos cargados</span>}
+        </div>
+        <input
+          type="tel"
+          inputMode="numeric"
+          placeholder="1112345678"
+          value={telefono}
+          onChange={(e) => { setTelefono(e.target.value); setClienteEncontrado(false) }}
+          onBlur={(e) => buscarPorTelefono(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+        />
+      </div>
+
+      {/* Resto de datos */}
       <div className="rounded-xl border border-gray-900 bg-white px-4 py-3 space-y-2.5">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tus datos</p>
         <div className="grid grid-cols-2 gap-2">
@@ -182,25 +245,15 @@ function ConfirmarContent() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-600">Teléfono (WhatsApp)</label>
+            <label className="text-xs font-medium text-gray-600">Email <span className="text-gray-400 font-normal">(opcional)</span></label>
             <input
-              type="tel"
-              placeholder="1112345678"
-              value={telefono}
-              onChange={(e) => setTelefono(e.target.value)}
+              type="email"
+              placeholder="tu@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
             />
           </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-600">Email <span className="text-gray-400 font-normal">(opcional — para gestionar tus turnos)</span></label>
-          <input
-            type="email"
-            placeholder="tu@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
-          />
         </div>
       </div>
 

@@ -7,6 +7,9 @@ import { createClient } from '@/lib/supabase/client'
 import { citaSchema, type CitaInput } from '@/lib/validators'
 import type { CitaConRelaciones, Profesional, Servicio, Cliente, AppointmentStatus } from '@/types/database'
 import { formatFechaHora, formatPrecio, addMinutes, capitalizeWords } from '@/lib/dates'
+import { normalizarTelefono } from '@/lib/telefono'
+import { calcularPrecioConPromo } from '@/lib/promociones'
+import type { Promocion } from '@/types/database'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -44,6 +47,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   const [newClienteNombre, setNewClienteNombre] = useState('')
   const [newClienteApellido, setNewClienteApellido] = useState('')
   const [newClienteTelefono, setNewClienteTelefono] = useState('')
+  const [promos, setPromos] = useState<Promocion[]>([])
 
   // Precio field — always visible, auto-filled, editable
   const [precioInput, setPrecioInput] = useState<string>('')
@@ -93,6 +97,33 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     return metodo === 'mercadopago' ? serv.precio_mercadopago : serv.precio_efectivo
   }
 
+  /** Precio con promo aplicada (si aplica). Devuelve null si no hay promo. */
+  function getPrecioConPromo(
+    serv: Servicio | undefined,
+    metodo: string,
+    fechaISO: string | null,
+    profId: string | null,
+  ): { precioFinal: number; precioOriginal: number; descuento: number; promoNombre: string } | null {
+    if (!serv || !fechaISO || promos.length === 0) return null
+    const precioBase = getDefaultPrecio(serv, metodo) || 0
+    if (precioBase <= 0) return null
+    const info = calcularPrecioConPromo({
+      precioBase,
+      promociones: promos,
+      fechaInicio: fechaISO,
+      servicioId: serv.id,
+      profesionalId: profId,
+      metodoPago: metodo,
+    })
+    if (info.descuento <= 0 || !info.promocionAplicada) return null
+    return {
+      precioFinal: info.precioFinal,
+      precioOriginal: info.precioOriginal,
+      descuento: info.descuento,
+      promoNombre: info.promocionAplicada.nombre,
+    }
+  }
+
   function resetPrecioToDefault() {
     const p = getDefaultPrecio(selectedServicio, selectedMetodoPago)
     setPrecioInput(p != null ? String(p) : '')
@@ -105,6 +136,9 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
       fetchServicios()
       fetchProfServMap()
       fetchClientes('')
+      fetch('/api/promociones/activas').then(r => r.ok ? r.json() : { items: [] }).then(d => {
+        if (d?.items) setPromos(d.items as Promocion[])
+      })
       setShowNewCliente(false)
       setNewClienteNombre('')
       setNewClienteTelefono('')
@@ -187,12 +221,109 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
   }
 
   function handleMetodoPagoChange(metodo: 'efectivo' | 'mercadopago' | 'transferencia') {
+    const metodoAnterior = selectedMetodoPago
     setValue('metodo_pago', metodo)
-    // Auto-update price if user hasn't manually edited it
-    if (!precioDirty && selectedServicio) {
-      const precio = metodo === 'mercadopago' ? selectedServicio.precio_mercadopago : selectedServicio.precio_efectivo
-      setPrecioInput(precio != null ? String(precio) : '')
+    if (!selectedServicio) return
+
+    const fechaISO = watch('fecha_inicio') || null
+    const profId = watch('profesional_id') || null
+
+    // Precios de referencia con método ANTERIOR (para detectar si el input actual venía de auto-cálculo)
+    const defaultAnterior = getDefaultPrecio(selectedServicio, metodoAnterior)
+    const promoAnterior = getPrecioConPromo(selectedServicio, metodoAnterior, fechaISO, profId)
+    const precioActual = precioInput === '' ? null : Number(precioInput)
+
+    // "Auto-manejado" = coincide con default o precio de promo del método anterior
+    const veniaDeAutoCalculo =
+      !precioDirty ||
+      (precioActual !== null && precioActual === defaultAnterior) ||
+      (promoAnterior && precioActual === promoAnterior.precioFinal)
+
+    if (!veniaDeAutoCalculo) return  // staff editó manual → no pisar
+
+    // Aplicar precio del nuevo método: promo si aplica, sino default
+    const promoNueva = getPrecioConPromo(selectedServicio, metodo, fechaISO, profId)
+    const nuevoDefault = getDefaultPrecio(selectedServicio, metodo)
+    const nuevoPrecio = promoNueva?.precioFinal ?? nuevoDefault
+    setPrecioInput(nuevoPrecio != null ? String(nuevoPrecio) : '')
+    setPrecioDirty(false)
+  }
+
+  /**
+   * Verifica que el cliente no tenga otra cita activa que se solape con la nueva.
+   * (Físicamente no puede estar en 2 servicios a la vez).
+   */
+  async function validarSolapamientoCliente(clienteId: string | null, fechaIni: Date, fechaFin: Date, excluirCitaId?: string): Promise<string | null> {
+    if (!clienteId) return null
+
+    let query = supabase
+      .from('citas')
+      .select('id, fecha_inicio, profesionales(nombre)')
+      .eq('cliente_id', clienteId)
+      .in('status', ['pendiente', 'confirmada'])
+      .lt('fecha_inicio', fechaFin.toISOString())
+      .gt('fecha_fin', fechaIni.toISOString())
+
+    const { data } = await query
+    const conflictos = (data || []).filter(c => !excluirCitaId || c.id !== excluirCitaId)
+
+    if (conflictos.length === 0) return null
+
+    const conf = conflictos[0] as any
+    const hora = new Date(conf.fecha_inicio).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+    const nombreProf = conf.profesionales?.nombre || 'otra profesional'
+    return `Este cliente ya tiene otro turno reservado a las ${hora} con ${nombreProf}. ¿Confirmar de todas formas?`
+  }
+
+  /**
+   * Verifica que la cita caiga dentro de algún bloque de horario laboral o desbloqueo del profesional.
+   * Retorna null si está OK, o un mensaje descriptivo si viola horario/bloqueo.
+   */
+  async function validarHorarioLaboral(profId: string, fechaIni: Date, fechaFin: Date): Promise<string | null> {
+    const diaSemana = fechaIni.getDay()
+    const dateStr = `${fechaIni.getFullYear()}-${String(fechaIni.getMonth() + 1).padStart(2, '0')}-${String(fechaIni.getDate()).padStart(2, '0')}`
+
+    const [horariosRes, desbloqRes, bloqRes, profRes] = await Promise.all([
+      supabase.from('horarios').select('hora_inicio, hora_fin').eq('profesional_id', profId).eq('dia_semana', diaSemana).eq('activo', true),
+      supabase.from('desbloqueos').select('hora_inicio, hora_fin').eq('profesional_id', profId).eq('fecha', dateStr),
+      supabase.from('bloqueos').select('fecha_inicio, fecha_fin').eq('profesional_id', profId).gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
+      supabase.from('profesionales').select('nombre').eq('id', profId).single(),
+    ])
+
+    const nombreProf = profRes.data?.nombre || 'Profesional'
+    const bloques = [
+      ...(horariosRes.data || []).map(h => ({ inicio: h.hora_inicio.slice(0, 5), fin: h.hora_fin.slice(0, 5) })),
+      ...(desbloqRes.data || []).map(d => ({ inicio: d.hora_inicio.slice(0, 5), fin: d.hora_fin.slice(0, 5) })),
+    ]
+
+    if (bloques.length === 0) {
+      return `${nombreProf} no trabaja este día.`
     }
+
+    const toMin = (hhmm: string) => {
+      const [h, m] = hhmm.split(':').map(Number)
+      return h * 60 + m
+    }
+    const iniMin = fechaIni.getHours() * 60 + fechaIni.getMinutes()
+    const finMin = fechaFin.getHours() * 60 + fechaFin.getMinutes()
+
+    const dentroDeBloque = bloques.some(b => iniMin >= toMin(b.inicio) && finMin <= toMin(b.fin))
+    if (!dentroDeBloque) {
+      const rangos = bloques.map(b => `${b.inicio}-${b.fin}`).join(', ')
+      return `Este horario está FUERA del bloque laboral de ${nombreProf}. Trabaja: ${rangos}.`
+    }
+
+    // Chequear que no caiga dentro de un bloqueo manual
+    for (const bloqueo of (bloqRes.data || [])) {
+      const bIni = new Date(bloqueo.fecha_inicio)
+      const bFin = new Date(bloqueo.fecha_fin)
+      if (fechaIni < bFin && fechaFin > bIni) {
+        const fmt = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+        return `Este horario cae dentro de un BLOQUEO de ${nombreProf} (${fmt(bIni)}-${fmt(bFin)}).`
+      }
+    }
+
+    return null
   }
 
   async function onSubmit(data: CitaInput) {
@@ -202,6 +333,38 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
       const fechaInicio = new Date(data.fecha_inicio)
       const fechaFin = addMinutes(fechaInicio, servicio?.duracion_minutos || 30)
       const precio = precioInput !== '' ? Number(precioInput) : getDefaultPrecio(servicio, data.metodo_pago)
+
+      // Validar horario laboral / bloqueos. Si viola, pedir confirmación al staff.
+      const warning = await validarHorarioLaboral(data.profesional_id, fechaInicio, fechaFin)
+      if (warning) {
+        const ok = window.confirm(`⚠️ ${warning}\n\n¿Guardar de todas formas?`)
+        if (!ok) {
+          setLoading(false)
+          return
+        }
+      }
+
+      // Validar que el cliente no tenga otra cita solapada en el mismo horario
+      if (data.cliente_id) {
+        const warningCliente = await validarSolapamientoCliente(
+          data.cliente_id,
+          fechaInicio,
+          fechaFin,
+          isEditing ? cita?.id : undefined,
+        )
+        if (warningCliente) {
+          const ok = window.confirm(`⚠️ ${warningCliente}`)
+          if (!ok) {
+            setLoading(false)
+            return
+          }
+        }
+      }
+
+      // Determinar si se aplicó una promo (el precio ingresado coincide con el de la promo)
+      const promoAplicableAhora = getPrecioConPromo(servicio, data.metodo_pago, fechaInicio.toISOString(), data.profesional_id)
+      const promoAplicoId = (promoAplicableAhora && Number(precio) === promoAplicableAhora.precioFinal) ? promos.find(p => p.nombre === promoAplicableAhora.promoNombre)?.id || null : null
+      const precioOriginalSaved = promoAplicoId ? promoAplicableAhora!.precioOriginal : null
 
       if (isEditing) {
         const { error } = await supabase
@@ -215,6 +378,8 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
             metodo_pago: data.metodo_pago,
             notas: data.notas || null,
             precio_cobrado: precio,
+            precio_original: precioOriginalSaved,
+            promocion_aplicada_id: promoAplicoId,
             updated_at: new Date().toISOString(),
           })
           .eq('id', cita!.id)
@@ -233,6 +398,8 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
           metodo_pago: data.metodo_pago,
           notas: data.notas || null,
           precio_cobrado: precio,
+          precio_original: precioOriginalSaved,
+          promocion_aplicada_id: promoAplicoId,
           origen: 'manual',
         })
 
@@ -271,10 +438,48 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
       toast.error('Completá nombre y teléfono')
       return
     }
+
+    // Normalizar teléfono al formato canónico "11xxxxxxxx" antes de guardar y buscar.
+    // Así detectamos duplicados aunque el usuario ingrese +54 9 11..., 15..., etc.
+    const telNormalizado = normalizarTelefono(newClienteTelefono)
+    if (telNormalizado.length < 8 || telNormalizado.length > 15) {
+      toast.error('Teléfono inválido')
+      return
+    }
+
+    // Buscar si ya existe un cliente con ese mismo teléfono normalizado
+    const { data: existente } = await supabase
+      .from('clientes')
+      .select('id, nombre, apellido, telefono')
+      .eq('telefono', telNormalizado)
+      .maybeSingle()
+
+    if (existente) {
+      const nombreCompleto = `${existente.nombre}${existente.apellido ? ' ' + existente.apellido : ''}`
+      const ok = window.confirm(
+        `⚠️ Ya existe un cliente con ese teléfono: "${nombreCompleto}".\n\n¿Querés usarlo para esta cita?\n\n(Aceptar = usar el existente / Cancelar = revisar el número)`
+      )
+      if (ok) {
+        // Reutilizar el existente sin crear duplicado
+        selectCliente(existente as unknown as Cliente)
+        setClientes((prev) => (prev.some(c => c.id === existente.id) ? prev : [existente as unknown as Cliente, ...prev]))
+        setShowNewCliente(false)
+        setNewClienteNombre('')
+        setNewClienteApellido('')
+        setNewClienteTelefono('')
+        toast.success(`Cliente existente vinculado: ${nombreCompleto}`)
+      }
+      return
+    }
+
     try {
       const { data, error } = await supabase
         .from('clientes')
-        .insert({ nombre: capitalizeWords(newClienteNombre), apellido: newClienteApellido ? capitalizeWords(newClienteApellido) : null, telefono: newClienteTelefono })
+        .insert({
+          nombre: capitalizeWords(newClienteNombre),
+          apellido: newClienteApellido ? capitalizeWords(newClienteApellido) : null,
+          telefono: telNormalizado,
+        })
         .select()
         .single()
       if (error) throw error
@@ -301,8 +506,18 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
   const clienteIdValue = watch('cliente_id')
   const servicioIdValue = watch('servicio_id')
+  const fechaInicioValue = watch('fecha_inicio')
+  const profesionalIdValue = watch('profesional_id')
 
   const defaultPrecio = getDefaultPrecio(selectedServicio, selectedMetodoPago)
+
+  // Precio con promo (si aplica para este servicio + horario + profesional + método)
+  const promoInfo = getPrecioConPromo(
+    selectedServicio,
+    selectedMetodoPago,
+    fechaInicioValue || null,
+    profesionalIdValue || null,
+  )
   const isPrecioModified = precioDirty && precioInput !== '' && defaultPrecio != null && Number(precioInput) !== defaultPrecio
 
   return (
@@ -522,6 +737,45 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
               })}
             </div>
           </div>
+
+          {/* ── Cartel de promo aplicable ── */}
+          {promoInfo && (
+            <div className="rounded-lg border border-fuchsia-400 bg-fuchsia-50 dark:bg-fuchsia-950/30 px-3 py-2 flex items-center gap-2 text-xs">
+              <span className="text-fuchsia-600 dark:text-fuchsia-400">✨</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-fuchsia-700 dark:text-fuchsia-300 truncate">
+                  Promo aplicable: {promoInfo.promoNombre}
+                </p>
+                <p className="text-muted-foreground text-[11px]">
+                  <span className="line-through">{formatPrecio(promoInfo.precioOriginal)}</span>{' → '}
+                  <strong className="text-fuchsia-700 dark:text-fuchsia-300">{formatPrecio(promoInfo.precioFinal)}</strong>
+                  {' '}(ahorro {formatPrecio(promoInfo.descuento)})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setPrecioInput(String(promoInfo.precioFinal)); setPrecioDirty(true) }}
+                className="shrink-0 rounded bg-fuchsia-500 text-white text-[11px] px-2 py-1 font-semibold hover:bg-fuchsia-600 transition-colors"
+              >
+                Aplicar
+              </button>
+            </div>
+          )}
+
+          {/* ── Aviso: la promo original ya no aplica (cambió método/horario) ── */}
+          {isEditing && cita?.promocion_aplicada_id && !promoInfo && (
+            <div className="rounded-lg border border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 flex items-start gap-2 text-xs">
+              <span className="text-amber-600 dark:text-amber-400 shrink-0">⚠️</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-amber-700 dark:text-amber-300">
+                  La promo original ya no aplica
+                </p>
+                <p className="text-muted-foreground text-[11px] mt-0.5">
+                  Probablemente cambió el método de pago o el horario. El precio se ajustó al valor sin descuento; revisá antes de guardar.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* ── Monto a cobrar ── */}
           <div className="space-y-1.5">

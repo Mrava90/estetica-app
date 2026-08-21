@@ -13,6 +13,7 @@ export interface Profesional {
   activo: boolean
   visible_calendario: boolean
   foto_url: string | null
+  tolerancia_solapamiento_min?: number
   created_at: string
   updated_at: string
 }
@@ -28,6 +29,7 @@ export interface Servicio {
   precio_mercadopago: number
   activo: boolean
   es_promo: boolean
+  categoria?: 'manos' | 'pies' | 'pestanas' | 'cejas' | 'otros' | null
   created_at: string
   updated_at: string
 }
@@ -68,6 +70,8 @@ export interface Cita {
   status: AppointmentStatus
   notas: string | null
   precio_cobrado: number | null
+  precio_original: number | null            // precio antes de aplicar promo (si aplicó)
+  promocion_aplicada_id: string | null      // referencia a promociones.id
   metodo_pago: string
   origen: string
   created_at: string
@@ -121,6 +125,38 @@ export interface AuditLog {
   created_at: string
 }
 
+export interface Promocion {
+  id: string
+  nombre: string
+  descripcion: string | null
+  // Descuento: uno de los tres. precios_override tiene prioridad.
+  descuento_pct: number | null
+  descuento_monto: number | null
+  precios_override: Record<string, number> | null  // { servicio_id: precio_final }
+  metodo_pago_requerido: 'efectivo' | 'mercadopago' | 'transferencia' | null
+  dias_semana: number[] | null      // [0..6], 0=domingo, null=todos
+  hora_desde: string | null         // "HH:MM:SS", null=todo el día
+  hora_hasta: string | null
+  fecha_desde: string | null        // "YYYY-MM-DD", null=sin límite
+  fecha_hasta: string | null
+  servicios_ids: string[] | null    // null=todos
+  profesionales_ids: string[] | null
+  imagen_url: string | null         // imagen del cartel (opcional, tipo Happy Hour)
+  activa: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Desbloqueo {
+  id: string
+  profesional_id: string
+  fecha: string
+  hora_inicio: string
+  hora_fin: string
+  motivo: string | null
+  created_at: string
+}
+
 export interface Configuracion {
   id: number
   nombre_salon: string
@@ -131,5 +167,6 @@ export interface Configuracion {
   dias_anticipacion_reserva: number
   mensaje_confirmacion: string | null
   mensaje_recordatorio: string | null
+  mensaje_reenganche?: string | null
   updated_at: string
 }

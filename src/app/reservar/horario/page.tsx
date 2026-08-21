@@ -4,11 +4,12 @@ import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { calcularSlotsDisponibles, type SlotDisponible } from '@/lib/disponibilidad'
-import { formatHora } from '@/lib/dates'
-import type { Servicio, Profesional } from '@/types/database'
+import { formatHora, formatPrecio } from '@/lib/dates'
+import type { Servicio, Profesional, Promocion } from '@/types/database'
 import { addDays, startOfDay, format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Sparkles } from 'lucide-react'
+import { calcularPrecioConPromo } from '@/lib/promociones'
 
 function HorarioContent() {
   const router = useRouter()
@@ -22,6 +23,7 @@ function HorarioContent() {
   const [slots, setSlots] = useState<Record<string, SlotDisponible[]>>({})
   const [selectedSlot, setSelectedSlot] = useState<{ profId: string; slot: SlotDisponible } | null>(null)
   const [diasAnticipacion, setDiasAnticipacion] = useState(7)
+  const [promos, setPromos] = useState<Promocion[]>([])
   const supabase = createClient()
 
   useEffect(() => {
@@ -34,10 +36,12 @@ function HorarioContent() {
       supabase.from('servicios').select('*').eq('id', servicioId).single(),
       fetchProfesionalesData(),
       supabase.from('configuracion').select('dias_anticipacion_reserva').single(),
-    ]).then(([servRes, profs, configRes]) => {
+      fetch('/api/promociones/activas').then(r => r.ok ? r.json() : { items: [] }),
+    ]).then(([servRes, profs, configRes, promosRes]) => {
       if (servRes.data) setServicio(servRes.data)
       if (profs.length > 0) setProfesionales(profs)
       if (configRes.data?.dias_anticipacion_reserva) setDiasAnticipacion(configRes.data.dias_anticipacion_reserva)
+      if (promosRes?.items) setPromos(promosRes.items as Promocion[])
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -72,8 +76,8 @@ function HorarioContent() {
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
     const profIds = profesionales.map((p) => p.id)
 
-    // 3 queries en paralelo para todos los profesionales a la vez
-    const [{ data: horariosData }, { data: citasData }, { data: bloqueosData }] = await Promise.all([
+    // 4 queries en paralelo para todos los profesionales a la vez
+    const [{ data: horariosData }, { data: citasData }, { data: bloqueosData }, { data: desbloqueosData }] = await Promise.all([
       supabase.from('horarios').select('profesional_id, hora_inicio, hora_fin')
         .in('profesional_id', profIds).eq('dia_semana', diaSemana).eq('activo', true).order('hora_inicio'),
       supabase.from('citas').select('profesional_id, fecha_inicio, fecha_fin')
@@ -82,6 +86,9 @@ function HorarioContent() {
       supabase.from('bloqueos').select('profesional_id, fecha_inicio, fecha_fin')
         .in('profesional_id', profIds)
         .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
+      supabase.from('desbloqueos').select('profesional_id, hora_inicio, hora_fin')
+        .in('profesional_id', profIds)
+        .eq('fecha', dateStr),
     ])
 
     // Agrupar en memoria por profesional
@@ -90,15 +97,25 @@ function HorarioContent() {
       const horarios = (horariosData || []).filter((h) => h.profesional_id === prof.id)
       const citas = (citasData || []).filter((c) => c.profesional_id === prof.id)
       const bloqueos = (bloqueosData || []).filter((b) => b.profesional_id === prof.id)
+      const profDesbloqueos = (desbloqueosData || []).filter((d) => d.profesional_id === prof.id)
+
+      // Combinar horarios regulares + desbloqueos excepcionales
+      const todosHorarios = [
+        ...horarios.map((h) => ({ hora_inicio: h.hora_inicio, hora_fin: h.hora_fin })),
+        ...profDesbloqueos.map((d) => ({ hora_inicio: d.hora_inicio, hora_fin: d.hora_fin })),
+      ]
+
+      const tolerancia = prof.tolerancia_solapamiento_min || 0
       const allAvailable: SlotDisponible[] = []
-      for (const horario of horarios) {
+      for (const horario of todosHorarios) {
         allAvailable.push(...calcularSlotsDisponibles(
           selectedDate,
           { hora_inicio: horario.hora_inicio, hora_fin: horario.hora_fin },
           citas,
           servicio.duracion_minutos,
           30,
-          bloqueos
+          bloqueos,
+          tolerancia,
         ))
       }
       if (allAvailable.length > 0) newSlots[prof.id] = allAvailable
@@ -187,17 +204,49 @@ function HorarioContent() {
                     const isSelected =
                       selectedSlot?.profId === prof.id &&
                       selectedSlot?.slot.inicio.getTime() === slot.inicio.getTime()
+
+                    // Calcular precio con promo para este slot específico
+                    const precioInfo = servicio && promos.length > 0
+                      ? calcularPrecioConPromo({
+                          precioBase: servicio.precio_efectivo || 0,
+                          promociones: promos,
+                          fechaInicio: slot.inicio,
+                          servicioId: servicio.id,
+                          profesionalId: prof.id,
+                          metodoPago: 'efectivo', // asumimos efectivo para preview (la mayoría de promos son en efectivo)
+                        })
+                      : null
+
+                    const tienePromo = precioInfo && precioInfo.descuento > 0
+
                     return (
                       <button
                         key={i}
                         onClick={() => handleSelectSlot(prof.id, slot)}
-                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
+                        className={`relative rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
                           isSelected
                             ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md'
+                            : tienePromo
+                            ? 'border-fuchsia-400 bg-fuchsia-50 text-gray-800 hover:border-fuchsia-500'
                             : 'border-gray-900 bg-white text-gray-700 hover:border-fuchsia-500'
                         }`}
                       >
-                        {formatHora(slot.inicio)}
+                        <div className="flex flex-col items-center">
+                          <span className="flex items-center gap-1">
+                            {tienePromo && <Sparkles className={`h-3 w-3 ${isSelected ? 'text-white' : 'text-fuchsia-500'}`} />}
+                            {formatHora(slot.inicio)}
+                          </span>
+                          {tienePromo && (
+                            <span className="flex items-baseline gap-1 text-[10px] mt-0.5">
+                              <span className={`line-through ${isSelected ? 'text-white/70' : 'text-gray-400'}`}>
+                                {formatPrecio(precioInfo!.precioOriginal)}
+                              </span>
+                              <span className={`font-bold ${isSelected ? 'text-white' : 'text-fuchsia-600'}`}>
+                                {formatPrecio(precioInfo!.precioFinal)}
+                              </span>
+                            </span>
+                          )}
+                        </div>
                       </button>
                     )
                   })}
