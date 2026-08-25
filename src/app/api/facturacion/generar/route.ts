@@ -22,6 +22,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isAdminEmail } from '@/lib/constants'
 import forge from 'node-forge'
 import https from 'https'
 import { promisify } from 'util'
@@ -37,7 +38,7 @@ const AFIP_AGENT = new https.Agent({
 
 // ── Endpoints ─────────────────────────────────────────────────────────────
 
-const isProd = process.env.AFIP_PROD === 'true'
+const isProd = process.env.AFIP_PROD?.trim() === 'true'
 
 const WSAA_URL = isProd
   ? 'https://wsaa.afip.gov.ar/ws/services/LoginCms'
@@ -124,12 +125,67 @@ function decodePemEnv(raw: string): string {
   return Buffer.from(trimmed, 'base64').toString('utf8')
 }
 
-async function getAuthTicket(): Promise<{ token: string; sign: string }> {
-  const cuit = process.env.AFIP_CUIT!
+function getAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  )
+}
+
+const SERVICE_WSFE = 'wsfe'
+
+/**
+ * Detecta si un error de AFIP es de autenticación (token vencido, inválido, etc).
+ * Si lo es, conviene invalidar el cache del TA y regenerar.
+ */
+function isAuthErrorAfip(err: unknown): boolean {
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase()
+  return (
+    msg.includes('token') && (msg.includes('inv') || msg.includes('vencid') || msg.includes('expir')) ||
+    msg.includes('no autorizado') ||
+    msg.includes('no autenticado') ||
+    msg.includes('autenticación') ||
+    msg.includes('sign inválido') ||
+    msg.includes('cms.bad') ||
+    /\b(600|601|602|1005|1101)\b/.test(msg) // códigos típicos de auth AFIP
+  )
+}
+
+/**
+ * Invalida el TA cacheado de forma segura.
+ */
+async function invalidateAuthCache(service = SERVICE_WSFE) {
+  const admin = getAdminClient()
+  await admin.from('afip_ta_cache').delete().eq('service', service)
+}
+
+async function getAuthTicket(forceRefresh = false): Promise<{ token: string; sign: string }> {
+  const admin = getAdminClient()
+
+  // 1. Intentar cachear: si existe un TA válido (margen 5 min de seguridad), reutilizarlo
+  if (!forceRefresh) {
+    const { data: cached } = await admin
+      .from('afip_ta_cache')
+      .select('token, sign, expires_at')
+      .eq('service', SERVICE_WSFE)
+      .single()
+
+    if (cached) {
+      const expiresAt = new Date(cached.expires_at).getTime()
+      const now = Date.now()
+      const margin = 5 * 60 * 1000 // 5 min de seguridad
+      if (expiresAt - margin > now) {
+        return { token: cached.token, sign: cached.sign }
+      }
+    }
+  }
+
+  // 2. Pedir un TA nuevo
   const cert = decodePemEnv(process.env.AFIP_CERT!)
   const key  = decodePemEnv(process.env.AFIP_KEY!)
 
-  const xml = buildLoginTicketRequest('wsfe')
+  const xml = buildLoginTicketRequest(SERVICE_WSFE)
   const cmsBase64 = buildCmsDer(xml, cert, key)
 
   const soapBody = `<?xml version="1.0" encoding="UTF-8"?>
@@ -146,11 +202,40 @@ async function getAuthTicket(): Promise<{ token: string; sign: string }> {
   const responseXml = await soapPost(WSAA_URL, soapBody, 'loginCms')
   const token = extractTag(responseXml, 'token')
   const sign  = extractTag(responseXml, 'sign')
+
   if (!token || !sign) {
     const fault = extractTag(responseXml, 'faultstring') || extractTag(responseXml, 'faultcode')
     const detail = fault || responseXml.slice(0, 400)
+
+    // Si AFIP rechaza por "TA válido existente" pero no lo tenemos en cache,
+    // significa que otra request paralela acaba de cachearlo: reintentar lectura
+    if (detail.includes('CEE ya posee un TA valido') || detail.includes('TA valido')) {
+      const { data: retry } = await admin
+        .from('afip_ta_cache')
+        .select('token, sign, expires_at')
+        .eq('service', SERVICE_WSFE)
+        .single()
+      if (retry) {
+        const expiresAt = new Date(retry.expires_at).getTime()
+        if (expiresAt > Date.now()) {
+          return { token: retry.token, sign: retry.sign }
+        }
+      }
+    }
+
     throw new Error(`WSAA: no se obtuvo Token/Signature — ${detail}`)
   }
+
+  // 3. Guardar en cache (TA dura 12h, lo decimos explícito por si AFIP no lo informa)
+  const expirationXml = extractTag(responseXml, 'expirationTime')
+  const expiresAt = expirationXml
+    ? new Date(expirationXml).toISOString()
+    : new Date(Date.now() + 11 * 60 * 60 * 1000).toISOString() // 11h por las dudas
+
+  await admin
+    .from('afip_ta_cache')
+    .upsert({ service: SERVICE_WSFE, token, sign, expires_at: expiresAt, updated_at: new Date().toISOString() })
+
   return { token, sign }
 }
 
@@ -325,6 +410,9 @@ export async function POST(request: Request) {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  if (!isAdminEmail(user.email)) {
+    return NextResponse.json({ error: 'Solo el admin puede emitir facturas' }, { status: 403 })
+  }
 
   // Verificar credenciales ARCA configuradas
   if (!process.env.AFIP_CUIT || !process.env.AFIP_CERT || !process.env.AFIP_KEY) {
@@ -353,9 +441,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Ya existe una factura emitida para este ítem.' }, { status: 409 })
   }
 
-  const cuit = process.env.AFIP_CUIT!
-  const ptoVta = parseInt(process.env.AFIP_PUNTO_VENTA || '1', 10)
-  const tipoCbte = parseInt(process.env.AFIP_TIPO_CBTE || '11', 10)
+  const cuit = process.env.AFIP_CUIT!.trim()
+  const ptoVta = parseInt((process.env.AFIP_PUNTO_VENTA || '1').trim(), 10)
+  const tipoCbte = parseInt((process.env.AFIP_TIPO_CBTE || '11').trim(), 10)
 
   // Determinar tipo/número de documento del receptor
   const docTipo = receptor_dni ? 96 : 99  // 96=DNI, 99=Consumidor Final
@@ -368,23 +456,33 @@ export async function POST(request: Request) {
   const fechaAFIP = fecha.replace(/-/g, '')
 
   try {
-    // 1. Autenticar con WSAA
-    const { token, sign } = await getAuthTicket()
+    // 1-3. Autenticar + obtener último + autorizar. Si AFIP rechaza por TA
+    // inválido (cache stale), invalidamos y reintentamos UNA vez con TA fresco.
+    const doRequest = async (forceRefresh: boolean): Promise<{ cae: string; caeFch: string; nroCbte: number }> => {
+      const { token, sign } = await getAuthTicket(forceRefresh)
+      const ultimoNro = await getUltimoComprobante(cuit, token, sign, ptoVta, tipoCbte)
+      const nroCbte = ultimoNro + 1
+      return autorizarComprobante({
+        cuit, token, sign, ptoVta, tipoCbte, nroCbte,
+        fecha: fechaAFIP,
+        monto: parseFloat(monto),
+        docTipo,
+        docNro,
+        condIVA,
+        descripcion,
+      })
+    }
 
-    // 2. Obtener último número de comprobante
-    const ultimoNro = await getUltimoComprobante(cuit, token, sign, ptoVta, tipoCbte)
-    const nroCbte = ultimoNro + 1
-
-    // 3. Solicitar autorización (CAE) al WSFEV1
-    const { cae, caeFch } = await autorizarComprobante({
-      cuit, token, sign, ptoVta, tipoCbte, nroCbte,
-      fecha: fechaAFIP,
-      monto: parseFloat(monto),
-      docTipo,
-      docNro,
-      condIVA,
-      descripcion,
-    })
+    let result: { cae: string; caeFch: string; nroCbte: number }
+    try {
+      result = await doRequest(false)
+    } catch (err) {
+      if (!isAuthErrorAfip(err)) throw err
+      console.warn('[AFIP] Error de auth, invalidando cache TA y reintentando...', err)
+      await invalidateAuthCache()
+      result = await doRequest(true)
+    }
+    const { cae, caeFch, nroCbte } = result
 
     // 4. Guardar factura en Supabase
     const caeFechaISO = caeFch
