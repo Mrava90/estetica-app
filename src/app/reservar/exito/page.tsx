@@ -28,27 +28,17 @@ function ExitoContent() {
     setEnviando(true)
     setError('')
     try {
-      if (citaId) {
-        await fetch('/api/mis-turnos/registrar-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, citaId }),
-        })
-      }
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/reservar/mis-turnos`,
-          shouldCreateUser: false,
-        },
+      // Solo mandamos citaId. Email y nombre se toman server-side desde la DB
+      // para evitar abuso del SMTP con direcciones arbitrarias.
+      const res = await fetch('/api/notificar-turno', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ citaId }),
       })
-      // Si el usuario no existe, igual mostramos éxito (no exponemos si existe o no)
-      if (otpError && otpError.message !== 'Signups not allowed for otp') {
-        throw otpError
-      }
+      if (!res.ok) throw new Error('Error al enviar')
       setLinkEnviado(true)
     } catch {
-      setError('No se pudo enviar el link.')
+      setError('No se pudo enviar el email.')
     } finally {
       setEnviando(false)
     }
