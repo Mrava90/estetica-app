@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useEffect, useRef, useState } from 'react'
-import type { CitaConRelaciones, Profesional, Bloqueo, Horario } from '@/types/database'
+import type { CitaConRelaciones, Profesional, Bloqueo, Desbloqueo, Horario } from '@/types/database'
 import { STATUS_COLORS } from '@/lib/constants'
 import { formatPrecio } from '@/lib/dates'
 import { Clock } from 'lucide-react'
@@ -33,10 +33,12 @@ interface Props {
   citas: CitaConRelaciones[]
   profesionales: Profesional[]
   bloqueos?: Bloqueo[]
+  desbloqueos?: Desbloqueo[]
   horarios?: Record<string, Horario[]>
   onSlotClick: (profesionalId: string, start: Date, end: Date) => void
   onCitaClick: (cita: CitaConRelaciones) => void
   onBloqueoClick?: (bloqueo: Bloqueo) => void
+  onDesbloqueoClick?: (desbloqueo: Desbloqueo) => void
   onCitaDrop?: (citaId: string, newStart: Date, newEnd: Date, newProfesionalId: string) => void
 }
 
@@ -45,10 +47,12 @@ export function CalendarioResourceDayView({
   citas,
   profesionales,
   bloqueos = [],
+  desbloqueos = [],
   horarios = {},
   onSlotClick,
   onCitaClick,
   onBloqueoClick,
+  onDesbloqueoClick,
   onCitaDrop,
 }: Props) {
   const gridRef = useRef<HTMLDivElement>(null)
@@ -115,25 +119,48 @@ export function CalendarioResourceDayView({
     return result
   }, [citasPorProfesional])
 
+  // Desbloqueos del día actual por profesional
+  const desbloqueosPorProfesional = useMemo(() => {
+    const dateStr = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
+    const map = new Map<string, Desbloqueo[]>()
+    profesionales.forEach((p) => map.set(p.id, []))
+    desbloqueos.forEach((d) => {
+      if (d.fecha === dateStr && map.has(d.profesional_id)) {
+        map.get(d.profesional_id)!.push(d)
+      }
+    })
+    return map
+  }, [desbloqueos, profesionales, fecha])
+
   // Franjas fuera de horario laboral por profesional (para sombrear el calendario)
   const fueraDeHorarioPorProfesional = useMemo(() => {
     const diaSemana = fecha.getDay() // 0=Dom, 1=Lun, ...
     const result = new Map<string, { top: number; height: number }[]>()
     profesionales.forEach((prof) => {
       const horariosProf = (horarios[prof.id] || []).filter((h) => h.dia_semana === diaSemana)
-      if (horariosProf.length === 0) {
-        // Día libre: sombrear todo
-        result.set(prof.id, [{ top: 0, height: (HORA_FIN - HORA_INICIO) * HORA_HEIGHT }])
-        return
-      }
-      // Ordenar bloques y calcular huecos
-      const bloques = horariosProf
-        .map((h) => {
+      const desbloqueosProf = desbloqueosPorProfesional.get(prof.id) || []
+
+      // Combinar horarios regulares + desbloqueos en una lista de bloques activos
+      const bloques: { start: number; end: number }[] = [
+        ...horariosProf.map((h) => {
           const [startH, startM] = h.hora_inicio.split(':').map(Number)
           const [endH, endM] = h.hora_fin.split(':').map(Number)
           return { start: startH * 60 + startM, end: endH * 60 + endM }
-        })
-        .sort((a, b) => a.start - b.start)
+        }),
+        ...desbloqueosProf.map((d) => {
+          const [startH, startM] = d.hora_inicio.split(':').map(Number)
+          const [endH, endM] = d.hora_fin.split(':').map(Number)
+          return { start: startH * 60 + startM, end: endH * 60 + endM }
+        }),
+      ].sort((a, b) => a.start - b.start)
+
+      if (bloques.length === 0) {
+        // Día libre sin desbloqueos: sombrear todo
+        result.set(prof.id, [{ top: 0, height: (HORA_FIN - HORA_INICIO) * HORA_HEIGHT }])
+        return
+      }
+
+      // Calcular huecos (franjas fuera de horario)
       const franjas: { top: number; height: number }[] = []
       const calStart = HORA_INICIO * 60
       const calEnd = HORA_FIN * 60
@@ -156,7 +183,7 @@ export function CalendarioResourceDayView({
       result.set(prof.id, franjas)
     })
     return result
-  }, [horarios, profesionales, fecha])
+  }, [horarios, profesionales, fecha, desbloqueosPorProfesional])
 
   const bloqueosPorProfesional = useMemo(() => {
     const map = new Map<string, Bloqueo[]>()
@@ -446,13 +473,22 @@ export function CalendarioResourceDayView({
     const profHorarios = horarios[profId] || []
     const diaSemana = fecha.getDay()
     const horarioHoy = profHorarios.find((h) => h.dia_semana === diaSemana)
-    if (!horarioHoy) return null
+    const desbloqueosProf = desbloqueosPorProfesional.get(profId) || []
+
+    // Si no tiene horario regular ni desbloqueos, no trabaja
+    if (!horarioHoy && desbloqueosProf.length === 0) return null
 
     const profCitas = citasPorProfesional.get(profId) || []
     const profBloqs = bloqueosPorProfesional.get(profId) || []
 
-    const workStart = toMin(horarioHoy.hora_inicio)
-    const workEnd = toMin(horarioHoy.hora_fin)
+    // Combinar horarios regulares + desbloqueos para definir la jornada
+    const workBlocks = [
+      ...(horarioHoy ? [{ start: toMin(horarioHoy.hora_inicio), end: toMin(horarioHoy.hora_fin) }] : []),
+      ...desbloqueosProf.map((d) => ({ start: toMin(d.hora_inicio), end: toMin(d.hora_fin) })),
+    ].sort((a, b) => a.start - b.start)
+
+    const workStart = Math.min(...workBlocks.map((b) => b.start))
+    const workEnd = Math.max(...workBlocks.map((b) => b.end))
 
     const occupied = [
       ...profCitas.map((c) => {
@@ -628,6 +664,42 @@ export function CalendarioResourceDayView({
                         </p>
                         <p className="text-[13px] font-semibold text-red-600 dark:text-red-400 truncate leading-tight mt-0.5">
                           {bloqueo.motivo || 'Bloqueado'}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+
+              {/* Desbloqueos */}
+              {desbloqueosPorProfesional.get(prof.id)?.map((desbloqueo) => {
+                const [sh, sm] = desbloqueo.hora_inicio.split(':').map(Number)
+                const [eh, em] = desbloqueo.hora_fin.split(':').map(Number)
+                const startMinutes = sh * 60 + sm
+                const endMinutes = eh * 60 + em
+                const top = ((startMinutes - HORA_INICIO * 60) / 60) * HORA_HEIGHT
+                const height = Math.max(((endMinutes - startMinutes) / 60) * HORA_HEIGHT, 24)
+                const isSmall = height < 40
+                return (
+                  <div
+                    key={desbloqueo.id}
+                    data-cita
+                    className="absolute left-1 right-1 rounded-md border border-dashed border-green-400 dark:border-green-600 bg-green-100/70 dark:bg-green-900/30 px-1.5 py-0.5 overflow-hidden cursor-pointer transition-colors z-[1]"
+                    style={{ top: `${top}px`, height: `${height}px`, pointerEvents: isDragging ? 'none' : 'auto' }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onDesbloqueoClick?.(desbloqueo)
+                    }}
+                  >
+                    {isSmall ? (
+                      <p className="text-[12px] font-semibold text-green-600 dark:text-green-400 truncate leading-snug">Habilitado</p>
+                    ) : (
+                      <>
+                        <p className="text-[10px] text-green-500 dark:text-green-400 leading-tight">
+                          {desbloqueo.hora_inicio.slice(0, 5)} - {desbloqueo.hora_fin.slice(0, 5)}
+                        </p>
+                        <p className="text-[13px] font-semibold text-green-600 dark:text-green-400 truncate leading-tight mt-0.5">
+                          {desbloqueo.motivo || 'Habilitado'}
                         </p>
                       </>
                     )}

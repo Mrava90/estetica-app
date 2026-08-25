@@ -145,6 +145,7 @@ export default function ConfiguracionPage() {
           dias_anticipacion_reserva: config.dias_anticipacion_reserva,
           mensaje_confirmacion: config.mensaje_confirmacion,
           mensaje_recordatorio: config.mensaje_recordatorio,
+          mensaje_reenganche: config.mensaje_reenganche,
           updated_at: new Date().toISOString(),
         })
         .eq('id', 1)
@@ -618,6 +619,18 @@ export default function ConfiguracionPage() {
                   onChange={(e) => setConfig({ ...config, mensaje_recordatorio: e.target.value })}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Mensaje de reenganche (para clientes de hace ~21 días)</Label>
+                <Textarea
+                  rows={3}
+                  value={config.mensaje_reenganche || ''}
+                  onChange={(e) => setConfig({ ...config, mensaje_reenganche: e.target.value })}
+                  placeholder="¡Hola {nombre}! Hace {dias} días te atendimos con {servicio}. ¿Te gustaría reservar tu próximo turno? 💅✨"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Variables extra disponibles para este mensaje: <code>{'{nombre}'}</code>, <code>{'{apellido}'}</code>, <code>{'{dias}'}</code>
+                </p>
+              </div>
             </CardContent>
           </Card>
 
@@ -851,7 +864,7 @@ export default function ConfiguracionPage() {
                               <TableCell colSpan={4} className="py-3 px-6">
                                 <p className="text-xs font-medium text-muted-foreground mb-2">Páginas visibles</p>
                                 <div className="flex flex-wrap gap-x-6 gap-y-2">
-                                  {NAV_ITEMS.filter(item => item.href !== '/facturacion' && item.href !== '/informes').map(item => (
+                                  {NAV_ITEMS.map(item => (
                                     <div key={item.href} className="flex items-center gap-2">
                                       <Switch
                                         checked={item.adminOnly
@@ -862,9 +875,6 @@ export default function ConfiguracionPage() {
                                       <div className="flex items-center gap-1.5">
                                         <item.icon className="h-3.5 w-3.5 text-muted-foreground" />
                                         <span className="text-sm">{item.label}</span>
-                                        {item.adminOnly && (
-                                          <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1 rounded">Admin</span>
-                                        )}
                                       </div>
                                     </div>
                                   ))}

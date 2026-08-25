@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { format, addDays, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
-import type { CitaConRelaciones, Profesional, Horario, Bloqueo } from '@/types/database'
+import type { CitaConRelaciones, Profesional, Horario, Bloqueo, Desbloqueo } from '@/types/database'
 import { CalendarioResourceDayView } from './CalendarioResourceDayView'
 import { CitaDialog } from './CitaDialog'
 import { CitaDetailPanel } from './CitaDetailPanel'
 import { BloqueoDialog } from './BloqueoDialog'
 import { RecordatoriosDialog } from './RecordatoriosDialog'
+import { ReenganchesDialog } from './ReenganchesDialog'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, CalendarDays, Ban, MessageCircle, CalendarPlus, Download, CheckCircle2, XCircle, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Ban, MessageCircle, Sparkles, CalendarPlus, Download, CheckCircle2, XCircle, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
@@ -53,13 +54,17 @@ export function CalendarioView() {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [horarios, setHorarios] = useState<Record<string, Horario[]>>({})
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
+  const [desbloqueos, setDesbloqueos] = useState<Desbloqueo[]>([])
   const [modoBloqueo, setModoBloqueo] = useState(false)
   const [bloqueoDialogOpen, setBloqueoDialogOpen] = useState(false)
   const [selectedBloqueo, setSelectedBloqueo] = useState<Bloqueo | null>(null)
+  const [selectedDesbloqueo, setSelectedDesbloqueo] = useState<Desbloqueo | null>(null)
   const [bloqueoDefaultStart, setBloqueoDefaultStart] = useState<string | undefined>()
   const [bloqueoDefaultEnd, setBloqueoDefaultEnd] = useState<string | undefined>()
   const [recordatoriosOpen, setRecordatoriosOpen] = useState(false)
   const [recordatoriosPendientes, setRecordatoriosPendientes] = useState(0)
+  const [reenganchesOpen, setReenganchesOpen] = useState(false)
+  const [reenganchesPendientes, setReenganchesPendientes] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
@@ -322,6 +327,15 @@ export function CalendarioView() {
     setRecordatoriosPendientes(pendientes > 0 ? pendientes : 0)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fetchReenganchesPendientes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/reenganches')
+      if (!res.ok) return
+      const data = await res.json()
+      setReenganchesPendientes((data.items || []).length)
+    } catch {}
+  }, [])
+
   const fetchData = useCallback(async () => {
     // Ventana de 60 días atrás y 90 días adelante — cubre todo el uso normal
     const desde = new Date(); desde.setDate(desde.getDate() - 60)
@@ -329,7 +343,7 @@ export function CalendarioView() {
     const desdeStr = desde.toISOString().split('T')[0]
     const hastaStr = hasta.toISOString().split('T')[0]
 
-    const [citasRes, profRes, bloqueosRes] = await Promise.all([
+    const [citasRes, profRes, bloqueosRes, desbloqueosRes] = await Promise.all([
       supabase
         .from('citas')
         .select('*, clientes(*), profesionales(*), servicios(*)')
@@ -342,10 +356,15 @@ export function CalendarioView() {
         .gte('fecha_inicio', `${desdeStr}T00:00:00`)
         .lte('fecha_inicio', `${hastaStr}T23:59:59`)
         .order('fecha_inicio'),
+      supabase.from('desbloqueos').select('*')
+        .gte('fecha', desdeStr)
+        .lte('fecha', hastaStr)
+        .order('fecha'),
     ])
 
     if (citasRes.data) setCitas(citasRes.data)
     if (bloqueosRes.data) setBloqueos(bloqueosRes.data)
+    if (desbloqueosRes.data) setDesbloqueos(desbloqueosRes.data)
 
     if (profRes.data) {
       setProfesionales(profRes.data)
@@ -372,6 +391,7 @@ export function CalendarioView() {
   useEffect(() => {
     fetchData()
     fetchRecordatoriosPendientes()
+    fetchReenganchesPendientes()
 
     const channel = supabase
       .channel('citas-bloqueos-changes')
@@ -381,12 +401,16 @@ export function CalendarioView() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bloqueos' }, () => {
         fetchData()
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'desbloqueos' }, () => {
+        fetchData()
+      })
       .subscribe()
 
     // Polling de respaldo cada 30s por si Realtime no está activo
     const interval = setInterval(() => {
       fetchData()
       fetchRecordatoriosPendientes()
+      fetchReenganchesPendientes()
     }, 30000)
 
     return () => {
@@ -448,7 +472,15 @@ export function CalendarioView() {
 
   function handleBloqueoClick(bloqueo: Bloqueo) {
     setSelectedBloqueo(bloqueo)
+    setSelectedDesbloqueo(null)
     setSelectedProfesionalId(bloqueo.profesional_id)
+    setBloqueoDialogOpen(true)
+  }
+
+  function handleDesbloqueoClick(desbloqueo: Desbloqueo) {
+    setSelectedDesbloqueo(desbloqueo)
+    setSelectedBloqueo(null)
+    setSelectedProfesionalId(desbloqueo.profesional_id)
     setBloqueoDialogOpen(true)
   }
 
@@ -482,6 +514,7 @@ export function CalendarioView() {
   function handleBloqueoDialogClose() {
     setBloqueoDialogOpen(false)
     setSelectedBloqueo(null)
+    setSelectedDesbloqueo(null)
     setSelectedProfesionalId(null)
     fetchData()
   }
@@ -550,6 +583,22 @@ export function CalendarioView() {
               {recordatoriosPendientes > 0 && (
                 <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-green-600 px-1 text-[10px] font-bold text-white">
                   {recordatoriosPendientes}
+                </span>
+              )}
+            </Button>
+          )}
+          {!isReadOnly && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="relative gap-1.5 text-xs flex-1"
+              onClick={() => setReenganchesOpen(true)}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-fuchsia-500" />
+              Reenganche
+              {reenganchesPendientes > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-bold text-white">
+                  {reenganchesPendientes}
                 </span>
               )}
             </Button>
@@ -627,22 +676,25 @@ export function CalendarioView() {
                   </span>
                 )}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="relative gap-1.5 text-xs"
+                onClick={() => setReenganchesOpen(true)}
+              >
+                <Sparkles className="h-3.5 w-3.5 text-fuchsia-500" />
+                Reenganche
+                {reenganchesPendientes > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-bold text-white">
+                    {reenganchesPendientes}
+                  </span>
+                )}
+              </Button>
             </>
           )}
           {!isToday && (
             <Button variant="ghost" size="sm" className="ml-1 text-xs" onClick={() => setFecha(new Date())}>
               Hoy
-            </Button>
-          )}
-          {isAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs"
-              onClick={() => setTurnosDialogOpen(true)}
-            >
-              <CalendarPlus className="h-3.5 w-3.5" />
-              Importar turnos
             </Button>
           )}
         </div>
@@ -686,10 +738,12 @@ export function CalendarioView() {
           citas={citas}
           profesionales={effectiveFiltrados}
           bloqueos={bloqueos}
+          desbloqueos={desbloqueos}
           horarios={horarios}
           onSlotClick={isReadOnly ? () => {} : handleSlotClick}
           onCitaClick={handleCitaClick}
           onBloqueoClick={isReadOnly ? undefined : handleBloqueoClick}
+          onDesbloqueoClick={isReadOnly ? undefined : handleDesbloqueoClick}
           onCitaDrop={isReadOnly ? undefined : handleCitaDrop}
         />
         </div>
@@ -720,11 +774,13 @@ export function CalendarioView() {
         open={bloqueoDialogOpen}
         onClose={handleBloqueoDialogClose}
         bloqueo={selectedBloqueo}
+        desbloqueo={selectedDesbloqueo}
         profesionalId={selectedProfesionalId}
         profesionalNombre={profNombre}
         fecha={fecha}
         defaultStart={bloqueoDefaultStart}
         defaultEnd={bloqueoDefaultEnd}
+        horarios={Object.values(horarios).flat()}
       />
 
       <RecordatoriosDialog
@@ -733,6 +789,14 @@ export function CalendarioView() {
         onClose={() => {
           setRecordatoriosOpen(false)
           fetchRecordatoriosPendientes()
+        }}
+      />
+
+      <ReenganchesDialog
+        open={reenganchesOpen}
+        onClose={() => {
+          setReenganchesOpen(false)
+          fetchReenganchesPendientes()
         }}
       />
 
