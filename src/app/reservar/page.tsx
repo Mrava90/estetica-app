@@ -184,16 +184,16 @@ export default function ReservarPage() {
       )}
 
       {/* Imágenes de promos:
-          - Mobile/tablet: van arriba, en el flujo, ancho completo
+          - Mobile/tablet: van arriba, en el flujo, centradas y más chicas (~65% del ancho)
           - xl (≥1280px): fijas a la izquierda del contenedor central, sin achicar servicios */}
       {!selectedServicio && promosHoyConImagen.length > 0 && (
-        <div className="space-y-3 xl:hidden">
+        <div className="space-y-3 xl:hidden flex flex-col items-center">
           {promosHoyConImagen.map(p => (
             <button
               key={p.id}
               type="button"
               onClick={() => setImagenAmpliada(p.imagen_url!)}
-              className="block w-full rounded-2xl overflow-hidden border-2 border-fuchsia-400 shadow-lg bg-white transition-transform hover:scale-[1.01] active:scale-95"
+              className="block w-2/3 max-w-[16rem] rounded-2xl overflow-hidden border-2 border-fuchsia-400 shadow-lg bg-white transition-transform hover:scale-[1.01] active:scale-95"
               aria-label={`Ver ${p.nombre} en grande`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
