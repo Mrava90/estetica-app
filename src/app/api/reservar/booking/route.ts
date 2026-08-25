@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toAR, diaSemanaAR } from '@/lib/timezone'
 import { calcularPrecioConPromo } from '@/lib/promociones'
+import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 import type { Promocion } from '@/types/database'
 
 function normalizarTelefono(tel: string): string {
@@ -28,6 +29,16 @@ const isUUID = (s: unknown): s is string => typeof s === 'string' && UUID_RE.tes
 //   NO expone email/apellido/DNI para evitar enumeracion y fuga de PII por telefono.
 //   El cliente reingresa apellido/DNI/email en el form si los quiere actualizar.
 export async function GET(request: NextRequest) {
+  // Rate limit: max 30 lookups/min por IP para evitar enumeracion de telefonos
+  const ip = getClientIp(request)
+  const rl = rateLimit(ip, { name: 'booking-lookup', windowMs: 60_000, max: 30 })
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Demasiadas consultas, esperá un momento' }, {
+      status: 429,
+      headers: { 'Retry-After': String(rl.retryAfterSec ?? 60) },
+    })
+  }
+
   const tel = request.nextUrl.searchParams.get('telefono')
   if (!tel || tel.length < 8 || tel.length > 20) {
     return NextResponse.json({ found: false })
@@ -50,6 +61,16 @@ export async function GET(request: NextRequest) {
 
 // POST /api/reservar/booking → crea/actualiza cliente + crea cita
 export async function POST(request: NextRequest) {
+  // Rate limit: max 10 reservas/min por IP (bloqueo 5 min si se pasa)
+  const ip = getClientIp(request)
+  const rl = rateLimit(ip, { name: 'booking-post', windowMs: 60_000, max: 10, blockMs: 5 * 60_000 })
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Demasiadas reservas en poco tiempo, esperá un momento' }, {
+      status: 429,
+      headers: { 'Retry-After': String(rl.retryAfterSec ?? 300) },
+    })
+  }
+
   let body: any
   try {
     body = await request.json()

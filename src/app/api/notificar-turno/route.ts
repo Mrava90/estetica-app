@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import nodemailer from 'nodemailer'
 import { formatFechaHoraAR } from '@/lib/timezone'
+import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -26,6 +27,16 @@ function escapeHtml(s: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Rate limit: max 5 emails/hora por IP para evitar abuso masivo del SMTP
+  const ip = getClientIp(request)
+  const rl = rateLimit(ip, { name: 'notificar-turno', windowMs: 60 * 60_000, max: 5, blockMs: 60 * 60_000 })
+  if (!rl.allowed) {
+    return NextResponse.json({ error: 'Demasiadas notificaciones' }, {
+      status: 429,
+      headers: { 'Retry-After': String(rl.retryAfterSec ?? 3600) },
+    })
+  }
+
   // Body solo lleva citaId. Email y nombre se obtienen server-side desde la DB
   // (no aceptamos email arbitrario del body para evitar abuso del SMTP).
   const { citaId } = await request.json().catch(() => ({}))
