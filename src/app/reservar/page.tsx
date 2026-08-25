@@ -208,9 +208,10 @@ export default function ReservarPage() {
         </div>
       )}
 
-      {/* Panel fijo a la izquierda en desktop grande — NO achica el contenedor central */}
+      {/* Panel fijo a la izquierda en desktop grande — NO achica el contenedor central.
+          Sin scroll: la imagen se ajusta a la altura de la ventana con object-contain. */}
       {!selectedServicio && promosHoyConImagen.length > 0 && (
-        <div className="hidden xl:block fixed left-6 top-24 w-[22rem] 2xl:w-[26rem] max-h-[calc(100vh-8rem)] overflow-y-auto space-y-3 z-20">
+        <div className="hidden xl:block fixed left-6 top-24 w-[22rem] 2xl:w-[26rem] space-y-3 z-20">
           {promosHoyConImagen.map(p => (
             <button
               key={p.id}
@@ -223,7 +224,7 @@ export default function ReservarPage() {
               <img
                 src={p.imagen_url!}
                 alt={p.nombre}
-                className="w-full h-auto object-contain bg-fuchsia-500"
+                className="w-full h-auto max-h-[calc(100vh-8rem)] object-contain bg-fuchsia-500"
                 loading="lazy"
               />
             </button>
