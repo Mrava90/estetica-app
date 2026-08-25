@@ -54,9 +54,24 @@ export async function fetchSheetData(spreadsheetId: string, sheetName: string): 
   const range = encodeURIComponent(`'${sheetName}'!A:O`)
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=FORMATTED_VALUE`
 
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token.token}` },
-  })
+  // Timeout 30s para que no quede colgado si Google está lento
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
+
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token.token}` },
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Google Sheets API timeout (${sheetName}): no respondió en 30s`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!res.ok) {
     const text = await res.text()
@@ -253,9 +268,9 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     throw new Error('Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY')
   }
 
-  // Período de sync: solo desde hoy en adelante
+  // Período de sync: desde el primer día del mes actual
   const now = new Date()
-  const syncFromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const syncFromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
   // 1. Fetch all sheets via Google Sheets API
   const [ssrRows, kwRows, gastosRows] = await Promise.all([

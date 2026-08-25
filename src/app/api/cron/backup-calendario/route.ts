@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { backupCalendarioToSheets, backupClientesToSheets } from '@/lib/sheets-backup'
 import { isAdminEmail } from '@/lib/constants'
+import { withCronLog } from '@/lib/cron-logger'
 
 async function runBackup() {
   const supabase = createAdminClient()
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const result = await runBackup()
+    const result = await withCronLog('backup-calendario', runBackup)
     return NextResponse.json({ ok: true, ...result, timestamp: new Date().toISOString() })
   } catch (error) {
     console.error('Backup error:', error)

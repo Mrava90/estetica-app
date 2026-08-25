@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CalendarDays, Users, DollarSign, Clock, Banknote, CreditCard } from 'lucide-react'
+import { paginateQuery } from '@/lib/supabase/paginate'
 
 function formatMoney(n: number): string {
   return new Intl.NumberFormat('es-AR', { style: 'decimal', maximumFractionDigits: 0 }).format(n)
@@ -61,7 +62,7 @@ export default function DashboardPage() {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString()
 
-    const [hoyRes, semanaRes, clientesRes, facturacionRes] = await Promise.all([
+    const [hoyRes, semanaRes, clientesRes, facturacionData] = await Promise.all([
       supabase
         .from('citas')
         .select('id', { count: 'exact', head: true })
@@ -78,15 +79,18 @@ export default function DashboardPage() {
         .from('clientes')
         .select('id', { count: 'exact', head: true })
         .gte('created_at', startOfMonth),
-      supabase
-        .from('citas')
-        .select('precio_cobrado')
-        .gte('fecha_inicio', startOfMonth)
-        .lt('fecha_inicio', endOfMonth)
-        .eq('status', 'completada'),
+      paginateQuery<{ precio_cobrado: number | null }>((from, to) =>
+        supabase
+          .from('citas')
+          .select('precio_cobrado')
+          .gte('fecha_inicio', startOfMonth)
+          .lt('fecha_inicio', endOfMonth)
+          .eq('status', 'completada')
+          .range(from, to)
+      ),
     ])
 
-    const facturacion = facturacionRes.data?.reduce((sum, c) => sum + (c.precio_cobrado || 0), 0) || 0
+    const facturacion = facturacionData.reduce((sum, c) => sum + (c.precio_cobrado || 0), 0)
 
     setStats({
       citasHoy: hoyRes.count || 0,
@@ -101,14 +105,17 @@ export default function DashboardPage() {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
 
-    const { data } = await supabase
-      .from('citas')
-      .select('precio_cobrado, metodo_pago')
-      .eq('status', 'completada')
-      .gte('fecha_inicio', startOfMonth)
-      .lt('fecha_inicio', endOfMonth)
+    const data = await paginateQuery<{ precio_cobrado: number | null; metodo_pago: string | null }>((from, to) =>
+      supabase
+        .from('citas')
+        .select('precio_cobrado, metodo_pago')
+        .eq('status', 'completada')
+        .gte('fecha_inicio', startOfMonth)
+        .lt('fecha_inicio', endOfMonth)
+        .range(from, to)
+    )
 
-    if (!data) return
+    if (!data.length) return
     const efectivo = data
       .filter(c => c.metodo_pago !== 'mercadopago')
       .reduce((s, c) => s + (c.precio_cobrado || 0), 0)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { syncFromSheets } from '@/lib/sheets-sync'
+import { withCronLog } from '@/lib/cron-logger'
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -13,8 +14,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = createAdminClient()
-    const result = await syncFromSheets(supabase)
+    const result = await withCronLog('sync-sheets', async () => {
+      const supabase = createAdminClient()
+      return syncFromSheets(supabase)
+    })
 
     return NextResponse.json({
       ok: true,

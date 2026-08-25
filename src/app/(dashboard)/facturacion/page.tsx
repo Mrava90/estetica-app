@@ -21,6 +21,10 @@ import {
   Send,
   Search,
   FileText,
+  Mail,
+  X,
+  Pencil,
+  Save,
 } from 'lucide-react'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -99,6 +103,36 @@ export default function FacturacionPage() {
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'emitida' | 'excluida'>('todos')
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [bulkProgreso, setBulkProgreso] = useState<{ done: number; total: number; errores: number } | null>(null)
+  const [emailRow, setEmailRow]       = useState<string | null>(null)
+  const [emailInput, setEmailInput]   = useState<Record<string, string>>({})
+  const [emailStatus, setEmailStatus] = useState<Record<string, 'idle' | 'loading' | 'sent' | 'error'>>({})
+  const [emailError, setEmailError]   = useState<Record<string, string>>({})
+  const [editData, setEditData]       = useState<Record<string, { nombre: string; dni: string; descripcion: string }>>({})
+  const [editingRow, setEditingRow]   = useState<string | null>(null)
+
+  async function handleEnviarEmail(facturaId: string) {
+    const email = (emailInput[facturaId] || '').trim()
+    if (!email) return
+    setEmailStatus(s => ({ ...s, [facturaId]: 'loading' }))
+    setEmailError(s => ({ ...s, [facturaId]: '' }))
+    try {
+      const res = await fetch('/api/facturacion/enviar-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ factura_id: facturaId, email }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Error al enviar')
+      setEmailStatus(s => ({ ...s, [facturaId]: 'sent' }))
+      setTimeout(() => {
+        setEmailRow(null)
+        setEmailStatus(s => ({ ...s, [facturaId]: 'idle' }))
+      }, 2500)
+    } catch (e: any) {
+      setEmailStatus(s => ({ ...s, [facturaId]: 'error' }))
+      setEmailError(s => ({ ...s, [facturaId]: e.message }))
+    }
+  }
 
   async function testConexion() {
     setTestLoading(true)
@@ -163,11 +197,11 @@ export default function FacturacionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           afip_row_key:    item.afip_row_key,
-          receptor_nombre: item.cliente_nombre,
-          receptor_dni:    item.cliente_dni,
+          receptor_nombre: editData[item.afip_row_key]?.nombre ?? item.cliente_nombre,
+          receptor_dni:    editData[item.afip_row_key]?.dni || item.cliente_dni,
           monto:           item.monto,
           fecha:           item.fecha,
-          descripcion:     item.servicio_nombre || 'Servicio de estética',
+          descripcion:     editData[item.afip_row_key]?.descripcion ?? item.servicio_nombre ?? 'Servicio de estética',
         }),
       })
       const json = await res.json()
@@ -273,11 +307,11 @@ export default function FacturacionPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             afip_row_key:    item.afip_row_key,
-            receptor_nombre: item.cliente_nombre,
-            receptor_dni:    item.cliente_dni,
+            receptor_nombre: editData[item.afip_row_key]?.nombre ?? item.cliente_nombre,
+            receptor_dni:    editData[item.afip_row_key]?.dni || item.cliente_dni,
             monto:           item.monto,
             fecha:           item.fecha,
-            descripcion:     item.servicio_nombre || 'Servicio de estética',
+            descripcion:     editData[item.afip_row_key]?.descripcion ?? item.servicio_nombre ?? 'Servicio de estética',
           }),
         })
         const json = await res.json()
@@ -361,7 +395,7 @@ export default function FacturacionPage() {
     )
   }
   const pendientesFiltrados = (filtroEstado === 'todos' || filtroEstado === 'pendiente') ? aplicarFiltros([...pendientes, ...conError]) : []
-  const emitidasFiltradas   = (filtroEstado === 'todos' || filtroEstado === 'emitida')   ? aplicarFiltros(emitidas)   : []
+  const emitidasFiltradas   = (filtroEstado === 'todos' || filtroEstado === 'emitida')   ? aplicarFiltros([...emitidas].sort((a, b) => b.fecha.localeCompare(a.fecha)))   : []
   const excluidasFiltradas  = (filtroEstado === 'todos' || filtroEstado === 'excluida')  ? aplicarFiltros(excluidas)  : []
 
   const totalMonto     = items.reduce((s, i) => s + i.monto, 0)
@@ -379,44 +413,44 @@ export default function FacturacionPage() {
     // ── Emitida ──────────────────────────────────────────────────────────────
     if (item.factura_estado === 'emitida') {
       return (
-        <li key={k} className="grid grid-cols-[2.25rem_1fr_auto] md:grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 gap-y-0 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+        <li key={k} className="grid grid-cols-[2.25rem_1fr_auto] md:grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_12rem] items-center gap-x-3 gap-y-0 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
           {/* Avatar */}
           <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
             {initials(item.cliente_nombre)}
           </div>
           {/* Nombre */}
           <div className="min-w-0">
-            <p className="font-semibold text-sm truncate">{item.cliente_nombre}</p>
+            <p className="font-semibold text-sm truncate text-gray-900">{item.cliente_nombre}</p>
           </div>
           {/* DNI */}
           <div className="hidden md:block">
             {item.cliente_dni
-              ? <span className="font-mono text-sm font-medium text-gray-700">{formatDNI(item.cliente_dni)}</span>
-              : <span className="text-xs text-muted-foreground italic">Sin DNI</span>}
+              ? <span className="font-mono text-sm font-medium text-gray-900">{formatDNI(item.cliente_dni)}</span>
+              : <span className="text-xs text-gray-500 italic">Sin DNI</span>}
           </div>
           {/* Servicio */}
-          <p className="hidden md:block text-xs text-muted-foreground truncate">{item.servicio_nombre}</p>
+          <p className="hidden md:block text-xs text-gray-700 truncate">{item.servicio_nombre}</p>
           {/* Fecha */}
-          <p className="hidden md:block text-xs text-muted-foreground text-right">{isoToDisplay(item.fecha)}</p>
+          <p className="hidden md:block text-xs text-gray-700 text-right">{isoToDisplay(item.fecha)}</p>
           {/* ESTADO */}
           <div className="hidden md:flex justify-center">
             <span className="rounded-full bg-green-200 text-green-800 text-[11px] font-medium px-2 py-0.5 whitespace-nowrap">Facturada</span>
           </div>
           {/* Monto */}
-          <p className="font-bold text-sm text-right">{formatPrecio(item.monto)}</p>
+          <p className="font-bold text-sm text-right text-gray-900">{formatPrecio(item.monto)}</p>
           {/* Estado */}
           <div className="flex items-center gap-2">
             <div className="flex flex-col items-end gap-0.5 min-w-[100px]">
               {item.factura_cae ? (
                 <>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-green-700 whitespace-nowrap">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> N°{item.factura_numero}
+                  <span className="flex items-center gap-1 text-xs font-semibold text-gray-900 whitespace-nowrap">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> N°{item.factura_numero}
                   </span>
-                  <span className="font-mono text-[10px] text-green-600 tracking-tight">{item.factura_cae}</span>
+                  <span className="font-mono text-[10px] text-gray-700 tracking-tight">{item.factura_cae}</span>
                 </>
               ) : (
-                <span className="flex items-center gap-1 text-xs font-semibold text-green-700 whitespace-nowrap">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Facturada
+                <span className="flex items-center gap-1 text-xs font-semibold text-gray-900 whitespace-nowrap">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> Facturada
                   <span className="rounded bg-green-200 px-1 py-0.5 text-[10px] font-medium text-green-800">Manual</span>
                 </span>
               )}
@@ -432,7 +466,57 @@ export default function FacturacionPage() {
                 <FileText className="h-4 w-4" />
               </a>
             )}
+            {item.factura_id && item.factura_cae && (
+              <button
+                onClick={() => setEmailRow(emailRow === item.factura_id ? null : item.factura_id!)}
+                title="Enviar comprobante por email"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
+              >
+                <Mail className="h-4 w-4" />
+              </button>
+            )}
           </div>
+          {/* Input de email inline */}
+          {emailRow === item.factura_id && item.factura_id && (
+            <div className="col-span-full mt-2 flex items-center gap-2">
+              {emailStatus[item.factura_id] === 'sent' ? (
+                <span className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
+                  <CheckCircle2 className="h-4 w-4" /> Comprobante enviado
+                </span>
+              ) : (
+                <>
+                  <input
+                    type="email"
+                    placeholder="correo@ejemplo.com"
+                    value={emailInput[item.factura_id] || ''}
+                    onChange={e => setEmailInput(s => ({ ...s, [item.factura_id!]: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && handleEnviarEmail(item.factura_id!)}
+                    className="h-8 flex-1 rounded-md border border-green-300 bg-white dark:bg-zinc-800 dark:text-white dark:border-green-700 dark:placeholder-zinc-400 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => handleEnviarEmail(item.factura_id!)}
+                    disabled={emailStatus[item.factura_id] === 'loading'}
+                    className="flex h-8 items-center gap-1.5 rounded-md bg-green-700 px-3 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50 transition-colors"
+                  >
+                    {emailStatus[item.factura_id] === 'loading'
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <Send className="h-3.5 w-3.5" />}
+                    Enviar
+                  </button>
+                  <button
+                    onClick={() => setEmailRow(null)}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                  {emailStatus[item.factura_id] === 'error' && (
+                    <span className="text-xs text-red-600">{emailError[item.factura_id]}</span>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </li>
       )
     }
@@ -557,7 +641,7 @@ export default function FacturacionPage() {
 
     // ── Pendiente (idle) ─────────────────────────────────────────────────────
     return (
-      <li key={k} className="grid grid-cols-[1.25rem_2.25rem_1fr_auto_auto] md:grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 rounded-xl border bg-card px-4 py-3 hover:bg-muted/20 transition-colors">
+      <li key={k} className="grid grid-cols-[1.25rem_2.25rem_1fr_auto_auto] md:grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_8rem] items-center gap-x-3 rounded-xl border bg-card px-4 py-3 hover:bg-muted/20 transition-colors">
 
         {/* Checkbox */}
         <input type="checkbox"
@@ -611,8 +695,22 @@ export default function FacturacionPage() {
         {/* Monto */}
         <p className="font-bold text-sm text-right whitespace-nowrap">{formatPrecio(item.monto)}</p>
 
-        {/* Botones ✓ / ✗ */}
+        {/* Botones ✓ / ✗ / editar */}
         <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => {
+              setEditingRow(k)
+              if (!editData[k]) setEditData(s => ({ ...s, [k]: {
+                nombre: item.cliente_nombre,
+                dni: item.cliente_dni ?? '',
+                descripcion: item.servicio_nombre ?? '',
+              }}))
+            }}
+            title="Editar datos"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-500 hover:bg-gray-100 transition-colors"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
           <button
             onClick={() => handleCheckClick(k)}
             title="Aprobar / marcar como facturada"
@@ -628,6 +726,52 @@ export default function FacturacionPage() {
             <XCircle className="h-4 w-4" />
           </button>
         </div>
+
+        {/* Panel de edición inline */}
+        {editingRow === k && editData[k] && (
+          <div className="col-span-full mt-2 flex flex-wrap items-end gap-2 border-t pt-3">
+            <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Nombre</label>
+              <input
+                type="text"
+                value={editData[k].nombre}
+                onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], nombre: e.target.value } }))}
+                className="h-8 rounded-md border px-2 text-sm bg-background"
+              />
+            </div>
+            <div className="flex flex-col gap-1 w-36">
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">DNI</label>
+              <input
+                type="text"
+                value={editData[k].dni}
+                onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], dni: e.target.value } }))}
+                placeholder="Sin DNI"
+                className="h-8 rounded-md border px-2 text-sm bg-background"
+              />
+            </div>
+            <div className="flex flex-col gap-1 flex-[2] min-w-[180px]">
+              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Servicio / Descripción</label>
+              <input
+                type="text"
+                value={editData[k].descripcion}
+                onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], descripcion: e.target.value } }))}
+                className="h-8 rounded-md border px-2 text-sm bg-background"
+              />
+            </div>
+            <button
+              onClick={() => setEditingRow(null)}
+              className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <Save className="h-3.5 w-3.5" /> Guardar
+            </button>
+            <button
+              onClick={() => { setEditingRow(null); setEditData(s => { const n = { ...s }; delete n[k]; return n }) }}
+              className="flex h-8 items-center gap-1 rounded-md border px-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
       </li>
     )
   }
@@ -764,7 +908,7 @@ export default function FacturacionPage() {
 
               {/* Encabezado de columnas (desktop) — pendientes */}
               {pendientesFiltrados.length > 0 && (
-                <div className="hidden md:grid grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="hidden md:grid grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_8rem] items-center gap-x-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   <input type="checkbox"
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
                     checked={pendientesFiltrados.length > 0 && pendientesFiltrados.every(i => seleccionados.has(i.afip_row_key))}
@@ -799,7 +943,7 @@ export default function FacturacionPage() {
               {/* Emitidas */}
               {emitidasFiltradas.length > 0 && (
                 <div className="space-y-2 pt-2">
-                  <div className="hidden md:grid grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_auto] items-center gap-x-3 px-4 text-xs font-semibold text-green-700 uppercase tracking-wide">
+                  <div className="hidden md:grid grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_12rem] items-center gap-x-3 px-4 text-xs font-semibold text-green-700 uppercase tracking-wide">
                     <span />
                     <span>Cliente</span>
                     <span>DNI</span>

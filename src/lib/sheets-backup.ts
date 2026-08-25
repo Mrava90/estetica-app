@@ -86,12 +86,23 @@ export async function backupCalendarioToSheets(
   checkCredentials()
   const spreadsheetId = getSpreadsheetId()
 
-  const { data: citas, error } = await supabase
-    .from('citas')
-    .select('*, clientes(*), profesionales(*), servicios(*)')
-    .order('fecha_inicio', { ascending: false })
-
-  if (error) throw new Error(`Error fetching citas: ${error.message}`)
+  // Paginar para evitar el corte default de 1000 filas. Con ~3000 citas activas
+  // y crecimiento, sin paginación el backup solo respaldaba las 1000 más recientes.
+  const PAGE_SIZE = 1000
+  const citas: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('citas')
+      .select('*, clientes(*), profesionales(*), servicios(*)')
+      .order('fecha_inicio', { ascending: false })
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error(`Error fetching citas: ${error.message}`)
+    if (!data || data.length === 0) break
+    citas.push(...data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
 
   const header = [
     'Fecha', 'Hora', 'Cliente', 'Teléfono', 'Email',
@@ -138,12 +149,21 @@ export async function backupClientesToSheets(
   checkCredentials()
   const spreadsheetId = getSpreadsheetId()
 
-  const { data: clientes, error } = await supabase
-    .from('clientes')
-    .select('*')
-    .order('nombre')
-
-  if (error) throw new Error(`Error fetching clientes: ${error.message}`)
+  const PAGE_SIZE = 1000
+  const clientes: any[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .order('nombre')
+      .range(from, from + PAGE_SIZE - 1)
+    if (error) throw new Error(`Error fetching clientes: ${error.message}`)
+    if (!data || data.length === 0) break
+    clientes.push(...data)
+    if (data.length < PAGE_SIZE) break
+    from += PAGE_SIZE
+  }
 
   const header = ['Nombre', 'Apellido', 'Teléfono', 'DNI', 'Email', 'Notas', 'Registrado desde', 'ID']
 

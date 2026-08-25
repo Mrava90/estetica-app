@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient } from '@/lib/supabase/client'
 import { servicioSchema, type ServicioInput } from '@/lib/validators'
-import type { Servicio, Profesional } from '@/types/database'
+import type { Servicio } from '@/types/database'
 import { formatPrecio } from '@/lib/dates'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,15 +17,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Pencil, Banknote, Smartphone, Upload, Download, Tag, TrendingUp, ArrowRight, X, Search } from 'lucide-react'
+import { Plus, Pencil, Banknote, Smartphone, Upload, Download, Tag, TrendingUp, ArrowRight, X, Search, Users } from 'lucide-react'
+import Link from 'next/link'
+import { CATEGORIA_LABELS, CATEGORIAS_ORDEN } from '@/lib/categorias'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState<Servicio[]>([])
-  const [profesionales, setProfesionales] = useState<Profesional[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [selectedProfs, setSelectedProfs] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [aumentoDialogOpen, setAumentoDialogOpen] = useState(false)
   const [porcentaje, setPorcentaje] = useState<string>('15')
@@ -53,10 +54,10 @@ export default function ServiciosPage() {
   })
 
   const esPromoValue = watch('es_promo')
+  const categoriaValue = watch('categoria')
 
   useEffect(() => {
     fetchServicios()
-    fetchProfesionales()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchServicios() {
@@ -64,28 +65,9 @@ export default function ServiciosPage() {
     if (data) setServicios(data)
   }
 
-  async function fetchProfesionales() {
-    const { data } = await supabase.from('profesionales').select('*').eq('activo', true).order('nombre')
-    if (data) setProfesionales(data)
-  }
-
-  async function fetchProfServicio(servicioId: string) {
-    const { data } = await supabase
-      .from('profesional_servicios')
-      .select('profesional_id')
-      .eq('servicio_id', servicioId)
-    if (data && data.length > 0) {
-      setSelectedProfs(data.map((d) => d.profesional_id))
-    } else {
-      // If no records, default all checked
-      setSelectedProfs(profesionales.map((p) => p.id))
-    }
-  }
-
   function openNew() {
     setEditingId(null)
-    reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_mercadopago: 0, es_promo: false })
-    setSelectedProfs(profesionales.map((p) => p.id))
+    reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_mercadopago: 0, es_promo: false, categoria: null })
     setDialogOpen(true)
   }
 
@@ -98,22 +80,14 @@ export default function ServiciosPage() {
       precio_efectivo: servicio.precio_efectivo,
       precio_mercadopago: servicio.precio_mercadopago,
       es_promo: servicio.es_promo ?? false,
+      categoria: servicio.categoria ?? null,
     })
-    fetchProfServicio(servicio.id)
     setDialogOpen(true)
-  }
-
-  function toggleProf(profId: string) {
-    setSelectedProfs((prev) =>
-      prev.includes(profId) ? prev.filter((id) => id !== profId) : [...prev, profId]
-    )
   }
 
   async function onSubmit(data: ServicioInput) {
     setLoading(true)
     try {
-      let servicioId = editingId
-
       if (editingId) {
         const { error } = await supabase
           .from('servicios')
@@ -121,23 +95,10 @@ export default function ServiciosPage() {
           .eq('id', editingId)
         if (error) throw error
       } else {
-        const { data: newServ, error } = await supabase
+        const { error } = await supabase
           .from('servicios')
           .insert(data)
-          .select('id')
-          .single()
         if (error) throw error
-        servicioId = newServ.id
-      }
-
-      // Update profesional_servicios
-      if (servicioId) {
-        await supabase.from('profesional_servicios').delete().eq('servicio_id', servicioId)
-        if (selectedProfs.length > 0) {
-          await supabase.from('profesional_servicios').insert(
-            selectedProfs.map((profId) => ({ profesional_id: profId, servicio_id: servicioId }))
-          )
-        }
       }
 
       toast.success(editingId ? 'Servicio actualizado' : 'Servicio creado')
@@ -212,25 +173,28 @@ export default function ServiciosPage() {
   }
 
   async function handleAplicarAumento() {
-    if (pct <= 0 || serviciosActivos.length === 0) return
+    if (pct === 0 || serviciosActivos.length === 0) return
     setApplying(true)
-    let ok = 0
-    for (const s of serviciosActivos) {
-      const { error } = await supabase
-        .from('servicios')
-        .update({
-          precio_efectivo: aplicarAumento(s.precio_efectivo),
-          precio_mercadopago: aplicarAumento(s.precio_mercadopago),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', s.id)
-      if (!error) ok++
+    try {
+      const res = await fetch('/api/servicios/aumento-masivo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ porcentaje: pct }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Error al aplicar aumento')
+        return
+      }
+      toast.success(`Precios actualizados en ${data.updated} servicio(s)`)
+      setAumentoDialogOpen(false)
+      setPorcentaje('15')
+      fetchServicios()
+    } catch {
+      toast.error('Error al aplicar aumento')
+    } finally {
+      setApplying(false)
     }
-    setApplying(false)
-    setAumentoDialogOpen(false)
-    setPorcentaje('15')
-    toast.success(`Precios actualizados en ${ok} servicio(s)`)
-    fetchServicios()
   }
 
   return (
@@ -393,6 +357,28 @@ export default function ServiciosPage() {
               </div>
             </div>
 
+            {/* Categoría */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Categoría (opcional)</Label>
+              <Select
+                value={categoriaValue || ''}
+                onValueChange={(v) => setValue('categoria', (v === '_auto' ? null : v) as any)}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder="Detectar por nombre (default)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_auto">Detectar por nombre</SelectItem>
+                  {CATEGORIAS_ORDEN.map((c) => (
+                    <SelectItem key={c} value={c}>{CATEGORIA_LABELS[c]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">
+                Si no la elegís, se infiere del nombre del servicio. Usá manual para casos especiales.
+              </p>
+            </div>
+
             {/* Promo toggle */}
             <div className="flex items-center gap-3 rounded-lg border p-3">
               <Checkbox
@@ -409,26 +395,16 @@ export default function ServiciosPage() {
               </div>
             </div>
 
-            {/* Profesionales que realizan este servicio */}
-            {profesionales.length > 0 && (
-              <div className="space-y-2">
-                <Label>Profesionales que lo realizan</Label>
-                <div className="flex flex-wrap gap-2">
-                  {profesionales.map((p) => (
-                    <Badge
-                      key={p.id}
-                      variant={selectedProfs.includes(p.id) ? 'default' : 'outline'}
-                      className="cursor-pointer gap-1.5"
-                      onClick={() => toggleProf(p.id)}
-                    >
-                      <span
-                        className="inline-block h-2 w-2 rounded-full"
-                        style={{ backgroundColor: p.color }}
-                      />
-                      {p.nombre}
-                    </Badge>
-                  ))}
-                </div>
+            {editingId && (
+              <div className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+                <Users className="h-4 w-4 shrink-0" />
+                <span>
+                  Para asignar profesionales que realizan este servicio, andá a{' '}
+                  <Link href="/personal" className="font-medium text-foreground underline hover:text-fuchsia-600">
+                    Personal
+                  </Link>{' '}
+                  y editá los servicios de cada uno.
+                </span>
               </div>
             )}
 

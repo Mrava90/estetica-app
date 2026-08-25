@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { Calculator, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { paginateQuery } from '@/lib/supabase/paginate'
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -83,15 +84,19 @@ export default function ContabilidadPage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
 
-    // Citas del año
-    const citasRes = await supabase
-      .from('citas')
-      .select('fecha_inicio, precio_cobrado, profesional_id, metodo_pago, notas, origen')
-      .eq('status', 'completada')
-      .gte('fecha_inicio', `${year}-01-01`)
-      .lt('fecha_inicio', `${year + 1}-01-01`)
+    // Paginar para no quedarse con el límite default de 1000 filas.
+    const allCitas = await paginateQuery<any>((from, to) =>
+      supabase
+        .from('citas')
+        .select('fecha_inicio, precio_cobrado, profesional_id, metodo_pago, notas, origen')
+        .eq('status', 'completada')
+        .gte('fecha_inicio', `${year}-01-01`)
+        .lt('fecha_inicio', `${year + 1}-01-01`)
+        .order('fecha_inicio')
+        .range(from, to)
+    )
 
-    const citasData: CitaRow[] = (citasRes.data || []).map(c => ({
+    const citasData: CitaRow[] = allCitas.map(c => ({
       ...c,
       comision_profesional: parseComisionNotas(c.notas),
     }))

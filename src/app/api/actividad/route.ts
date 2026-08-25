@@ -39,25 +39,47 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Fetch client names for all registro_ids
-  const registroIds = [...new Set((logs ?? []).map(l => l.registro_id).filter(Boolean))]
-  let clienteMap: Record<string, { nombre: string; apellido: string | null }> = {}
+  // Enriquecer:
+  // - Para citas: nombre del cliente
+  // - Para bloqueos/desbloqueos/horarios: nombre del profesional (viene en datos_nuevos/anteriores)
+  const citaIds = [...new Set((logs ?? []).filter(l => l.tabla === 'citas').map(l => l.registro_id).filter(Boolean))]
+  const profesionalIds = [...new Set(
+    (logs ?? [])
+      .filter(l => l.tabla !== 'citas')
+      .flatMap(l => [
+        (l.datos_nuevos as any)?.profesional_id,
+        (l.datos_anteriores as any)?.profesional_id,
+      ])
+      .filter(Boolean)
+  )]
 
-  if (registroIds.length > 0) {
-    const { data: citas } = await admin
-      .from('citas')
-      .select('id, cliente_id, clientes(nombre, apellido)')
-      .in('id', registroIds)
-    ;(citas ?? []).forEach((c) => {
-      const cl = Array.isArray(c.clientes) ? c.clientes[0] : c.clientes
-      if (cl) clienteMap[c.id] = cl
-    })
-  }
+  const clienteMap: Record<string, { nombre: string; apellido: string | null }> = {}
+  const profesionalMap: Record<string, string> = {}
 
-  const enriched = (logs ?? []).map(log => ({
-    ...log,
-    cliente: clienteMap[log.registro_id] ?? null,
-  }))
+  await Promise.all([
+    citaIds.length > 0
+      ? admin.from('citas').select('id, cliente_id, clientes(nombre, apellido)').in('id', citaIds).then(({ data }) => {
+          (data ?? []).forEach((c: any) => {
+            const cl = Array.isArray(c.clientes) ? c.clientes[0] : c.clientes
+            if (cl) clienteMap[c.id] = cl
+          })
+        })
+      : Promise.resolve(),
+    profesionalIds.length > 0
+      ? admin.from('profesionales').select('id, nombre').in('id', profesionalIds).then(({ data }) => {
+          (data ?? []).forEach((p: any) => { profesionalMap[p.id] = p.nombre })
+        })
+      : Promise.resolve(),
+  ])
+
+  const enriched = (logs ?? []).map(log => {
+    const profId = (log.datos_nuevos as any)?.profesional_id || (log.datos_anteriores as any)?.profesional_id
+    return {
+      ...log,
+      cliente: clienteMap[log.registro_id] ?? null,
+      profesional: profId ? { nombre: profesionalMap[profId] ?? null } : null,
+    }
+  })
 
   return NextResponse.json({ logs: enriched })
 }

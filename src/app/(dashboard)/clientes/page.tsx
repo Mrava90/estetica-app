@@ -46,7 +46,27 @@ export default function ClientesPage() {
   }, [search, todosClientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleDelete(id: string, nombre: string) {
-    if (!confirm(`¿Eliminar a "${nombre}"? Esta acción no se puede deshacer.`)) return
+    // Verificar primero si tiene citas asociadas
+    const { count: citasCount } = await supabase
+      .from('citas')
+      .select('id', { count: 'exact', head: true })
+      .eq('cliente_id', id)
+
+    let msg = `¿Eliminar a "${nombre}"?\n\nEsta acción no se puede deshacer.`
+    if (citasCount && citasCount > 0) {
+      msg = `"${nombre}" tiene ${citasCount} cita${citasCount === 1 ? '' : 's'} asociada${citasCount === 1 ? '' : 's'}.\n\nSi continuás, esas citas quedan como "Sin cliente" (no se borran).\n\n¿Eliminar igual?`
+    }
+    if (!confirm(msg)) return
+
+    // Desvincular citas antes de borrar para no romper referencias
+    if (citasCount && citasCount > 0) {
+      const { error: updErr } = await supabase.from('citas').update({ cliente_id: null }).eq('cliente_id', id)
+      if (updErr) {
+        toast.error('Error al desvincular citas: ' + updErr.message)
+        return
+      }
+    }
+
     const { error } = await supabase.from('clientes').delete().eq('id', id)
     if (error) {
       toast.error('Error al eliminar: ' + error.message)

@@ -21,6 +21,7 @@ export const servicioSchema = z.object({
   precio_efectivo: z.number().min(0, 'Precio inválido'),
   precio_mercadopago: z.number().min(0, 'Precio inválido'),
   es_promo: z.boolean(),
+  categoria: z.enum(['manos', 'pies', 'pestanas', 'cejas', 'otros']).nullable().optional(),
 })
 
 export const profesionalSchema = z.object({

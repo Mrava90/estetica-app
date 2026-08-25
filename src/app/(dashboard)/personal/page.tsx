@@ -10,6 +10,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from 'sonner'
 import { Plus, Minus, Copy, Save, Camera } from 'lucide-react'
 import Image from 'next/image'
+import { ServiciosProfesional } from '@/components/personal/ServiciosProfesional'
+import { ToleranciaSolapamiento } from '@/components/personal/ToleranciaSolapamiento'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const DIAS_MAP = [1, 2, 3, 4, 5, 6, 0] // Lun=1 ... Dom=0
@@ -276,6 +278,17 @@ export default function PersonalPage() {
             <input ref={fotoInputRef} type="file" accept="image/*" className="hidden" onChange={handleFotoUpload} />
           </div>
         </div>
+      )}
+
+      {prof && (
+        <ServiciosProfesional profesional={prof} profesionales={profesionales} />
+      )}
+
+      {prof && (
+        <ToleranciaSolapamiento
+          profesional={prof}
+          onUpdate={(v) => setProfesionales((prev) => prev.map((p) => p.id === prof.id ? { ...p, tolerancia_solapamiento_min: v } : p))}
+        />
       )}
 
       {prof && (

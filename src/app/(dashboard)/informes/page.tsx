@@ -91,17 +91,22 @@ export default function InformesPage() {
 
   async function fetchData() {
     setLoading(true)
-    const [citasRes, profRes] = await Promise.all([
+
+    const { paginateQuery } = await import('@/lib/supabase/paginate')
+    const allCitas = await paginateQuery<any>((from, to) =>
       supabase
         .from('citas')
         .select('*, clientes(*), profesionales(*), servicios(*)')
         .gte('fecha_inicio', rangoFecha.from.toISOString())
         .lte('fecha_inicio', rangoFecha.to.toISOString())
         .neq('status', 'cancelada')
-        .order('fecha_inicio'),
-      supabase.from('profesionales').select('*').eq('activo', true).order('nombre'),
-    ])
-    if (citasRes.data) setCitas(citasRes.data)
+        .order('fecha_inicio')
+        .range(from, to)
+    )
+
+    const profRes = await supabase.from('profesionales').select('*').eq('activo', true).order('nombre')
+
+    setCitas(allCitas)
     if (profRes.data) setProfesionales(profRes.data)
     setLoading(false)
   }
@@ -112,7 +117,8 @@ export default function InformesPage() {
   }, [citas, filtroProfesional])
 
   const resumen = useMemo(() => calcularResumen(filteredCitas), [filteredCitas])
-  const citasPorHora = useMemo(() => calcularCitasPorHora(filteredCitas), [filteredCitas])
+  const citasCalendario = useMemo(() => filteredCitas.filter(c => c.origen !== 'sheets'), [filteredCitas])
+  const citasPorHora = useMemo(() => calcularCitasPorHora(citasCalendario), [citasCalendario])
   const citasPorDia = useMemo(() => calcularCitasPorDiaSemana(filteredCitas), [filteredCitas])
   const citasPorSemana = useMemo(() => calcularCitasPorSemana(filteredCitas), [filteredCitas])
   const ingresosPorDia = useMemo(() => calcularIngresosPorDia(filteredCitas), [filteredCitas])

@@ -28,6 +28,15 @@ export function formatPrecio(precio: number): string {
   }).format(precio)
 }
 
+/**
+ * Combina una fecha + "HH:mm" usando setHours (hora LOCAL del runtime).
+ *
+ * IMPORTANTE: usar solo en client components. El navegador del usuario está
+ * en AR (UTC-3), por lo que el resultado es correcto. Si se llama desde código
+ * server-side (Vercel runs in UTC), las horas quedan corridas 3hs.
+ *
+ * Para uso server-side, usar `parseTimeToDateAR` en src/lib/timezone.ts.
+ */
 export function parseTimeToDate(fecha: Date, timeStr: string): Date {
   const [hours, minutes] = timeStr.split(':').map(Number)
   const d = new Date(fecha)

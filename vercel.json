@@ -7,6 +7,14 @@
     {
       "path": "/api/cron/backup-calendario",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/ranking-servicios",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/afip-padron",
+      "schedule": "0 9 * * 1"
     }
   ]
 }

@@ -37,6 +37,10 @@ import {
 } from 'lucide-react'
 import { isAdminEmail, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 
+// Orígenes de citas que cuentan en la caja diaria. Hoy solo 'sheets' (fuente de verdad).
+// Si en el futuro la app es la fuente principal, agregar 'manual' y/o 'online' acá.
+const ORIGENES_CAJA: ('sheets' | 'manual' | 'online')[] = ['sheets']
+
 interface MonthlyStats {
   efectivo: number
   mercadopago: number
@@ -128,7 +132,7 @@ export default function CajaDiariaPage() {
         .gte('fecha_inicio', dayStart)
         .lt('fecha_inicio', dayEnd)
         .in('status', ['confirmada', 'completada'])
-        .eq('origen', 'sheets')
+        .in('origen', ORIGENES_CAJA)
         .order('fecha_inicio'),
       supabase
         .from('movimientos_caja')
@@ -184,6 +188,9 @@ export default function CajaDiariaPage() {
   const liquidacion = useMemo(() => {
     const map = new Map<string, { nombre: string; color: string; comision: number }>()
     for (const cita of citas) {
+      // Liquidación solo desde sheets (la comisión viene en las notas con formato propio).
+      // Si el futuro la app calcula comisiones desde la columna profesionales.comision_porcentaje,
+      // habilitar este bloque para todos los orígenes en ORIGENES_CAJA.
       if (cita.origen !== 'sheets' || !cita.profesionales) continue
       const { comision } = parseSheetNotas(cita.notas)
       const prof = cita.profesionales

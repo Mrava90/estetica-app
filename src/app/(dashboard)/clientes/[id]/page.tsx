@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { clienteSchema, type ClienteInput } from '@/lib/validators'
 import type { Cliente, CitaConRelaciones } from '@/types/database'
 import { formatFechaHora, formatPrecio, capitalizeWords } from '@/lib/dates'
+import { normalizarTelefono } from '@/lib/telefono'
 import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,21 +65,47 @@ export default function ClienteDetailPage() {
   async function onSubmit(data: ClienteInput) {
     setLoading(true)
     try {
+      // Normalizar teléfono para detectar duplicados aunque haya prefijos distintos
+      const telNormalizado = normalizarTelefono(data.telefono)
+      if (!telNormalizado || telNormalizado.length < 8 || telNormalizado.length > 15) {
+        toast.error('Teléfono inválido')
+        setLoading(false)
+        return
+      }
+
+      // Si el teléfono cambió, verificar que no coincida con otro cliente
+      const telAnterior = cliente?.telefono ? normalizarTelefono(cliente.telefono) : ''
+      if (telNormalizado !== telAnterior) {
+        const { data: existente } = await supabase
+          .from('clientes')
+          .select('id, nombre, apellido')
+          .eq('telefono', telNormalizado)
+          .neq('id', params.id)
+          .maybeSingle()
+
+        if (existente) {
+          const nombreCompleto = `${existente.nombre}${existente.apellido ? ' ' + existente.apellido : ''}`
+          toast.error(`Ese teléfono ya está registrado a "${nombreCompleto}". Usá otro.`)
+          setLoading(false)
+          return
+        }
+      }
+
       const { error } = await supabase
         .from('clientes')
         .update({
           ...data,
           nombre: capitalizeWords(data.nombre),
           apellido: data.apellido ? capitalizeWords(data.apellido) : null,
+          telefono: telNormalizado,
           dni: data.dni || null,
           email: data.email || null,
           notas: data.notas || null,
-          updated_at: new Date().toISOString(),
         })
         .eq('id', params.id)
       if (error) throw error
       toast.success('Cliente actualizado')
-      fetchCliente()
+      router.push('/clientes')
     } catch {
       toast.error('Error al actualizar cliente')
     } finally {
