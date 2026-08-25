@@ -48,11 +48,10 @@ function ConfirmarContent() {
     try {
       const res = await fetch(`/api/reservar/booking?telefono=${encodeURIComponent(tel)}`)
       const data = await res.json()
+      // Por seguridad el endpoint publico solo devuelve `nombre` (para saludo).
+      // Email/apellido/DNI ya no vienen — el cliente los ingresa manualmente si los quiere completar.
       if (data.found) {
-        if (data.nombre)   setNombre(data.nombre)
-        if (data.apellido) setApellido(data.apellido)
-        if (data.email)    setEmail(data.email)
-        if (data.dni)      setDni(data.dni)
+        if (data.nombre) setNombre(data.nombre)
         setClienteEncontrado(true)
       }
     } finally {

@@ -23,7 +23,10 @@ const sanitize = (s: string) => s.trim().slice(0, 200)
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const isUUID = (s: unknown): s is string => typeof s === 'string' && UUID_RE.test(s)
 
-// GET /api/reservar/booking?telefono=11... → lookup mínimo de cliente para autocompletar
+// GET /api/reservar/booking?telefono=11...
+//   → devuelve SOLO el nombre para mostrar saludo ("Hola, María!") si el cliente ya existe.
+//   NO expone email/apellido/DNI para evitar enumeracion y fuga de PII por telefono.
+//   El cliente reingresa apellido/DNI/email en el form si los quiere actualizar.
 export async function GET(request: NextRequest) {
   const tel = request.nextUrl.searchParams.get('telefono')
   if (!tel || tel.length < 8 || tel.length > 20) {
@@ -37,12 +40,12 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('clientes')
-    .select('nombre, apellido, email, dni')
+    .select('nombre')
     .eq('telefono', telNorm)
     .maybeSingle()
 
   if (!data) return NextResponse.json({ found: false })
-  return NextResponse.json({ found: true, ...data })
+  return NextResponse.json({ found: true, nombre: data.nombre })
 }
 
 // POST /api/reservar/booking → crea/actualiza cliente + crea cita
@@ -160,7 +163,7 @@ export async function POST(request: NextRequest) {
     // Buscar cliente existente por teléfono
     const { data: existing } = await admin
       .from('clientes')
-      .select('id')
+      .select('id, nombre, apellido, email, dni')
       .eq('telefono', telFinal)
       .maybeSingle()
 
@@ -190,12 +193,16 @@ export async function POST(request: NextRequest) {
         }, { status: 409 })
       }
 
-      await admin.from('clientes').update({
-        nombre: capitalizeWords(sanitize(nombre)),
-        apellido: apellido?.trim() ? capitalizeWords(sanitize(apellido)) : null,
-        ...(dni?.trim() ? { dni: sanitize(dni) } : {}),
-        ...(email?.trim() ? { email: sanitize(email).toLowerCase() } : {}),
-      }).eq('id', clienteId)
+      // Solo COMPLETAR campos vacios del cliente existente. NUNCA pisar valores existentes
+      // (previene account hijack: atacante con el telefono no puede sustituir email/apellido/dni).
+      const patch: Record<string, string> = {}
+      if (!existing.nombre && nombre?.trim()) patch.nombre = capitalizeWords(sanitize(nombre))
+      if (!existing.apellido && apellido?.trim()) patch.apellido = capitalizeWords(sanitize(apellido))
+      if (!existing.dni && dni?.trim()) patch.dni = sanitize(dni)
+      if (!existing.email && email?.trim()) patch.email = sanitize(email).toLowerCase()
+      if (Object.keys(patch).length > 0) {
+        await admin.from('clientes').update(patch).eq('id', clienteId)
+      }
     } else {
       const { data: newCliente, error: cErr } = await admin
         .from('clientes')
