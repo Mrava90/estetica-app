@@ -58,6 +58,11 @@ export function formatFechaHoraAR(date: Date | string): string {
  */
 export function parseTimeToDateAR(fecha: Date | string, timeStr: string): Date {
   const baseDate = typeof fecha === 'string' ? fecha.slice(0, 10) : formatAR(fecha, 'yyyy-MM-dd')
-  // ISO con offset AR: la hora indicada se interpreta como AR (UTC-3)
-  return new Date(`${baseDate}T${timeStr}:00-03:00`)
+  // Acepta timeStr en formato "HH:MM" o "HH:MM:SS" (postgres devuelve el 2do).
+  // Normalizamos a "HH:MM:SS" antes de armar el ISO.
+  const parts = timeStr.split(':')
+  const hh = (parts[0] ?? '00').padStart(2, '0')
+  const mm = (parts[1] ?? '00').padStart(2, '0')
+  const ss = (parts[2] ?? '00').padStart(2, '0')
+  return new Date(`${baseDate}T${hh}:${mm}:${ss}-03:00`)
 }
