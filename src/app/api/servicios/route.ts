@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 import * as XLSX from 'xlsx'
 
 function getSupabase() {
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminEmail(user.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: 'Solo el admin puede modificar servicios masivamente' }, { status: 403 })
   }
 

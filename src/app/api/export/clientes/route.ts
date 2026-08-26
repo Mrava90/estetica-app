@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 function getSupabase() {
   return createClient(
@@ -22,7 +22,7 @@ export async function GET() {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminEmail(user.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: 'Solo el admin puede exportar' }, { status: 403 })
   }
 

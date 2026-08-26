@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 /**
  * POST /api/servicios/aumento-masivo
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminEmail(user.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 
@@ -50,7 +50,7 @@ export async function GET() {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminEmail(user.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 
@@ -94,7 +94,7 @@ export async function DELETE(request: Request) {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminEmail(user.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

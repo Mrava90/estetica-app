@@ -18,12 +18,45 @@ import {
 
 export const ADMIN_EMAILS = ['ravamartin@gmail.com']
 
+/**
+ * @deprecated Preferir isAdminUser(user) que lee de app_metadata.role.
+ * Se mantiene como fallback para transicion.
+ */
 export function isAdminEmail(email: string | null | undefined): boolean {
   return !!email && ADMIN_EMAILS.includes(email)
 }
 
-/** @deprecated use isAdminEmail() */
+/** @deprecated */
 export const ADMIN_EMAIL = ADMIN_EMAILS[0]
+
+// Shape minimo de un user de Supabase Auth para inferir rol.
+// Usa Record generico para compat con `User` de @supabase/supabase-js
+// (que tiene app_metadata: UserAppMetadata con otras keys ademas de role).
+interface UserWithMetadata {
+  email?: string | null
+  app_metadata?: Record<string, unknown> | null
+}
+
+/**
+ * Verifica si un user tiene rol admin. Preferido sobre isAdminEmail.
+ * Lee de app_metadata.role. Fallback a la lista ADMIN_EMAILS por compat.
+ */
+export function isAdminUser(user: UserWithMetadata | null | undefined): boolean {
+  if (!user) return false
+  if ((user.app_metadata as { role?: string } | null)?.role === 'admin') return true
+  return isAdminEmail(user.email)
+}
+
+/**
+ * Verifica si un user tiene rol staff O admin (personal con acceso al dashboard).
+ * Lee de app_metadata.role. Fallback a dominio @estetica.local + ADMIN_EMAILS.
+ */
+export function isStaffUser(user: UserWithMetadata | null | undefined): boolean {
+  if (!user) return false
+  const role = (user.app_metadata as { role?: string } | null)?.role
+  if (role === 'admin' || role === 'staff') return true
+  return isAdminEmail(user.email) || (user.email?.endsWith('@estetica.local') ?? false)
+}
 
 export interface NavItem {
   label: string

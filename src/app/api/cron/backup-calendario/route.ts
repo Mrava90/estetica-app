@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { backupCalendarioToSheets, backupClientesToSheets } from '@/lib/sheets-backup'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 import { withCronLog } from '@/lib/cron-logger'
 
 async function runBackup() {
@@ -39,7 +39,7 @@ export async function POST() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!isAdminEmail(user?.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

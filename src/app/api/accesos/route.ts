@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/server'
 
 const STAFF_DOMAIN = '@estetica.local'
@@ -8,7 +8,7 @@ const STAFF_DOMAIN = '@estetica.local'
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !isAdminEmail(user.email)) {
+  if (!user || !isAdminUser(user)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
@@ -18,7 +18,7 @@ export async function GET() {
 
   // Filtrar solo clientes (excluir admins y staff @estetica.local)
   const clientes = (data.users || []).filter(
-    (u) => u.email && !isAdminEmail(u.email) && !u.email.endsWith(STAFF_DOMAIN)
+    (u) => u.email && !isAdminUser(u) && !u.email.endsWith(STAFF_DOMAIN)
   ).map((u) => ({
     id: u.id,
     email: u.email,
@@ -33,7 +33,7 @@ export async function GET() {
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !isAdminEmail(user.email)) {
+  if (!user || !isAdminUser(user)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 

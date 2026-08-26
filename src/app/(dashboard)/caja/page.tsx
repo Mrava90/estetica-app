@@ -35,7 +35,7 @@ import {
   X,
   Pencil,
 } from 'lucide-react'
-import { isAdminEmail, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
+import { isAdminUser, STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
 
 // Orígenes de citas que cuentan en la caja diaria. Hoy solo 'sheets' (fuente de verdad).
 // Si en el futuro la app es la fuente principal, agregar 'manual' y/o 'online' acá.
@@ -99,7 +99,7 @@ export default function CajaDiariaPage() {
   useEffect(() => {
     async function fetchAdminStats() {
       const { data: userData } = await supabase.auth.getUser()
-      if (!isAdminEmail(userData.user?.email)) return
+      if (!isAdminUser(userData?.user)) return
       setIsAdmin(true)
 
       const now = new Date()

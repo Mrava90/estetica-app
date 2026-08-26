@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 /**
  * GET /api/actividad/lookup?tipo=profesionales|servicios
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
   // Solo admin puede ver actividad (mismo criterio que /api/actividad)
   const isStaff = user.email?.endsWith('@estetica.local') ?? false
-  if (!isAdminEmail(user.email) && !isStaff) {
+  if (!isAdminUser(user) && !isStaff) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 async function assertAdmin() {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return { ok: false as const, status: 401, msg: 'No autorizado' }
-  if (!isAdminEmail(user.email)) return { ok: false as const, status: 403, msg: 'Solo admin' }
+  if (!isAdminUser(user)) return { ok: false as const, status: 403, msg: 'Solo admin' }
   return { ok: true as const, user }
 }
 

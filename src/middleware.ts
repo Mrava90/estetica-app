@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser, isStaffUser } from '@/lib/constants'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -55,10 +55,9 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Staff users (@estetica.local) and admins can access dashboard
-  // Client users (magic link with external email) go to mis-turnos
-  const isStaff = user.email?.endsWith('@estetica.local') ?? false
-  if (!isAdminEmail(user.email) && !isStaff) {
+  // Staff (app_metadata.role='staff' o @estetica.local) y admins acceden al dashboard.
+  // Clientes (magic link con email externo) van a mis-turnos.
+  if (!isStaffUser(user)) {
     const url = request.nextUrl.clone()
     url.pathname = '/reservar/mis-turnos'
     return NextResponse.redirect(url)
@@ -73,7 +72,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Admin-only routes (staff can't access these)
-  if (pathname.startsWith('/contabilidad') && !isAdminEmail(user.email)) {
+  if (pathname.startsWith('/contabilidad') && !isAdminUser(user)) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)

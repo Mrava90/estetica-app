@@ -4,21 +4,22 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { NAV_ITEMS, isAdminEmail } from '@/lib/constants'
+import { NAV_ITEMS, isAdminUser } from '@/lib/constants'
 import { Scissors } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export function MobileNav({ onClose }: { onClose?: () => void }) {
   const pathname = usePathname()
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [permisos, setPermisos] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const supabase = createClient()
     supabase.auth.getUser().then(({ data }) => {
-      const email = data.user?.email ?? null
-      setUserEmail(email)
-      if (email && !isAdminEmail(email)) {
+      const admin = isAdminUser(data.user)
+      setIsAdmin(admin)
+      const email = data.user?.email
+      if (email && !admin) {
         supabase.from('user_nav_permisos').select('href, visible').eq('user_email', email)
           .then(({ data: perms }) => {
             if (perms) {
@@ -31,7 +32,6 @@ export function MobileNav({ onClose }: { onClose?: () => void }) {
     })
   }, [])
 
-  const isAdmin = isAdminEmail(userEmail)
   const visibleItems = NAV_ITEMS.filter(item => {
     if (isAdmin) return true
     if (item.adminOnly) return permisos[item.href] === true

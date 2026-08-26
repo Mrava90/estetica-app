@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
 import { Copy, Check, Plus, Trash2, Shield, KeyRound, Pencil, Users, Clock, CalendarDays, Menu, DatabaseBackup, UserCog, AtSign } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { NAV_ITEMS, DIAS_SEMANA, isAdminEmail } from '@/lib/constants'
+import { NAV_ITEMS, DIAS_SEMANA, isAdminUser } from '@/lib/constants'
 const COLORES_DEFAULT = ['#6366f1', '#ec4899', '#f97316', '#22c55e', '#3b82f6', '#a855f7', '#ef4444', '#14b8a6']
 
 interface AppUser {
@@ -82,7 +82,7 @@ export default function ConfiguracionPage() {
 
   async function checkAdmin() {
     const { data: { user } } = await supabase.auth.getUser()
-    if (isAdminEmail(user?.email)) {
+    if (isAdminUser(user)) {
       setIsAdmin(true)
       fetchUsers()
     }

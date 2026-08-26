@@ -12,7 +12,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 import forge from 'node-forge'
 
 function decodePemEnv(raw: string): string {
@@ -32,7 +32,7 @@ export async function GET() {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminEmail(user.email)) {
+  if (!isAdminUser(user)) {
     return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
   }
 

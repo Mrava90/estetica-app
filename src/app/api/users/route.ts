@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 async function isAdmin(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return false
   // Check hardcoded admin emails
-  if (isAdminEmail(user.email)) return true
+  if (isAdminUser(user)) return true
   // Check app_metadata for admins that changed their email
   const adminClient = createAdminClient()
   const { data } = await adminClient.auth.admin.getUserById(user.id)
@@ -29,13 +29,13 @@ export async function GET(request: NextRequest) {
 
   // Solo mostrar staff (@estetica.local) y admins — los clientes van a /accesos
   const users = data.users
-    .filter((u) => u.email && (u.email.endsWith('@estetica.local') || isAdminEmail(u.email) || u.app_metadata?.is_admin === true))
+    .filter((u) => u.email && (u.email.endsWith('@estetica.local') || isAdminUser(u) || u.app_metadata?.is_admin === true))
     .map((u) => ({
       id: u.id,
       email: u.email,
       created_at: u.created_at,
       last_sign_in_at: u.last_sign_in_at,
-      is_admin: isAdminEmail(u.email) || u.app_metadata?.is_admin === true,
+      is_admin: isAdminUser(u) || u.app_metadata?.is_admin === true,
     }))
 
   return NextResponse.json({ users })
@@ -104,7 +104,7 @@ export async function PATCH(request: NextRequest) {
   if (newEmail) {
     // Preserve is_admin flag if the user being changed is an admin
     const { data: existing } = await admin.auth.admin.getUserById(userId)
-    const wasAdmin = isAdminEmail(existing?.user?.email) || existing?.user?.app_metadata?.is_admin === true
+    const wasAdmin = isAdminUser(existing?.user) || existing?.user?.app_metadata?.is_admin === true
     const updatePayload: Record<string, unknown> = { email: newEmail }
     if (wasAdmin) {
       updatePayload.app_metadata = { ...(existing?.user?.app_metadata || {}), is_admin: true }
@@ -139,7 +139,7 @@ export async function DELETE(request: NextRequest) {
   // Prevent deleting admin
   const admin = createAdminClient()
   const { data: userData } = await admin.auth.admin.getUserById(userId)
-  if (isAdminEmail(userData?.user?.email) || userData?.user?.app_metadata?.is_admin === true) {
+  if (isAdminUser(userData?.user) || userData?.user?.app_metadata?.is_admin === true) {
     return NextResponse.json({ error: 'No podés eliminar al administrador' }, { status: 403 })
   }
 

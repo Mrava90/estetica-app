@@ -22,7 +22,7 @@ import { ChevronLeft, ChevronRight, CalendarDays, Ban, MessageCircle, Sparkles, 
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 import { formatPrecio } from '@/lib/dates'
 
 interface TurnoRow {
@@ -99,7 +99,7 @@ export function CalendarioView() {
     supabase.auth.getUser().then(({ data }) => {
       const email = data.user?.email ?? null
       setUserEmail(email)
-      if (isAdminEmail(email)) setIsAdmin(true)
+      if (isAdminUser(data.user)) setIsAdmin(true)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

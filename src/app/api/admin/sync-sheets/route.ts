@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { syncFromSheets } from '@/lib/sheets-sync'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 export async function POST() {
   // Verify user is authenticated and is admin
   const supabaseUser = await createClient()
   const { data: { user } } = await supabaseUser.auth.getUser()
 
-  if (!user || !isAdminEmail(user.email)) {
+  if (!user || !isAdminUser(user)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

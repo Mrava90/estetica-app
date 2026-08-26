@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 export async function GET(request: NextRequest) {
   // Verify admin session
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
   )
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !isAdminEmail(user.email)) {
+  if (!user || !isAdminUser(user)) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 

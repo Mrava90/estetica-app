@@ -43,7 +43,7 @@ import {
   UserX,
   CalendarIcon,
 } from 'lucide-react'
-import { isAdminEmail } from '@/lib/constants'
+import { isAdminUser } from '@/lib/constants'
 
 const CHART_COLORS = [
   'hsl(var(--chart-1))',
@@ -77,7 +77,7 @@ export default function InformesPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (isAdminEmail(data.user?.email)) {
+      if (isAdminUser(data.user)) {
         setAuthorized(true)
       } else {
         router.replace('/calendario')
