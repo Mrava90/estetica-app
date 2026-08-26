@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { calcularSlotsDisponibles, type SlotDisponible } from '@/lib/disponibilidad'
+import { type SlotDisponible } from '@/lib/disponibilidad'
 import { formatHora, formatPrecio } from '@/lib/dates'
 import type { Servicio, Profesional, Promocion } from '@/types/database'
 import { addDays, startOfDay, format } from 'date-fns'
@@ -72,53 +72,25 @@ function HorarioContent() {
 
   async function fetchAvailability() {
     if (!servicio || profesionales.length === 0) return
-    const diaSemana = selectedDate.getDay()
     const dateStr = format(selectedDate, 'yyyy-MM-dd')
-    const profIds = profesionales.map((p) => p.id)
 
-    // 4 queries en paralelo para todos los profesionales a la vez
-    const [{ data: horariosData }, { data: citasData }, { data: bloqueosData }, { data: desbloqueosData }] = await Promise.all([
-      supabase.from('horarios').select('profesional_id, hora_inicio, hora_fin')
-        .in('profesional_id', profIds).eq('dia_semana', diaSemana).eq('activo', true).order('hora_inicio'),
-      supabase.from('citas').select('profesional_id, fecha_inicio, fecha_fin')
-        .in('profesional_id', profIds).in('status', ['pendiente', 'confirmada'])
-        .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
-      supabase.from('bloqueos').select('profesional_id, fecha_inicio, fecha_fin')
-        .in('profesional_id', profIds)
-        .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
-      supabase.from('desbloqueos').select('profesional_id, hora_inicio, hora_fin')
-        .in('profesional_id', profIds)
-        .eq('fecha', dateStr),
-    ])
+    // Ahora la API server-side devuelve solo slots ya disponibles (calcula todo con
+    // service_role: horarios, citas, bloqueos, desbloqueos). El cliente ya no consulta
+    // esas tablas anonimamente — antes se filtraban al navegador, ahora quedan en el server.
+    const params = new URLSearchParams({ servicioId: servicio.id, fecha: dateStr })
+    if (profesionalId) params.set('profesionalId', profesionalId)
 
-    // Agrupar en memoria por profesional
+    const res = await fetch(`/api/reservar/disponibilidad?${params.toString()}`)
+    if (!res.ok) {
+      setSlots({})
+      return
+    }
+    const data = await res.json()
+    const bruto = (data.slots || {}) as Record<string, Array<{ inicio: string; fin: string }>>
+
     const newSlots: Record<string, SlotDisponible[]> = {}
-    for (const prof of profesionales) {
-      const horarios = (horariosData || []).filter((h) => h.profesional_id === prof.id)
-      const citas = (citasData || []).filter((c) => c.profesional_id === prof.id)
-      const bloqueos = (bloqueosData || []).filter((b) => b.profesional_id === prof.id)
-      const profDesbloqueos = (desbloqueosData || []).filter((d) => d.profesional_id === prof.id)
-
-      // Combinar horarios regulares + desbloqueos excepcionales
-      const todosHorarios = [
-        ...horarios.map((h) => ({ hora_inicio: h.hora_inicio, hora_fin: h.hora_fin })),
-        ...profDesbloqueos.map((d) => ({ hora_inicio: d.hora_inicio, hora_fin: d.hora_fin })),
-      ]
-
-      const tolerancia = prof.tolerancia_solapamiento_min || 0
-      const allAvailable: SlotDisponible[] = []
-      for (const horario of todosHorarios) {
-        allAvailable.push(...calcularSlotsDisponibles(
-          selectedDate,
-          { hora_inicio: horario.hora_inicio, hora_fin: horario.hora_fin },
-          citas,
-          servicio.duracion_minutos,
-          30,
-          bloqueos,
-          tolerancia,
-        ))
-      }
-      if (allAvailable.length > 0) newSlots[prof.id] = allAvailable
+    for (const [profId, arr] of Object.entries(bruto)) {
+      newSlots[profId] = arr.map((s) => ({ inicio: new Date(s.inicio), fin: new Date(s.fin) }))
     }
     setSlots(newSlots)
   }

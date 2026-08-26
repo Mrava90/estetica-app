@@ -78,13 +78,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400 })
   }
 
-  const { nombre, apellido, telefono, dni, email, servicioId, profesionalId, fechaInicio, fechaFin, reprogramarId } = body
+  // fechaFin del body se IGNORA (se calcula server-side desde servicio.duracion_minutos).
+  // Ver hallazgo #5: aceptar fechaFin del cliente permite bloquear mas tiempo del debido.
+  const { nombre, apellido, telefono, dni, email, servicioId, profesionalId, fechaInicio, reprogramarId } = body
 
   // Validaciones básicas
   if (!nombre?.trim() || !telefono?.trim()) {
     return NextResponse.json({ error: 'Faltan datos obligatorios' }, { status: 400 })
   }
-  if (!servicioId || !profesionalId || !fechaInicio || !fechaFin) {
+  if (!servicioId || !profesionalId || !fechaInicio) {
     return NextResponse.json({ error: 'Faltan datos del turno' }, { status: 400 })
   }
   if (!isUUID(servicioId) || !isUUID(profesionalId)) {
@@ -104,21 +106,39 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient()
 
-  // Validar que servicio/profesional existan y estén activos
-  const [servCheck, profCheck] = await Promise.all([
-    admin.from('servicios').select('id, precio_efectivo').eq('id', servicioId).eq('activo', true).maybeSingle(),
+  // Validar servicio/profesional activos + duracion real del servicio (para calcular fechaFin)
+  // + validar que el profesional realiza ese servicio (hallazgo #6).
+  const [servCheck, profCheck, profServCheck] = await Promise.all([
+    admin.from('servicios').select('id, precio_efectivo, duracion_minutos').eq('id', servicioId).eq('activo', true).maybeSingle(),
     admin.from('profesionales').select('id').eq('id', profesionalId).eq('activo', true).maybeSingle(),
+    admin.from('profesional_servicios').select('profesional_id').eq('servicio_id', servicioId).limit(1000),
   ])
   if (!servCheck.data || !profCheck.data) {
     return NextResponse.json({ error: 'Servicio o profesional inválido' }, { status: 400 })
   }
 
-  // Validar que fechaInicio sea futura y válida
+  // Relacion profesional-servicio: si hay MAP para este servicio y el prof no esta, rechazar.
+  // Convencion existente: sin filas en profesional_servicios significa "cualquier prof puede".
+  const profsHabilitados = (profServCheck.data || []).map((p) => p.profesional_id)
+  if (profsHabilitados.length > 0 && !profsHabilitados.includes(profesionalId)) {
+    return NextResponse.json({ error: 'Este profesional no realiza ese servicio' }, { status: 400 })
+  }
+
+  // Calcular fechaFin server-side usando la duracion real del servicio.
+  // Ademas: limite de anticipacion (misma logica que /api/citas eliminado: max 90 dias)
+  const MAX_DIAS_ANTICIPACION = 90
   const fInicio = new Date(fechaInicio)
-  const fFin = new Date(fechaFin)
-  if (isNaN(fInicio.getTime()) || isNaN(fFin.getTime()) || fInicio.getTime() < Date.now() - 5 * 60 * 1000) {
+  if (isNaN(fInicio.getTime()) || fInicio.getTime() < Date.now() - 5 * 60 * 1000) {
     return NextResponse.json({ error: 'Fecha inválida' }, { status: 400 })
   }
+  const maxFuturo = Date.now() + MAX_DIAS_ANTICIPACION * 24 * 60 * 60 * 1000
+  if (fInicio.getTime() > maxFuturo) {
+    return NextResponse.json({ error: `Solo se puede reservar con hasta ${MAX_DIAS_ANTICIPACION} días de anticipación` }, { status: 400 })
+  }
+  const duracionMin = servCheck.data.duracion_minutos ?? 30
+  const fFin = new Date(fInicio.getTime() + duracionMin * 60_000)
+  // fechaFin como string ISO para usar mas abajo donde el codigo espera un string
+  const fechaFin = fFin.toISOString()
 
   // Validar que la cita cae dentro del horario laboral del profesional o de un desbloqueo excepcional.
   // Sin esta validación, un cliente con navegador manipulado o estado stale podría reservar
@@ -214,16 +234,11 @@ export async function POST(request: NextRequest) {
         }, { status: 409 })
       }
 
-      // Solo COMPLETAR campos vacios del cliente existente. NUNCA pisar valores existentes
-      // (previene account hijack: atacante con el telefono no puede sustituir email/apellido/dni).
-      const patch: Record<string, string> = {}
-      if (!existing.nombre && nombre?.trim()) patch.nombre = capitalizeWords(sanitize(nombre))
-      if (!existing.apellido && apellido?.trim()) patch.apellido = capitalizeWords(sanitize(apellido))
-      if (!existing.dni && dni?.trim()) patch.dni = sanitize(dni)
-      if (!existing.email && email?.trim()) patch.email = sanitize(email).toLowerCase()
-      if (Object.keys(patch).length > 0) {
-        await admin.from('clientes').update(patch).eq('id', clienteId)
-      }
+      // NO actualizamos ningun dato de un cliente existente encontrado por telefono.
+      // Ni siquiera "completar campos vacios": si el cliente no tiene email registrado,
+      // un atacante que sepa su telefono podria setear SU propio email y despues pedir
+      // magic link -> acceso a la cuenta. (Hallazgo #3 del reporte).
+      // Los datos del cliente solo se pueden editar desde el dashboard interno (staff).
     } else {
       const { data: newCliente, error: cErr } = await admin
         .from('clientes')
