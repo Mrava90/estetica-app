@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calcularSlotsDisponibles } from '@/lib/disponibilidad'
+import { parseTimeToDateAR, diaSemanaAR } from '@/lib/timezone'
 import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 
 /**
@@ -98,7 +99,8 @@ export async function GET(request: NextRequest) {
   }
 
   const profIds = profesionales.map((p) => p.id)
-  const diaSemana = fecha.getDay()  // ya esta en la fecha AR local
+  // dia_semana en AR (evita off-by-one si el proceso corre en UTC)
+  const diaSemana = diaSemanaAR(fecha)
   const dateStr = fechaStr
 
   // 3. Horarios/desbloqueos/citas/bloqueos del dia, en paralelo
@@ -145,6 +147,7 @@ export async function GET(request: NextRequest) {
         INTERVALO_MIN,
         bloqueos,
         tolerancia,
+        parseTimeToDateAR,  // interpreta HH:mm como hora AR (server-side en UTC)
       ))
     }
 

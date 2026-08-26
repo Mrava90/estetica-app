@@ -21,6 +21,9 @@ interface BloqueoExistente {
   fecha_fin: string
 }
 
+/** Firma para la funcion que interpreta "HH:mm" sobre una fecha base */
+export type ParseTimeFn = (fecha: Date, timeStr: string) => Date
+
 export function calcularSlotsDisponibles(
   fecha: Date,
   horario: HorarioDelDia | null,
@@ -29,11 +32,15 @@ export function calcularSlotsDisponibles(
   intervalo: number = 30,
   bloqueos: BloqueoExistente[] = [],
   toleranciaSolapamientoMin: number = 0,
+  parseTime: ParseTimeFn = parseTimeToDate,
 ): SlotDisponible[] {
   if (!horario) return []
 
-  const inicioJornada = parseTimeToDate(fecha, horario.hora_inicio)
-  const finJornada = parseTimeToDate(fecha, horario.hora_fin)
+  // parseTime por defecto es parseTimeToDate (setHours LOCAL) — apto para uso
+  // en el navegador donde el TZ es AR. En server-side (Vercel = UTC) hay que
+  // pasar parseTimeToDateAR desde @/lib/timezone o los slots quedan corridos 3hs.
+  const inicioJornada = parseTime(fecha, horario.hora_inicio)
+  const finJornada = parseTime(fecha, horario.hora_fin)
   const ahora = new Date()
   const toleranciaMs = Math.max(0, toleranciaSolapamientoMin) * 60_000
 
