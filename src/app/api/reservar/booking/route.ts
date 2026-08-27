@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
   // + validar que el profesional realiza ese servicio (hallazgo #6).
   const [servCheck, profCheck, profServCheck] = await Promise.all([
     admin.from('servicios').select('id, precio_efectivo, duracion_minutos').eq('id', servicioId).eq('activo', true).maybeSingle(),
-    admin.from('profesionales').select('id').eq('id', profesionalId).eq('activo', true).maybeSingle(),
+    admin.from('profesionales').select('id, tolerancia_solapamiento_min').eq('id', profesionalId).eq('activo', true).maybeSingle(),
     admin.from('profesional_servicios').select('profesional_id').eq('servicio_id', servicioId).limit(1000),
   ])
   if (!servCheck.data || !profCheck.data) {
@@ -185,18 +185,27 @@ export async function POST(request: NextRequest) {
   }
 
   // Verificar que el slot no esté ocupado por otra cita del mismo profesional.
-  // Sin este check, dos personas reservando simultáneamente pueden dobles-bookear.
-  // Cuenta cualquier cita pendiente/confirmada que se solape con el rango solicitado.
+  // RESPETA la tolerancia de solapamiento configurada por profesional: se aceptan
+  // solapamientos hasta X minutos (X = tolerancia_solapamiento_min). Solo si el
+  // overlap TOTAL con todas las citas activas supera esa tolerancia, se rechaza.
+  const toleranciaMin = profCheck.data.tolerancia_solapamiento_min || 0
+  const toleranciaMs = toleranciaMin * 60_000
   const { data: conflictos } = await admin
     .from('citas')
-    .select('id')
+    .select('id, fecha_inicio, fecha_fin')
     .eq('profesional_id', profesionalId)
     .in('status', ['pendiente', 'confirmada'])
     .lt('fecha_inicio', fFin.toISOString())
     .gt('fecha_fin', fInicio.toISOString())
-    .limit(1)
 
-  if (conflictos && conflictos.length > 0) {
+  const overlapTotalMs = (conflictos || []).reduce((acc, c) => {
+    const cIni = new Date(c.fecha_inicio).getTime()
+    const cFin = new Date(c.fecha_fin).getTime()
+    const overlap = Math.max(0, Math.min(fFin.getTime(), cFin) - Math.max(fInicio.getTime(), cIni))
+    return acc + overlap
+  }, 0)
+
+  if (overlapTotalMs > toleranciaMs) {
     return NextResponse.json({ error: 'Ese horario ya no está disponible. Elegí otro por favor.' }, { status: 409 })
   }
 
