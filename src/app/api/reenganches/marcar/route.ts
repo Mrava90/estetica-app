@@ -4,58 +4,64 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 
 /**
  * POST /api/reenganches/marcar
- * Body: { cita_id: string, enviado?: boolean }
+ * Body:
+ *   { cliente_id: uuid, fecha_visita: iso, enviado?: boolean }
+ *     - Preferido: no depende de que la cita siga existiendo. El sync de sheets
+ *       borra e re-inserta citas todos los dias -> el cita_id puede volverse
+ *       stale entre que el frontend carga la lista y clickea WhatsApp.
+ *   { cita_id: uuid, enviado?: boolean }  (legacy, fallback)
+ *     - Se resuelve cliente_id + fecha_inicio desde la cita si esta existe.
  *
- * Marca al CLIENTE de esa cita como "reenganche enviado" (o revierte con enviado=false).
- * El estado vive en la tabla reenganches_enviados (indexada por cliente_id), NO en
- * la cita — esto asegura que el marcado sobreviva al sync diario de sheets que
- * borra e re-inserta citas.
- *
- * El cliente vuelve a ser candidato cuando su nueva visita es MAS NUEVA que
- * ultima_visita_al_enviar.
+ * El marcado vive en la tabla reenganches_enviados (indexada por cliente_id),
+ * NO en la cita — asi sobrevive al sync diario.
  */
 export async function POST(request: NextRequest) {
   const auth = await createServerClient()
   const { data: { user } } = await auth.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const { cita_id, enviado = true } = await request.json().catch(() => ({}))
-  if (!cita_id || typeof cita_id !== 'string') {
-    return NextResponse.json({ error: 'Falta cita_id' }, { status: 400 })
-  }
-
+  const body = await request.json().catch(() => ({}))
+  const enviado = body.enviado !== false
   const admin = createAdminClient()
 
-  // Obtener el cliente y la fecha de esa cita
-  const { data: cita, error: citaErr } = await admin
-    .from('citas')
-    .select('cliente_id, fecha_inicio')
-    .eq('id', cita_id)
-    .maybeSingle()
+  let clienteId: string | null = body.cliente_id || null
+  let fechaVisita: string | null = body.fecha_visita || null
 
-  if (citaErr || !cita || !cita.cliente_id) {
-    return NextResponse.json({ error: 'Cita no encontrada o sin cliente asociado' }, { status: 404 })
+  // Fallback legacy: si vino solo cita_id, resolver cliente_id + fecha desde citas.
+  if (!clienteId && body.cita_id && typeof body.cita_id === 'string') {
+    const { data: cita } = await admin
+      .from('citas')
+      .select('cliente_id, fecha_inicio')
+      .eq('id', body.cita_id)
+      .maybeSingle()
+    if (cita?.cliente_id) {
+      clienteId = cita.cliente_id
+      fechaVisita = cita.fecha_inicio
+    }
+  }
+
+  if (!clienteId) {
+    return NextResponse.json({ error: 'Falta cliente_id (o cita_id resolvible)' }, { status: 400 })
   }
 
   if (enviado) {
-    // Upsert: si ya existe registro para este cliente, actualizarlo con la nueva fecha.
-    // Guardamos la fecha de ESTA visita como "ultima_visita_al_enviar" para que
-    // el cliente vuelva a aparecer cuando venga a una visita posterior.
+    if (!fechaVisita) {
+      return NextResponse.json({ error: 'Falta fecha_visita' }, { status: 400 })
+    }
     const { error: upErr } = await admin
       .from('reenganches_enviados')
       .upsert({
-        cliente_id: cita.cliente_id,
+        cliente_id: clienteId,
         sent_at: new Date().toISOString(),
-        ultima_visita_al_enviar: cita.fecha_inicio,
+        ultima_visita_al_enviar: fechaVisita,
         sent_by: user.email || null,
       }, { onConflict: 'cliente_id' })
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
   } else {
-    // Revertir: eliminar el marcado. El cliente vuelve a ser candidato.
     const { error: delErr } = await admin
       .from('reenganches_enviados')
       .delete()
-      .eq('cliente_id', cita.cliente_id)
+      .eq('cliente_id', clienteId)
     if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
   }
 

@@ -65,21 +65,35 @@ export function ReenganchesDialog({ open, onClose }: Props) {
       .replace(/\{dias\}/g, String(item.dias_transcurridos))
   }
 
-  async function marcarEnviado(citaId: string, enviado: boolean = true) {
-    await fetch('/api/reenganches/marcar', {
+  async function marcarEnviado(item: ReengancheItem, enviado: boolean = true): Promise<boolean> {
+    // Mandamos cliente_id + fecha_visita directo (no dependemos del cita_id que puede
+    // volverse stale entre carga de la lista y el click, por el sync-sheets diario).
+    const res = await fetch('/api/reenganches/marcar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cita_id: citaId, enviado }),
+      body: JSON.stringify({
+        cliente_id: item.cliente_id,
+        fecha_visita: item.fecha_servicio,
+        enviado,
+      }),
     })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      toast.error(data.error || 'No se pudo marcar el envío. Reintentá.')
+      return false
+    }
+    return true
   }
 
   async function desmarcar(item: ReengancheItem) {
     if (!confirm(`Devolver a ${item.nombre} a pendientes? Podrás volver a enviarle el WhatsApp.`)) return
     setEnviando(item.cita_id)
     try {
-      await marcarEnviado(item.cita_id, false)
-      setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
-      toast.success('Devuelto a pendientes')
+      const ok = await marcarEnviado(item, false)
+      if (ok) {
+        setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
+        toast.success('Devuelto a pendientes')
+      }
     } finally {
       setEnviando(null)
     }
@@ -99,8 +113,8 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     // Auto-marcar como enviado y sacarlo del listado
     setEnviando(item.cita_id)
     try {
-      await marcarEnviado(item.cita_id)
-      setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
+      const ok = await marcarEnviado(item)
+      if (ok) setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
     } finally {
       setEnviando(null)
     }
@@ -110,9 +124,11 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     if (!confirm(`Marcar a ${item.nombre} como "no enviar" (no vuelve a aparecer)?`)) return
     setEnviando(item.cita_id)
     try {
-      await marcarEnviado(item.cita_id)
-      setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
-      toast.success('Ocultado')
+      const ok = await marcarEnviado(item)
+      if (ok) {
+        setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
+        toast.success('Ocultado')
+      }
     } finally {
       setEnviando(null)
     }
