@@ -122,6 +122,15 @@ export async function GET(request: NextRequest) {
       .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
   ])
 
+  // Si alguna query fallo, devolver 503 explicito en vez de "no hay horarios" silencioso.
+  // Antes: un error de Supabase se traducia a slots vacios y el cliente creia que la
+  // profesional no tenia disponibilidad, cuando en realidad era un problema temporal.
+  const dbError = horariosRes.error || desbloqRes.error || citasRes.error || bloqRes.error
+  if (dbError) {
+    console.error('disponibilidad DB error:', dbError)
+    return NextResponse.json({ error: 'Servicio temporalmente no disponible, intentá de nuevo' }, { status: 503 })
+  }
+
   // 4. Calcular slots por profesional
   const slots: Record<string, Array<{ inicio: string; fin: string }>> = {}
 

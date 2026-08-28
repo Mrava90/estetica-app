@@ -23,6 +23,7 @@ function HorarioContent() {
   const [slots, setSlots] = useState<Record<string, SlotDisponible[]>>({})
   const [selectedSlot, setSelectedSlot] = useState<{ profId: string; slot: SlotDisponible } | null>(null)
   const [diasAnticipacion, setDiasAnticipacion] = useState(7)
+  const [apiError, setApiError] = useState(false)
   const [promos, setPromos] = useState<Promocion[]>([])
   const supabase = createClient()
 
@@ -80,9 +81,19 @@ function HorarioContent() {
     const params = new URLSearchParams({ servicioId: servicio.id, fecha: dateStr })
     if (profesionalId) params.set('profesionalId', profesionalId)
 
-    const res = await fetch(`/api/reservar/disponibilidad?${params.toString()}`)
+    setApiError(false)
+    let res: Response
+    try {
+      res = await fetch(`/api/reservar/disponibilidad?${params.toString()}`)
+    } catch {
+      setSlots({})
+      setApiError(true)
+      return
+    }
     if (!res.ok) {
       setSlots({})
+      // 503 = problema temporal del servidor. UX distinta a "no hay horarios reales".
+      if (res.status >= 500) setApiError(true)
       return
     }
     const data = await res.json()
@@ -158,7 +169,12 @@ function HorarioContent() {
 
       {/* Time slots per professional */}
       <div className="space-y-4">
-        {Object.keys(slots).length === 0 ? (
+        {apiError ? (
+          <div className="rounded-xl border border-amber-400 bg-white p-8 text-center space-y-2">
+            <p className="text-amber-700 font-medium">No pudimos cargar los horarios ahora mismo</p>
+            <p className="text-gray-500 text-sm">Puede ser un problema temporal, probá refrescar en unos segundos.</p>
+          </div>
+        ) : Object.keys(slots).length === 0 ? (
           <div className="rounded-xl border border-gray-900 bg-white p-8 text-center">
             <p className="text-gray-500">No hay horarios disponibles para este día</p>
           </div>

@@ -15,28 +15,38 @@ function ExitoContent() {
 
   const [enviando, setEnviando] = useState(false)
   const [linkEnviado, setLinkEnviado] = useState(false)
+  const [emailNoRegistrado, setEmailNoRegistrado] = useState(false)
   const [error, setError] = useState('')
   const supabase = createClient()
 
   useEffect(() => {
     if (emailParam && citaId) {
-      sendMagicLink(emailParam)
+      sendMagicLink()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function sendMagicLink(email: string) {
+  async function sendMagicLink() {
     setEnviando(true)
     setError('')
+    setEmailNoRegistrado(false)
     try {
       // Solo mandamos citaId. Email y nombre se toman server-side desde la DB
       // para evitar abuso del SMTP con direcciones arbitrarias.
+      // La API responde { ok: true, sent: true|false }: sent=false significa que
+      // el cliente no tiene email guardado (typicamente un cliente existente
+      // cuyo email no se sobreescribe por seguridad).
       const res = await fetch('/api/notificar-turno', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ citaId }),
       })
       if (!res.ok) throw new Error('Error al enviar')
-      setLinkEnviado(true)
+      const data = await res.json().catch(() => ({}))
+      if (data.sent === false) {
+        setEmailNoRegistrado(true)
+      } else {
+        setLinkEnviado(true)
+      }
     } catch {
       setError('No se pudo enviar el email.')
     } finally {
@@ -70,8 +80,15 @@ function ExitoContent() {
           </div>
           {linkEnviado ? (
             <div className="space-y-1 py-1">
-              <p className="text-sm font-medium text-green-700">¡Link enviado a {emailParam}!</p>
-              <p className="text-xs text-gray-500">Revisá tu email para ver y cancelar tus turnos</p>
+              <p className="text-sm font-medium text-green-700">¡Link enviado a tu email!</p>
+              <p className="text-xs text-gray-500">Revisá tu casilla para ver y cancelar tus turnos</p>
+            </div>
+          ) : emailNoRegistrado ? (
+            <div className="space-y-1 py-1">
+              <p className="text-sm font-medium text-amber-700">Todavía no podemos enviarte el link automáticamente.</p>
+              <p className="text-xs text-gray-500">
+                Tu email no está asociado a tu cuenta. Escribinos por WhatsApp para vincularlo y podés gestionar tus turnos vos misma más adelante.
+              </p>
             </div>
           ) : enviando ? (
             <p className="text-sm text-gray-500 py-1">Enviando link...</p>
@@ -79,10 +96,10 @@ function ExitoContent() {
             <div className="space-y-2">
               {error && <p className="text-xs text-red-500">{error}</p>}
               <button
-                onClick={() => sendMagicLink(emailParam)}
+                onClick={sendMagicLink}
                 className="text-sm font-medium text-fuchsia-600 hover:underline"
               >
-                Reenviar link a {emailParam}
+                Reenviar link
               </button>
             </div>
           )}

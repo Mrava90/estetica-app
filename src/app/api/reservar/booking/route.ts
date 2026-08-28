@@ -107,11 +107,13 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient()
 
   // Validar servicio/profesional activos + duracion real del servicio (para calcular fechaFin)
-  // + validar que el profesional realiza ese servicio (hallazgo #6).
-  const [servCheck, profCheck, profServCheck] = await Promise.all([
+  // + validar que el profesional realiza ese servicio (hallazgo #6)
+  // + traer dias_anticipacion_reserva de configuracion (para respetar la ventana del negocio).
+  const [servCheck, profCheck, profServCheck, configCheck] = await Promise.all([
     admin.from('servicios').select('id, precio_efectivo, duracion_minutos').eq('id', servicioId).eq('activo', true).maybeSingle(),
-    admin.from('profesionales').select('id, tolerancia_solapamiento_min').eq('id', profesionalId).eq('activo', true).maybeSingle(),
+    admin.from('profesionales').select('id, tolerancia_solapamiento_min').eq('id', profesionalId).eq('activo', true).eq('visible_calendario', true).maybeSingle(),
     admin.from('profesional_servicios').select('profesional_id').eq('servicio_id', servicioId).limit(1000),
+    admin.from('configuracion').select('dias_anticipacion_reserva').eq('id', 1).maybeSingle(),
   ])
   if (!servCheck.data || !profCheck.data) {
     return NextResponse.json({ error: 'Servicio o profesional inválido' }, { status: 400 })
@@ -125,15 +127,17 @@ export async function POST(request: NextRequest) {
   }
 
   // Calcular fechaFin server-side usando la duracion real del servicio.
-  // Ademas: limite de anticipacion (misma logica que /api/citas eliminado: max 90 dias)
-  const MAX_DIAS_ANTICIPACION = 90
+  // Ademas: aplicar el limite de anticipacion CONFIGURADO por el negocio (default 30 dias
+  // si no hay config). Antes usabamos un hardcoded 90 que la UI ya recortaba pero la API
+  // no -> una llamada directa podia reservar mas alla de lo permitido.
+  const diasAnticipacionMax = Math.max(1, Math.min(365, configCheck?.data?.dias_anticipacion_reserva ?? 30))
   const fInicio = new Date(fechaInicio)
   if (isNaN(fInicio.getTime()) || fInicio.getTime() < Date.now() - 5 * 60 * 1000) {
     return NextResponse.json({ error: 'Fecha inválida' }, { status: 400 })
   }
-  const maxFuturo = Date.now() + MAX_DIAS_ANTICIPACION * 24 * 60 * 60 * 1000
+  const maxFuturo = Date.now() + diasAnticipacionMax * 24 * 60 * 60 * 1000
   if (fInicio.getTime() > maxFuturo) {
-    return NextResponse.json({ error: `Solo se puede reservar con hasta ${MAX_DIAS_ANTICIPACION} días de anticipación` }, { status: 400 })
+    return NextResponse.json({ error: `Solo se puede reservar con hasta ${diasAnticipacionMax} días de anticipación` }, { status: 400 })
   }
   const duracionMin = servCheck.data.duracion_minutos ?? 30
   const fFin = new Date(fInicio.getTime() + duracionMin * 60_000)
@@ -184,30 +188,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Verificar que el slot no esté ocupado por otra cita del mismo profesional.
-  // RESPETA la tolerancia de solapamiento configurada por profesional: se aceptan
-  // solapamientos hasta X minutos (X = tolerancia_solapamiento_min). Solo si el
-  // overlap TOTAL con todas las citas activas supera esa tolerancia, se rechaza.
+  // Nota: el chequeo de conflictos + INSERT se hace atomicamente mas abajo
+  // via RPC reservar_cita_atomica (advisory lock por profesional).
   const toleranciaMin = profCheck.data.tolerancia_solapamiento_min || 0
-  const toleranciaMs = toleranciaMin * 60_000
-  const { data: conflictos } = await admin
-    .from('citas')
-    .select('id, fecha_inicio, fecha_fin')
-    .eq('profesional_id', profesionalId)
-    .in('status', ['pendiente', 'confirmada'])
-    .lt('fecha_inicio', fFin.toISOString())
-    .gt('fecha_fin', fInicio.toISOString())
-
-  const overlapTotalMs = (conflictos || []).reduce((acc, c) => {
-    const cIni = new Date(c.fecha_inicio).getTime()
-    const cFin = new Date(c.fecha_fin).getTime()
-    const overlap = Math.max(0, Math.min(fFin.getTime(), cFin) - Math.max(fInicio.getTime(), cIni))
-    return acc + overlap
-  }, 0)
-
-  if (overlapTotalMs > toleranciaMs) {
-    return NextResponse.json({ error: 'Ese horario ya no está disponible. Elegí otro por favor.' }, { status: 409 })
-  }
 
   try {
     // Buscar cliente existente por teléfono
@@ -281,27 +264,37 @@ export async function POST(request: NextRequest) {
       metodoPago: 'efectivo',
     })
 
-    // Crear cita
-    const { data: citaData, error: citaErr } = await admin.from('citas').insert({
-      cliente_id: clienteId,
-      profesional_id: profesionalId,
-      servicio_id: servicioId,
-      fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin,
-      precio_cobrado: precioInfo.precioFinal,
-      precio_original: precioInfo.descuento > 0 ? precioInfo.precioOriginal : null,
-      promocion_aplicada_id: precioInfo.promocionAplicada?.id || null,
-      origen: 'online',
-      status: 'pendiente',
-    }).select('id').single()
+    // Crear cita ATOMICAMENTE via RPC.
+    // La funcion toma pg_advisory_xact_lock por profesional, chequea overlap
+    // respetando tolerancia + bloqueos, y hace el INSERT — todo en una tx.
+    // Si dos reservas para el mismo prof llegan a la vez, la segunda espera
+    // el lock y despues encuentra el slot ocupado -> devuelve HORARIO_OCUPADO.
+    const { data: rpcRows, error: rpcErr } = await admin.rpc('reservar_cita_atomica', {
+      p_profesional_id: profesionalId,
+      p_cliente_id: clienteId,
+      p_servicio_id: servicioId,
+      p_fecha_inicio: fechaInicio,
+      p_fecha_fin: fechaFin,
+      p_tolerancia_min: toleranciaMin,
+      p_precio_cobrado: precioInfo.precioFinal,
+      p_precio_original: precioInfo.descuento > 0 ? precioInfo.precioOriginal : null,
+      p_promocion_id: precioInfo.promocionAplicada?.id || null,
+      p_origen: 'online',
+      p_status: 'pendiente',
+    })
 
-    // Manejar violación del UNIQUE constraint (uniq_cita_slot_activa).
-    // Es la última barrera contra doble-booking cuando 2 requests concurrentes
-    // pasaron el chequeo de disponibilidad antes que cualquiera insertara.
-    if (citaErr && (citaErr.code === '23505' || String(citaErr.message).includes('uniq_cita_slot_activa'))) {
+    if (rpcErr) throw rpcErr
+    const rpcResult = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows
+    if (rpcResult?.err === 'HORARIO_OCUPADO') {
       return NextResponse.json({ error: 'Ese horario acaba de ocuparse. Elegí otro por favor.' }, { status: 409 })
     }
-    if (citaErr || !citaData) throw citaErr || new Error('No se pudo crear cita')
+    if (rpcResult?.err === 'HORARIO_BLOQUEADO') {
+      return NextResponse.json({ error: 'Ese horario está bloqueado. Elegí otro por favor.' }, { status: 400 })
+    }
+    if (!rpcResult?.cita_id) {
+      throw new Error(rpcResult?.err || 'No se pudo crear cita')
+    }
+    const citaData = { id: rpcResult.cita_id as string }
 
     // Reprogramación: cancelar la cita original SOLO si pertenece al mismo cliente.
     // Sin esta verificación, cualquier persona podría cancelar la cita de otro
