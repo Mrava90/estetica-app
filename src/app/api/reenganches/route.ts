@@ -194,30 +194,36 @@ export async function GET(request: Request) {
     ;(volvieron.data || []).forEach(c => c.cliente_id && excluidos.add(c.cliente_id))
     ;(futuros.data || []).forEach(c => c.cliente_id && excluidos.add(c.cliente_id))
 
-    // También excluir por match de nombre en notas de citas posteriores/futuras (sheets sin cliente_id)
-    const nombresACheckear = new Set(enriquecidas.map(c => normalizarNombre(`${c.nombre || ''} ${c.apellido || ''}`)))
-    const nombresPrimerACheckear = new Set(enriquecidas.map(c => normalizarNombre(c.nombre || '')))
+    // También excluir por match de nombre en notas de citas posteriores/futuras
+    // (sheets sin cliente_id). SOLO por nombre completo (nombre + apellido),
+    // NO por primer nombre solo — este ultimo generaba muchos falsos positivos
+    // ("Gabriela", "Maria", "Yohi" matcheaban con OTRAS Gabrielas/Marias/Yohis
+    // en sheets y excluian al candidato real).
+    const nombresACheckear = new Set(
+      enriquecidas
+        .filter(c => c.apellido && c.apellido.trim().length > 0)
+        .map(c => normalizarNombre(`${c.nombre} ${c.apellido}`))
+    )
 
-    const { data: otras } = await admin
-      .from('citas')
-      .select('cliente_id, notas, status, fecha_inicio')
-      .is('cliente_id', null)
-      .or(`and(status.eq.completada,fecha_inicio.gt.${hastaISO}),and(status.in.(pendiente,confirmada),fecha_inicio.gte.${hoyISO},fecha_inicio.lte.${futuroISO})`)
-      .limit(2000)
+    if (nombresACheckear.size > 0) {
+      const { data: otras } = await admin
+        .from('citas')
+        .select('cliente_id, notas, status, fecha_inicio')
+        .is('cliente_id', null)
+        .or(`and(status.eq.completada,fecha_inicio.gt.${hastaISO}),and(status.in.(pendiente,confirmada),fecha_inicio.gte.${hoyISO},fecha_inicio.lte.${futuroISO})`)
+        .limit(2000)
 
-    for (const c of otras || []) {
-      if (!c.notas) continue
-      const p = parseNombreServicio(c.notas)
-      if (!p) continue
-      const norm = normalizarNombre(p.nombreCompleto)
-      const primerNorm = normalizarNombre(p.nombreCompleto.split(/\s+/)[0])
-      if (nombresACheckear.has(norm) || nombresPrimerACheckear.has(primerNorm)) {
-        for (const cand of enriquecidas) {
-          if (!cand.cliente_id) continue
-          const candNorm = normalizarNombre(`${cand.nombre || ''} ${cand.apellido || ''}`)
-          const candPrimer = normalizarNombre(cand.nombre || '')
-          if (candNorm === norm || candPrimer === primerNorm) {
-            excluidos.add(cand.cliente_id)
+      for (const c of otras || []) {
+        if (!c.notas) continue
+        const p = parseNombreServicio(c.notas)
+        if (!p) continue
+        const norm = normalizarNombre(p.nombreCompleto)
+        if (nombresACheckear.has(norm)) {
+          for (const cand of enriquecidas) {
+            if (!cand.cliente_id || !cand.apellido) continue
+            if (normalizarNombre(`${cand.nombre} ${cand.apellido}`) === norm) {
+              excluidos.add(cand.cliente_id)
+            }
           }
         }
       }
