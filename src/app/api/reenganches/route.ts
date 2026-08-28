@@ -159,12 +159,22 @@ export async function GET(request: Request) {
   }
 
   if (!soloEnviados && clienteIds.length > 0) {
-    // Excluir clientes que YA recibieron mensaje por esta misma visita (o posterior).
-    // Si el envio fue por una visita >= la que aparece aca, no volver a mandar.
+    // Excluir clientes que YA recibieron mensaje por una visita del mismo DIA (o posterior).
+    //
+    // Comparamos por DIA porque el sync-sheets asigna horas ficticias (9:00, 9:05, ...)
+    // que cambian entre corridas si se reordenan filas en Sheets. Un cliente cuya cita
+    // ayer estaba en dia D 09:05 puede aparecer hoy como dia D 09:15 (misma fecha real).
+    // Comparar por dia evita que el cliente reaparezca por un cambio irrelevante de hora
+    // ficticia. Solo debe volver a aparecer si tiene una visita en un DIA posterior.
+    const enviadosPorClienteDia = new Map<string, string>()
+    for (const [cid, iso] of enviadosPorCliente.entries()) {
+      enviadosPorClienteDia.set(cid, iso.slice(0, 10))  // 'YYYY-MM-DD'
+    }
     for (const c of enriquecidas) {
       if (!c.cliente_id) continue
-      const yaEnviadoPor = enviadosPorCliente.get(c.cliente_id)
-      if (yaEnviadoPor && new Date(yaEnviadoPor).getTime() >= new Date(c.fecha_servicio).getTime()) {
+      const yaEnviadoDia = enviadosPorClienteDia.get(c.cliente_id)
+      const candidataDia = c.fecha_servicio.slice(0, 10)
+      if (yaEnviadoDia && yaEnviadoDia >= candidataDia) {
         excluidos.add(c.cliente_id)
       }
     }
