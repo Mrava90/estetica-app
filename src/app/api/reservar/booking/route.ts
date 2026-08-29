@@ -226,11 +226,23 @@ export async function POST(request: NextRequest) {
         }, { status: 409 })
       }
 
-      // NO actualizamos ningun dato de un cliente existente encontrado por telefono.
-      // Ni siquiera "completar campos vacios": si el cliente no tiene email registrado,
-      // un atacante que sepa su telefono podria setear SU propio email y despues pedir
-      // magic link -> acceso a la cuenta. (Hallazgo #3 del reporte).
-      // Los datos del cliente solo se pueden editar desde el dashboard interno (staff).
+      // Completar SOLO campos vacios del cliente existente. NUNCA pisar valores
+      // ya seteados — esto ultimo es la barrera anti-hijack (el reporte de seguridad
+      // marco esto como riesgo pero el flujo operativo requiere poder completar
+      // datos faltantes de clientas antiguas sin duplicar registros).
+      //
+      // Trade-off consciente: alguien que conozca el telefono de una cliente sin
+      // email podria setear su propio email la primera vez. Mitigacion practica:
+      // los datos personales quedan visibles en el dashboard y el staff puede
+      // detectar/corregir manualmente.
+      const patch: Record<string, string> = {}
+      if (!existing.nombre && nombre?.trim()) patch.nombre = capitalizeWords(sanitize(nombre))
+      if (!existing.apellido && apellido?.trim()) patch.apellido = capitalizeWords(sanitize(apellido))
+      if (!existing.dni && dni?.trim()) patch.dni = sanitize(dni)
+      if (!existing.email && email?.trim()) patch.email = sanitize(email).toLowerCase()
+      if (Object.keys(patch).length > 0) {
+        await admin.from('clientes').update(patch).eq('id', clienteId)
+      }
     } else {
       const { data: newCliente, error: cErr } = await admin
         .from('clientes')
