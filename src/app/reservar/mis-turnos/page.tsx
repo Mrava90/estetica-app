@@ -8,7 +8,7 @@ import { CalendarDays, Mail, CheckCircle, X, LogOut } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 
-type Estado = 'loading' | 'sin-sesion' | 'sin-cliente' | 'ok'
+type Estado = 'loading' | 'sin-sesion' | 'sin-cliente' | 'ok' | 'error'
 
 export default function MisTurnosPage() {
   const [estado, setEstado] = useState<Estado>('loading')
@@ -20,27 +20,58 @@ export default function MisTurnosPage() {
   const [errorEmail, setErrorEmail] = useState('')
   const [cancelando, setCancelando] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
   const supabase = createClient()
 
   useEffect(() => {
+    let cancelled = false
+    // Timeout de seguridad: si algo cuelga, no dejar "Cargando..." indefinido.
+    const timeoutId = setTimeout(() => {
+      if (cancelled) return
+      setEstado((prev) => (prev === 'loading' ? 'error' : prev))
+      setErrorMsg('La página tardó demasiado en cargar. Refrescá o probá con otro navegador.')
+    }, 15_000)
+
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user?.email) {
-        setEstado('sin-sesion')
-        return
-      }
-      setEmail(user.email)
-      const res = await fetch('/api/mis-turnos')
-      if (!res.ok) { setEstado('sin-sesion'); return }
-      const { citas: data } = await res.json()
-      if (!data || data.length === 0) {
-        setEstado('sin-cliente')
-      } else {
-        setCitas(data)
-        setEstado('ok')
+      try {
+        const { data: { user }, error: authErr } = await supabase.auth.getUser()
+        if (cancelled) return
+        if (authErr) {
+          setEstado('sin-sesion')
+          return
+        }
+        if (!user?.email) {
+          setEstado('sin-sesion')
+          return
+        }
+        setEmail(user.email)
+        const res = await fetch('/api/mis-turnos')
+        if (cancelled) return
+        if (res.status === 401) { setEstado('sin-sesion'); return }
+        if (!res.ok) {
+          setEstado('error')
+          setErrorMsg('No pudimos cargar tus turnos. Intentá refrescar la página.')
+          return
+        }
+        const { citas: data } = await res.json()
+        if (cancelled) return
+        if (!data || data.length === 0) {
+          setEstado('sin-cliente')
+        } else {
+          setCitas(data)
+          setEstado('ok')
+        }
+      } catch (e) {
+        if (cancelled) return
+        setEstado('error')
+        setErrorMsg('Hubo un problema al cargar. Refrescá o volvé a iniciar sesión.')
+        console.error('mis-turnos init error:', e)
+      } finally {
+        clearTimeout(timeoutId)
       }
     }
     init()
+    return () => { cancelled = true; clearTimeout(timeoutId) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleMagicLink() {
@@ -91,6 +122,26 @@ export default function MisTurnosPage() {
 
   if (estado === 'loading') {
     return <div className="text-center text-white/70 py-16">Cargando...</div>
+  }
+
+  if (estado === 'error') {
+    return (
+      <div className="flex flex-col items-center space-y-5 py-8">
+        <h1 className="text-2xl font-bold text-white drop-shadow-md">Mis turnos</h1>
+        <div className="rounded-xl border border-amber-400 bg-white p-6 text-center w-full max-w-sm space-y-3">
+          <p className="text-sm font-medium text-amber-700">{errorMsg || 'Hubo un problema al cargar.'}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-lg bg-black px-6 py-2 text-sm font-semibold text-white hover:bg-gray-900"
+          >
+            Reintentar
+          </button>
+        </div>
+        <Link href="/reservar" className="text-sm text-white/70 hover:text-white underline">
+          Volver a reservar
+        </Link>
+      </div>
+    )
   }
 
   if (estado === 'sin-sesion') {
