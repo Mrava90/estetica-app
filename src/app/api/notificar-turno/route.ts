@@ -72,7 +72,27 @@ export async function POST(request: NextRequest) {
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://turnosballester.vercel.app'
-  const link = `${appUrl}/reservar/mis-turnos`
+
+  // Generar un MAGIC LINK real via Auth Admin API. Con esto el cliente hace un
+  // solo click desde el email y llega a /reservar/mis-turnos con sesion activa.
+  // Antes se mandaba un link plano a la pagina que despues le pedia otra vez
+  // el email para enviar OTRO email con el magic link -> 2 emails, 2 clicks.
+  let link = `${appUrl}/reservar/mis-turnos`
+  try {
+    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: emailDestino,
+      options: {
+        redirectTo: `${appUrl}/auth/confirm?next=/reservar/mis-turnos`,
+      },
+    })
+    if (!linkErr && linkData?.properties?.action_link) {
+      link = linkData.properties.action_link
+    }
+    // Si falla la generacion, cae al fallback (link plano que pide email otra vez).
+  } catch (e) {
+    console.error('generateLink error:', e)
+  }
 
   const servicio = escapeHtml((cita.servicios as any)?.nombre || '')
   const profesional = escapeHtml((cita.profesionales as any)?.nombre || '')
