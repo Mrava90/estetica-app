@@ -12,6 +12,7 @@ import { Plus, Minus, Copy, Save, Camera } from 'lucide-react'
 import Image from 'next/image'
 import { ServiciosProfesional } from '@/components/personal/ServiciosProfesional'
 import { ToleranciaSolapamiento } from '@/components/personal/ToleranciaSolapamiento'
+import { AliasPago } from '@/components/personal/AliasPago'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const DIAS_MAP = [1, 2, 3, 4, 5, 6, 0] // Lun=1 ... Dom=0
@@ -288,6 +289,13 @@ export default function PersonalPage() {
         <ToleranciaSolapamiento
           profesional={prof}
           onUpdate={(v) => setProfesionales((prev) => prev.map((p) => p.id === prof.id ? { ...p, tolerancia_solapamiento_min: v } : p))}
+        />
+      )}
+
+      {prof && (
+        <AliasPago
+          profesional={prof}
+          onUpdate={(v) => setProfesionales((prev) => prev.map((p) => p.id === prof.id ? { ...p, alias_pago: v } : p))}
         />
       )}
 

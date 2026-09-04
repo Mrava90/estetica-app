@@ -14,6 +14,7 @@ export interface Profesional {
   visible_calendario: boolean
   foto_url: string | null
   tolerancia_solapamiento_min?: number
+  alias_pago?: string | null
   created_at: string
   updated_at: string
 }
