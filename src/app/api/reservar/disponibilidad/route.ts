@@ -19,7 +19,7 @@ import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
-const INTERVALO_MIN = 30
+const INTERVALO_MIN_DEFAULT = 15
 const MAX_DIAS_ANTICIPACION = 90
 
 export async function GET(request: NextRequest) {
@@ -103,8 +103,15 @@ export async function GET(request: NextRequest) {
   const diaSemana = diaSemanaAR(fecha)
   const dateStr = fechaStr
 
-  // 3. Horarios/desbloqueos/citas/bloqueos del dia, en paralelo
-  const [horariosRes, desbloqRes, citasRes, bloqRes] = await Promise.all([
+  // Rango del dia en AR (UTC-3). Los timestamps sin TZ los interpreta PostgREST como
+  // UTC, entonces perdiamos las citas despues de 21hs AR y traiamos las de despues
+  // de 21hs AR del dia anterior. Con -03:00 explicito el rango cubre exactamente
+  // el dia AR completo (00:00 → 24:00 AR).
+  const inicioDiaAR = `${dateStr}T00:00:00-03:00`
+  const finDiaAR = `${dateStr}T24:00:00-03:00`
+
+  // 3. Horarios/desbloqueos/citas/bloqueos del dia + intervalo desde config, en paralelo
+  const [horariosRes, desbloqRes, citasRes, bloqRes, configRes] = await Promise.all([
     admin.from('horarios')
       .select('profesional_id, hora_inicio, hora_fin')
       .in('profesional_id', profIds).eq('dia_semana', diaSemana).eq('activo', true)
@@ -115,11 +122,12 @@ export async function GET(request: NextRequest) {
     admin.from('citas')
       .select('profesional_id, fecha_inicio, fecha_fin')
       .in('profesional_id', profIds).in('status', ['pendiente', 'confirmada'])
-      .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
+      .gte('fecha_inicio', inicioDiaAR).lt('fecha_inicio', finDiaAR),
     admin.from('bloqueos')
       .select('profesional_id, fecha_inicio, fecha_fin')
       .in('profesional_id', profIds)
-      .gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
+      .gte('fecha_inicio', inicioDiaAR).lt('fecha_inicio', finDiaAR),
+    admin.from('configuracion').select('intervalo_citas_minutos').eq('id', 1).maybeSingle(),
   ])
 
   // Si alguna query fallo, devolver 503 explicito en vez de "no hay horarios" silencioso.
@@ -132,6 +140,7 @@ export async function GET(request: NextRequest) {
   }
 
   // 4. Calcular slots por profesional
+  const intervaloMin = Math.max(5, configRes.data?.intervalo_citas_minutos || INTERVALO_MIN_DEFAULT)
   const slots: Record<string, Array<{ inicio: string; fin: string }>> = {}
 
   for (const prof of profesionales) {
@@ -153,7 +162,7 @@ export async function GET(request: NextRequest) {
         { hora_inicio: horario.hora_inicio, hora_fin: horario.hora_fin },
         citas,
         servicio.duracion_minutos ?? 30,
-        INTERVALO_MIN,
+        intervaloMin,
         bloqueos,
         tolerancia,
         parseTimeToDateAR,  // interpreta HH:mm como hora AR (server-side en UTC)
