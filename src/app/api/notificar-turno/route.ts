@@ -86,8 +86,18 @@ export async function POST(request: NextRequest) {
         redirectTo: `${appUrl}/auth/confirm?next=/reservar/mis-turnos`,
       },
     })
-    if (!linkErr && linkData?.properties?.action_link) {
-      link = linkData.properties.action_link
+    // Preferimos hashed_token + endpoint /auth/confirm en vez de action_link.
+    // action_link es el flow implicito de Supabase que devuelve la sesion en el
+    // fragmento (#access_token=) — el fragmento no llega al server-side y el
+    // callback no lo puede leer, entonces el cliente termina en /login?error=invalid_link.
+    // hashed_token va en query string, /auth/confirm hace verifyOtp() y crea sesion OK.
+    if (!linkErr && linkData?.properties?.hashed_token) {
+      const p = new URLSearchParams({
+        token_hash: linkData.properties.hashed_token,
+        type: 'magiclink',
+        next: '/reservar/mis-turnos',
+      })
+      link = `${appUrl}/auth/confirm?${p.toString()}`
     }
     // Si falla la generacion, cae al fallback (link plano que pide email otra vez).
   } catch (e) {

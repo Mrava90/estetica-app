@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fechaArYMD } from '@/lib/timezone'
 
 /**
  * GET /api/promociones/activas
@@ -8,7 +9,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
  */
 export async function GET() {
   const admin = createAdminClient()
-  const hoy = new Date().toISOString().slice(0, 10)
+  // Fecha en AR — si usamos UTC, entre 21:00 y 00:00 AR se pierde el dia actual
+  // porque UTC ya paso al siguiente y una promo con fecha_hasta = hoy se filtra fuera.
+  const hoy = fechaArYMD()
 
   const { data, error } = await admin
     .from('promociones')

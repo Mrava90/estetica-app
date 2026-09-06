@@ -5,9 +5,16 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { type SlotDisponible } from '@/lib/disponibilidad'
 import { formatHora, formatPrecio } from '@/lib/dates'
+import { fechaArYMD, formatAR } from '@/lib/timezone'
 import type { Servicio, Profesional, Promocion } from '@/types/database'
-import { addDays, startOfDay, format } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { addDays } from 'date-fns'
+
+// "Hoy" en Argentina (independiente de la TZ del dispositivo).
+// Un cliente con celular mal configurado veia otro dia como "hoy" y las tiras
+// de fechas quedaban corridas.
+function hoyAR(): Date {
+  return new Date(fechaArYMD() + 'T00:00:00-03:00')
+}
 import { ArrowLeft, Sparkles } from 'lucide-react'
 import { calcularPrecioConPromo } from '@/lib/promociones'
 
@@ -19,7 +26,7 @@ function HorarioContent() {
 
   const [servicio, setServicio] = useState<Servicio | null>(null)
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
-  const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()))
+  const [selectedDate, setSelectedDate] = useState(hoyAR())
   const [slots, setSlots] = useState<Record<string, SlotDisponible[]>>({})
   const [selectedSlot, setSelectedSlot] = useState<{ profId: string; slot: SlotDisponible } | null>(null)
   const [diasAnticipacion, setDiasAnticipacion] = useState(7)
@@ -73,7 +80,7 @@ function HorarioContent() {
 
   async function fetchAvailability() {
     if (!servicio || profesionales.length === 0) return
-    const dateStr = format(selectedDate, 'yyyy-MM-dd')
+    const dateStr = formatAR(selectedDate, 'yyyy-MM-dd')
 
     // Ahora la API server-side devuelve solo slots ya disponibles (calcula todo con
     // service_role: horarios, citas, bloqueos, desbloqueos). El cliente ya no consulta
@@ -121,7 +128,7 @@ function HorarioContent() {
     router.push(`/reservar/confirmar?${params.toString()}`)
   }
 
-  const dates = Array.from({ length: diasAnticipacion }, (_, i) => addDays(startOfDay(new Date()), i))
+  const dates = Array.from({ length: diasAnticipacion }, (_, i) => addDays(hoyAR(), i))
 
   return (
     <div className="space-y-6">
@@ -158,10 +165,10 @@ function HorarioContent() {
               }`}
             >
               <span className="text-xs uppercase font-medium">
-                {format(date, 'EEE', { locale: es })}
+                {formatAR(date, 'EEE')}
               </span>
-              <span className="text-lg font-bold">{format(date, 'd')}</span>
-              <span className="text-xs">{format(date, 'MMM', { locale: es })}</span>
+              <span className="text-lg font-bold">{formatAR(date, 'd')}</span>
+              <span className="text-xs">{formatAR(date, 'MMM')}</span>
             </button>
           )
         })}

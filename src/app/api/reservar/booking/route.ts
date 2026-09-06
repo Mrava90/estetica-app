@@ -293,10 +293,16 @@ export async function POST(request: NextRequest) {
       p_promocion_id: precioInfo.promocionAplicada?.id || null,
       p_origen: 'online',
       p_status: 'pendiente',
+      p_reprogramar_id: reprogramarId || null,
     })
 
     if (rpcErr) throw rpcErr
     const rpcResult = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows
+    if (rpcResult?.err === 'CLIENTE_OCUPADO') {
+      return NextResponse.json({
+        error: 'Ya tenés un turno reservado en ese horario. No podés tener dos turnos superpuestos.',
+      }, { status: 409 })
+    }
     if (rpcResult?.err === 'HORARIO_OCUPADO') {
       return NextResponse.json({ error: 'Ese horario acaba de ocuparse. Elegí otro por favor.' }, { status: 409 })
     }

@@ -1,24 +1,25 @@
 import { format, parseISO, addMinutes, isBefore, startOfDay, endOfDay } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { formatAR } from '@/lib/timezone'
+
+// Todas las funciones de formateo delegan a formatAR (hora Argentina fija).
+// Antes usaban date-fns format() sin TZ, que mostraba en la TZ del dispositivo:
+// un cliente con el celular en UTC veia horas corridas 3hs. Ahora es siempre AR.
 
 export function formatFecha(date: string | Date): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, "d 'de' MMMM, yyyy", { locale: es })
+  return formatAR(date, "d 'de' MMMM, yyyy")
 }
 
 export function formatHora(date: string | Date): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'HH:mm', { locale: es })
+  return formatAR(date, 'HH:mm')
 }
 
 export function formatFechaCorta(date: string | Date): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, 'dd/MM/yyyy', { locale: es })
+  return formatAR(date, 'dd/MM/yyyy')
 }
 
 export function formatFechaHora(date: string | Date): string {
-  const d = typeof date === 'string' ? parseISO(date) : date
-  return format(d, "d 'de' MMMM, HH:mm", { locale: es })
+  return formatAR(date, "d 'de' MMMM, HH:mm")
 }
 
 export function formatPrecio(precio: number): string {
