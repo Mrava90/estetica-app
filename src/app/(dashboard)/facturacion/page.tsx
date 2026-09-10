@@ -112,7 +112,7 @@ function BadgeCanal({ tipo, match }: { tipo: TipoPagoMP | null; match: ItemFactu
   }
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${estilos[tipo]}`}
+      className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-0 text-[9px] font-medium whitespace-nowrap leading-[1.4] ${estilos[tipo]}`}
       title={match === 'ambiguo' ? 'Varios pagos coinciden en fecha y monto — verificá' : `Cobrado por ${tipo}`}
     >
       <span aria-hidden>{iconos[tipo]}</span>
@@ -464,50 +464,48 @@ export default function FacturacionPage() {
     // ── Emitida ──────────────────────────────────────────────────────────────
     if (item.factura_estado === 'emitida') {
       return (
-        <li key={k} className="grid grid-cols-[2.25rem_1fr_auto] md:grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_12rem] items-center gap-x-3 gap-y-0 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+        <li key={k} className="grid grid-cols-[1.75rem_1fr_auto] md:grid-cols-[1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_9rem] items-center gap-x-2 gap-y-0 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5">
           {/* Avatar */}
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
             {initials(item.cliente_nombre)}
           </div>
           {/* Nombre */}
           <div className="min-w-0">
-            <p className="font-semibold text-sm truncate text-gray-900">{item.cliente_nombre}</p>
+            <p className="font-semibold text-xs truncate text-gray-900 leading-tight">{item.cliente_nombre}</p>
           </div>
           {/* DNI */}
           <div className="hidden md:block">
             {item.cliente_dni
-              ? <span className="font-mono text-sm font-medium text-gray-900">{formatDNI(item.cliente_dni)}</span>
-              : <span className="text-xs text-gray-500 italic">Sin DNI</span>}
+              ? <span className="font-mono text-[11px] font-medium text-gray-900">{formatDNI(item.cliente_dni)}</span>
+              : <span className="text-[10px] text-gray-500 italic">Sin DNI</span>}
           </div>
           {/* Servicio + canal de cobro */}
-          <div className="hidden md:block min-w-0">
-            <p className="text-xs text-gray-700 truncate">{item.servicio_nombre}</p>
-            {item.tipo_pago && (
-              <div className="mt-0.5"><BadgeCanal tipo={item.tipo_pago} match={item.mp_match} /></div>
-            )}
+          <div className="hidden md:flex items-center gap-1.5 min-w-0">
+            <p className="text-[11px] text-gray-700 truncate">{item.servicio_nombre}</p>
+            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} />
           </div>
           {/* Fecha */}
-          <p className="hidden md:block text-xs text-gray-700 text-right">{isoToDisplay(item.fecha)}</p>
+          <p className="hidden md:block text-[10px] text-gray-700 text-right">{isoToDisplay(item.fecha)}</p>
           {/* ESTADO */}
           <div className="hidden md:flex justify-center">
-            <span className="rounded-full bg-green-200 text-green-800 text-[11px] font-medium px-2 py-0.5 whitespace-nowrap">Facturada</span>
+            <span className="rounded-full bg-green-200 text-green-800 text-[9px] font-medium px-1.5 py-0.5 whitespace-nowrap">Facturada</span>
           </div>
           {/* Monto */}
-          <p className="font-bold text-sm text-right text-gray-900">{formatPrecio(item.monto)}</p>
+          <p className="font-bold text-xs text-right text-gray-900">{formatPrecio(item.monto)}</p>
           {/* Estado */}
-          <div className="flex items-center gap-2">
-            <div className="flex flex-col items-end gap-0.5 min-w-[100px]">
+          <div className="flex items-center gap-1">
+            <div className="flex flex-col items-end gap-0 min-w-[76px]">
               {item.factura_cae ? (
                 <>
-                  <span className="flex items-center gap-1 text-xs font-semibold text-gray-900 whitespace-nowrap">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> N°{item.factura_numero}
+                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-gray-900 whitespace-nowrap leading-tight">
+                    <CheckCircle2 className="h-3 w-3 text-green-600" /> N°{item.factura_numero}
                   </span>
-                  <span className="font-mono text-[10px] text-gray-700 tracking-tight">{item.factura_cae}</span>
+                  <span className="font-mono text-[9px] text-gray-700 tracking-tight leading-tight">{item.factura_cae}</span>
                 </>
               ) : (
-                <span className="flex items-center gap-1 text-xs font-semibold text-gray-900 whitespace-nowrap">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> Facturada
-                  <span className="rounded bg-green-200 px-1 py-0.5 text-[10px] font-medium text-green-800">Manual</span>
+                <span className="flex items-center gap-0.5 text-[10px] font-semibold text-gray-900 whitespace-nowrap">
+                  <CheckCircle2 className="h-3 w-3 text-green-600" /> Facturada
+                  <span className="rounded bg-green-200 px-1 text-[9px] font-medium text-green-800">Manual</span>
                 </span>
               )}
             </div>
@@ -517,18 +515,18 @@ export default function FacturacionPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 title="Ver / descargar comprobante PDF"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
               >
-                <FileText className="h-4 w-4" />
+                <FileText className="h-3 w-3" />
               </a>
             )}
             {item.factura_id && item.factura_cae && (
               <button
                 onClick={() => setEmailRow(emailRow === item.factura_id ? null : item.factura_id!)}
                 title="Enviar comprobante por email"
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
               >
-                <Mail className="h-4 w-4" />
+                <Mail className="h-3 w-3" />
               </button>
             )}
           </div>
@@ -580,16 +578,16 @@ export default function FacturacionPage() {
     // ── Excluida ─────────────────────────────────────────────────────────────
     if (item.factura_estado === 'excluida') {
       return (
-        <li key={k} className="flex items-center gap-3 rounded-xl border border-dashed bg-muted/20 px-4 py-2.5 opacity-50">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-bold">
+        <li key={k} className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-2.5 py-1 opacity-50">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-[9px] font-bold">
             {initials(item.cliente_nombre)}
           </div>
-          <p className="flex-1 text-sm line-through truncate">{item.cliente_nombre}</p>
-          {item.cliente_dni && <span className="hidden md:block font-mono text-xs line-through text-muted-foreground">{formatDNI(item.cliente_dni)}</span>}
-          <p className="text-sm font-medium line-through text-muted-foreground">{formatPrecio(item.monto)}</p>
+          <p className="flex-1 text-xs line-through truncate">{item.cliente_nombre}</p>
+          {item.cliente_dni && <span className="hidden md:block font-mono text-[10px] line-through text-muted-foreground">{formatDNI(item.cliente_dni)}</span>}
+          <p className="text-xs font-medium line-through text-muted-foreground">{formatPrecio(item.monto)}</p>
           <button onClick={() => handleRestaurar(item)} disabled={mode === 'loading'}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap">
-            {mode === 'loading' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap">
+            {mode === 'loading' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
             Restaurar
           </button>
         </li>
@@ -599,11 +597,11 @@ export default function FacturacionPage() {
     // ── Loading ──────────────────────────────────────────────────────────────
     if (mode === 'loading') {
       return (
-        <li key={k} className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 opacity-60">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground shrink-0" />
-          <p className="flex-1 text-sm font-medium">{item.cliente_nombre}</p>
-          <p className="text-xs text-muted-foreground">Procesando…</p>
-          <p className="font-semibold text-sm">{formatPrecio(item.monto)}</p>
+        <li key={k} className="flex items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 opacity-60">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+          <p className="flex-1 text-xs font-medium">{item.cliente_nombre}</p>
+          <p className="text-[10px] text-muted-foreground">Procesando…</p>
+          <p className="font-semibold text-xs">{formatPrecio(item.monto)}</p>
         </li>
       )
     }
@@ -611,55 +609,50 @@ export default function FacturacionPage() {
     // ── Confirmando ──────────────────────────────────────────────────────────
     if (mode === 'confirming') {
       return (
-        <li key={k} className="flex flex-col gap-3 rounded-xl border-2 border-blue-300 bg-blue-50 px-4 py-4">
+        <li key={k} className="flex flex-col gap-2 rounded-lg border-2 border-blue-300 bg-blue-50 px-3 py-2.5">
           {/* Resumen del ítem */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
               {initials(item.cliente_nombre)}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm">{item.cliente_nombre}</p>
+              <p className="font-semibold text-xs">{item.cliente_nombre}</p>
             </div>
             {item.cliente_dni
-              ? <span className="font-mono text-sm font-semibold bg-white border rounded px-2 py-0.5">{formatDNI(item.cliente_dni)}</span>
-              : <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">Sin DNI · Consumidor Final</span>}
-            <p className="font-bold text-base ml-auto">{formatPrecio(item.monto)}</p>
+              ? <span className="font-mono text-[11px] font-semibold bg-white border rounded px-1.5 py-0.5">{formatDNI(item.cliente_dni)}</span>
+              : <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">Sin DNI · Cons. Final</span>}
+            <p className="font-bold text-sm ml-auto">{formatPrecio(item.monto)}</p>
           </div>
 
           {/* Opciones */}
-          <p className="text-xs text-blue-700 font-medium">¿Qué querés hacer con esta factura?</p>
-          <div className="flex flex-wrap gap-2">
-            {/* Opción 1: Enviar a ARCA */}
+          <p className="text-[11px] text-blue-700 font-medium">¿Qué querés hacer con esta factura?</p>
+          <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => handleEnviarARCA(item)}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
             >
-              <Send className="h-4 w-4" />
+              <Send className="h-3.5 w-3.5" />
               Enviar a ARCA
             </button>
-
-            {/* Opción 2: Marcar como ya facturada */}
             <button
               onClick={() => handleMarcarManual(item)}
-              className="flex items-center gap-2 rounded-lg border-2 border-green-300 bg-white px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-50 transition-colors"
+              className="flex items-center gap-1.5 rounded-md border border-green-300 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-50 transition-colors"
             >
-              <CheckCircle2 className="h-4 w-4" />
+              <CheckCircle2 className="h-3.5 w-3.5" />
               Ya fue facturada
             </button>
-
-            {/* Cancelar */}
             <button
               onClick={() => setMode(k, 'idle')}
-              className="flex items-center gap-2 rounded-lg border bg-white px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+              className="flex items-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
             >
               Cancelar
             </button>
           </div>
 
           {/* Aclaración */}
-          <p className="text-xs text-muted-foreground">
-            <strong>Enviar a ARCA</strong> requiere credenciales configuradas y genera el CAE automáticamente.
-            · <strong>Ya fue facturada</strong> marca el ítem como procesado sin conectarse a ARCA (útil para facturas emitidas manualmente desde la web de AFIP).
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            <strong>Enviar a ARCA</strong> genera el CAE automáticamente. · <strong>Ya fue facturada</strong> marca el ítem
+            como procesado sin conectarse a ARCA (para facturas emitidas a mano desde la web de AFIP).
           </p>
         </li>
       )
@@ -669,26 +662,26 @@ export default function FacturacionPage() {
     if (err || item.factura_estado === 'error') {
       const msg = err || item.factura_error || 'Error desconocido'
       return (
-        <li key={k} className="flex flex-col gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+        <li key={k} className="flex flex-col gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
               {initials(item.cliente_nombre)}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm">{item.cliente_nombre}</p>
-              <p className="text-xs text-red-600">{msg}</p>
+              <p className="font-semibold text-xs">{item.cliente_nombre}</p>
+              <p className="text-[10px] text-red-600 leading-snug">{msg}</p>
             </div>
-            {item.cliente_dni && <span className="font-mono text-sm text-muted-foreground">{formatDNI(item.cliente_dni)}</span>}
-            <p className="font-bold text-sm">{formatPrecio(item.monto)}</p>
+            {item.cliente_dni && <span className="font-mono text-[11px] text-muted-foreground">{formatDNI(item.cliente_dni)}</span>}
+            <p className="font-bold text-xs">{formatPrecio(item.monto)}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button onClick={() => handleCheckClick(k)}
-              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors">
-              <RotateCcw className="h-3 w-3" /> Reintentar
+              className="flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-blue-700 transition-colors">
+              <RotateCcw className="h-2.5 w-2.5" /> Reintentar
             </button>
             <button onClick={() => handleExcluir(item)}
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors">
-              <XCircle className="h-3 w-3" /> Descartar
+              className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-[10px] font-medium hover:bg-muted transition-colors">
+              <XCircle className="h-2.5 w-2.5" /> Descartar
             </button>
           </div>
         </li>
@@ -697,11 +690,11 @@ export default function FacturacionPage() {
 
     // ── Pendiente (idle) ─────────────────────────────────────────────────────
     return (
-      <li key={k} className="grid grid-cols-[1.25rem_2.25rem_1fr_auto_auto] md:grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_8rem] items-center gap-x-3 rounded-xl border bg-card px-4 py-3 hover:bg-muted/20 transition-colors">
+      <li key={k} className="grid grid-cols-[1rem_1.75rem_1fr_auto_auto] md:grid-cols-[1rem_1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_6rem] items-center gap-x-2 rounded-lg border bg-card px-2.5 py-1.5 hover:bg-muted/20 transition-colors">
 
         {/* Checkbox */}
         <input type="checkbox"
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+          className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 cursor-pointer"
           checked={seleccionados.has(k)}
           onChange={e => setSeleccionados(prev => {
             const next = new Set(prev)
@@ -711,16 +704,16 @@ export default function FacturacionPage() {
         />
 
         {/* Avatar */}
-        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${avatarColor(item.cliente_nombre)}`}>
+        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
           {initials(item.cliente_nombre)}
         </div>
 
         {/* Nombre */}
         <div className="min-w-0">
-          <p className="font-semibold text-sm truncate">{item.cliente_nombre}</p>
+          <p className="font-semibold text-xs truncate leading-tight">{item.cliente_nombre}</p>
           {/* DNI + canal visibles en mobile (debajo del nombre) */}
-          <div className="md:hidden flex items-center gap-1.5 mt-0.5">
-            <span className="text-xs text-muted-foreground">
+          <div className="md:hidden flex items-center gap-1 mt-0.5">
+            <span className="text-[10px] text-muted-foreground">
               {item.cliente_dni ? formatDNI(item.cliente_dni) : <span className="text-amber-600">Sin DNI</span>}
             </span>
             <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} />
@@ -730,37 +723,35 @@ export default function FacturacionPage() {
         {/* DNI — columna separada en desktop */}
         <div className="hidden md:flex items-center">
           {item.cliente_dni ? (
-            <span className="font-mono text-sm font-semibold text-gray-800 bg-gray-100 rounded px-2 py-0.5 tracking-wide">
+            <span className="font-mono text-[11px] font-semibold text-gray-800 bg-gray-100 rounded px-1.5 py-0.5">
               {formatDNI(item.cliente_dni)}
             </span>
           ) : (
-            <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-0.5 whitespace-nowrap">
+            <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 whitespace-nowrap">
               Sin DNI
             </span>
           )}
         </div>
 
         {/* Servicio + canal de cobro */}
-        <div className="hidden md:block min-w-0">
-          <p className="text-xs text-muted-foreground truncate">{item.servicio_nombre}</p>
-          {item.tipo_pago && (
-            <div className="mt-0.5"><BadgeCanal tipo={item.tipo_pago} match={item.mp_match} /></div>
-          )}
+        <div className="hidden md:flex items-center gap-1.5 min-w-0">
+          <p className="text-[11px] text-muted-foreground truncate">{item.servicio_nombre}</p>
+          <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} />
         </div>
 
         {/* Fecha */}
-        <p className="hidden md:block text-xs text-muted-foreground text-right whitespace-nowrap">{isoToDisplay(item.fecha)}</p>
+        <p className="hidden md:block text-[10px] text-muted-foreground text-right whitespace-nowrap">{isoToDisplay(item.fecha)}</p>
 
         {/* ESTADO */}
         <div className="hidden md:flex justify-center">
-          <span className="rounded-full bg-amber-100 text-amber-700 text-[11px] font-medium px-2 py-0.5 whitespace-nowrap">Pendiente</span>
+          <span className="rounded-full bg-amber-100 text-amber-700 text-[9px] font-medium px-1.5 py-0.5 whitespace-nowrap">Pendiente</span>
         </div>
 
         {/* Monto */}
-        <p className="font-bold text-sm text-right whitespace-nowrap">{formatPrecio(item.monto)}</p>
+        <p className="font-bold text-xs text-right whitespace-nowrap">{formatPrecio(item.monto)}</p>
 
         {/* Botones ✓ / ✗ / editar */}
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1">
           <button
             onClick={() => {
               setEditingRow(k)
@@ -771,68 +762,68 @@ export default function FacturacionPage() {
               }}))
             }}
             title="Editar datos"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-500 hover:bg-gray-100 transition-colors"
+            className="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 hover:bg-gray-100 transition-colors"
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil className="h-3 w-3" />
           </button>
           <button
             onClick={() => handleCheckClick(k)}
             title="Aprobar / marcar como facturada"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-green-400 bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+            className="flex h-6 w-6 items-center justify-center rounded border border-green-400 bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
           >
-            <CheckCircle2 className="h-4 w-4" />
+            <CheckCircle2 className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={() => handleExcluir(item)}
             title="No facturar este ítem"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-red-300 bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+            className="flex h-6 w-6 items-center justify-center rounded border border-red-300 bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
           >
-            <XCircle className="h-4 w-4" />
+            <XCircle className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {/* Panel de edición inline */}
         {editingRow === k && editData[k] && (
-          <div className="col-span-full mt-2 flex flex-wrap items-end gap-2 border-t pt-3">
-            <div className="flex flex-col gap-1 flex-1 min-w-[140px]">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Nombre</label>
+          <div className="col-span-full mt-1.5 flex flex-wrap items-end gap-1.5 border-t pt-2">
+            <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide">Nombre</label>
               <input
                 type="text"
                 value={editData[k].nombre}
                 onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], nombre: e.target.value } }))}
-                className="h-8 rounded-md border px-2 text-sm bg-background"
+                className="h-6 rounded border px-1.5 text-xs bg-background"
               />
             </div>
-            <div className="flex flex-col gap-1 w-36">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">DNI</label>
+            <div className="flex flex-col gap-0.5 w-28">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide">DNI</label>
               <input
                 type="text"
                 value={editData[k].dni}
                 onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], dni: e.target.value } }))}
                 placeholder="Sin DNI"
-                className="h-8 rounded-md border px-2 text-sm bg-background"
+                className="h-6 rounded border px-1.5 text-xs bg-background"
               />
             </div>
-            <div className="flex flex-col gap-1 flex-[2] min-w-[180px]">
-              <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Servicio / Descripción</label>
+            <div className="flex flex-col gap-0.5 flex-[2] min-w-[150px]">
+              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide">Servicio / Descripción</label>
               <input
                 type="text"
                 value={editData[k].descripcion}
                 onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], descripcion: e.target.value } }))}
-                className="h-8 rounded-md border px-2 text-sm bg-background"
+                className="h-6 rounded border px-1.5 text-xs bg-background"
               />
             </div>
             <button
               onClick={() => setEditingRow(null)}
-              className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="flex h-6 items-center gap-1 rounded bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
             >
-              <Save className="h-3.5 w-3.5" /> Guardar
+              <Save className="h-3 w-3" /> Guardar
             </button>
             <button
               onClick={() => { setEditingRow(null); setEditData(s => { const n = { ...s }; delete n[k]; return n }) }}
-              className="flex h-8 items-center gap-1 rounded-md border px-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+              className="flex h-6 items-center gap-1 rounded border px-1.5 text-[11px] text-muted-foreground hover:bg-muted transition-colors"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3 w-3" />
             </button>
           </div>
         )}
@@ -843,29 +834,29 @@ export default function FacturacionPage() {
   // ── Render principal ──────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-3 p-4">
 
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Receipt className="h-6 w-6 text-blue-600" />
+          <h1 className="text-lg font-bold flex items-center gap-1.5">
+            <Receipt className="h-4.5 w-4.5 text-blue-600" />
             Facturación Electrónica
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-[11px] text-muted-foreground mt-0.5">
             Datos desde hoja "Afip" · Solo MercadoPago · Aprobación manual por ítem
           </p>
         </div>
-        <div className="flex flex-wrap items-start gap-2">
+        <div className="flex flex-wrap items-start gap-1.5">
           <SwitchFacturacionAuto />
-          <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
+          <div className="flex gap-0.5 rounded-md border bg-muted p-0.5 self-start">
             <button onClick={() => setTab('lista')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Receipt className="h-3.5 w-3.5" /> Lista
+              className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${tab === 'lista' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+              <Receipt className="h-3 w-3" /> Lista
             </button>
             <button onClick={() => setTab('configuracion')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'configuracion' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Settings2 className="h-3.5 w-3.5" /> Config ARCA
+              className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${tab === 'configuracion' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+              <Settings2 className="h-3 w-3" /> Config ARCA
             </button>
           </div>
         </div>
@@ -875,75 +866,75 @@ export default function FacturacionPage() {
       {tab === 'lista' && (
         <>
           {/* Selector de mes + búsqueda + filtro */}
-          <div className="flex flex-col sm:flex-row flex-wrap items-start gap-3">
-            <div className="flex items-center gap-3 rounded-lg border bg-card px-4 py-2.5 self-start w-fit">
-              <button onClick={mesAnterior} className="rounded p-1 hover:bg-muted transition-colors">
-                <ChevronLeft className="h-4 w-4" />
+          <div className="flex flex-col sm:flex-row flex-wrap items-start gap-2">
+            <div className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 self-start w-fit">
+              <button onClick={mesAnterior} className="rounded p-0.5 hover:bg-muted transition-colors">
+                <ChevronLeft className="h-3.5 w-3.5" />
               </button>
-              <span className="w-44 text-center font-medium capitalize text-sm">{mesLabel(mesBase)}</span>
-              <button onClick={mesSiguiente} className="rounded p-1 hover:bg-muted transition-colors">
-                <ChevronRight className="h-4 w-4" />
+              <span className="w-32 text-center font-medium capitalize text-xs">{mesLabel(mesBase)}</span>
+              <button onClick={mesSiguiente} className="rounded p-0.5 hover:bg-muted transition-colors">
+                <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
 
             {/* Búsqueda */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 placeholder="Buscar cliente…"
                 value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
-                className="pl-9 pr-3 py-2 w-48 rounded-lg border bg-card text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                className="pl-7 pr-2 py-1 w-40 rounded-md border bg-card text-xs outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
 
             {/* Filtro de estado */}
-            <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
+            <div className="flex gap-0.5 rounded-md border bg-muted p-0.5 self-start">
               <button onClick={() => setFiltroEstado('todos')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${filtroEstado === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                 Todos
               </button>
               <button onClick={() => setFiltroEstado('pendiente')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroEstado === 'pendiente' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${filtroEstado === 'pendiente' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                 Pendientes
               </button>
               <button onClick={() => setFiltroEstado('emitida')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'emitida' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroEstado === 'emitida' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                 <span className="block">Facturadas</span>
                 {montoEmitido > 0 && (
-                  <span className="block text-[10px] font-normal text-green-600">{formatPrecio(montoEmitido)}</span>
+                  <span className="block text-[9px] font-normal text-green-600">{formatPrecio(montoEmitido)}</span>
                 )}
               </button>
               {excluidas.length > 0 && (
                 <button onClick={() => setFiltroEstado('excluida')}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroEstado === 'excluida' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                  className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroEstado === 'excluida' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                   <span className="block">Eliminadas</span>
-                  <span className="block text-[10px] font-normal">{excluidas.length}</span>
+                  <span className="block text-[9px] font-normal">{excluidas.length}</span>
                 </button>
               )}
             </div>
 
             {/* Filtro de canal de cobro — solo si MP respondió */}
             {mpDisponible && (
-              <div className="flex gap-1 rounded-lg border border-violet-200 bg-violet-50 p-1 self-start">
+              <div className="flex gap-0.5 rounded-md border border-violet-200 bg-violet-50 p-0.5 self-start">
                 <button onClick={() => setFiltroCanal('todos')}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroCanal === 'todos' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                  className={`rounded px-2 py-1 text-xs font-medium transition-colors ${filtroCanal === 'todos' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
                   Todo MP
                 </button>
                 <button onClick={() => setFiltroCanal('presencial')}
                   title="Cobros presenciales en el local (QR y posnet Point)"
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroCanal === 'presencial' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                  className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'presencial' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
                   <span className="block">▣ QR / Point</span>
-                  <span className={`block text-[10px] font-normal ${filtroCanal === 'presencial' ? 'text-violet-100' : 'text-violet-500'}`}>
+                  <span className={`block text-[9px] font-normal ${filtroCanal === 'presencial' ? 'text-violet-100' : 'text-violet-500'}`}>
                     {itemsPresenciales.length} · {formatPrecio(montoPresencial)}
                   </span>
                 </button>
                 <button onClick={() => setFiltroCanal('transferencia')}
                   title="Transferencias al alias / CVU"
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroCanal === 'transferencia' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                  className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'transferencia' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
                   <span className="block">⇄ Transferencia</span>
-                  <span className={`block text-[10px] font-normal ${filtroCanal === 'transferencia' ? 'text-violet-100' : 'text-violet-500'}`}>
+                  <span className={`block text-[9px] font-normal ${filtroCanal === 'transferencia' ? 'text-violet-100' : 'text-violet-500'}`}>
                     {itemsTransferencia.length} · {formatPrecio(montoTransferencia)}
                   </span>
                 </button>
@@ -953,43 +944,43 @@ export default function FacturacionPage() {
 
           {/* Aviso cuando el filtro de canal está activo */}
           {mpDisponible && filtroCanal !== 'todos' && (
-            <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800">
-              <Info className="h-4 w-4 shrink-0" />
+            <div className="flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] text-violet-800">
+              <Info className="h-3.5 w-3.5 shrink-0" />
               <span>
-                Mostrando solo <strong>{filtroCanal === 'presencial' ? 'cobros presenciales (QR / Point)' : 'transferencias'}</strong>.
-                {' '}Al seleccionar todas, el envío masivo a ARCA va a incluir únicamente estas.
+                Solo <strong>{filtroCanal === 'presencial' ? 'QR / Point' : 'transferencias'}</strong>.
+                {' '}Al seleccionar todas, el envío masivo a ARCA incluye únicamente estas.
               </span>
-              <button onClick={() => setFiltroCanal('todos')} className="ml-auto shrink-0 text-xs underline hover:no-underline">
-                Quitar filtro
+              <button onClick={() => setFiltroCanal('todos')} className="ml-auto shrink-0 underline hover:no-underline">
+                Quitar
               </button>
             </div>
           )}
 
           {/* Stats */}
           {!loading && items.length > 0 && (
-            <div className={`grid gap-3 ${mpDisponible ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-3'}`}>
-              <div className="rounded-xl border bg-card px-4 py-3">
-                <p className="text-xs text-muted-foreground">Total MP del mes</p>
-                <p className="text-xl font-bold text-blue-700">{formatPrecio(totalMonto)}</p>
-                <p className="text-xs text-muted-foreground">{items.length} ítems</p>
+            <div className={`grid gap-2 ${mpDisponible ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-3'}`}>
+              <div className="rounded-lg border bg-card px-2.5 py-1.5">
+                <p className="text-[10px] text-muted-foreground leading-tight">Total MP del mes</p>
+                <p className="text-base font-bold text-blue-700 leading-tight">{formatPrecio(totalMonto)}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{items.length} ítems</p>
               </div>
-              <div className="rounded-xl border bg-card px-4 py-3">
-                <p className="text-xs text-muted-foreground">Pendientes</p>
-                <p className="text-xl font-bold text-amber-700">{pendientes.length + conError.length}</p>
-                <p className="text-xs text-muted-foreground">{formatPrecio(montoPendiente)}</p>
+              <div className="rounded-lg border bg-card px-2.5 py-1.5">
+                <p className="text-[10px] text-muted-foreground leading-tight">Pendientes</p>
+                <p className="text-base font-bold text-amber-700 leading-tight">{pendientes.length + conError.length}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">{formatPrecio(montoPendiente)}</p>
               </div>
-              <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
-                <p className="text-xs text-green-700">Facturadas</p>
-                <p className="text-xl font-bold text-green-700">{emitidas.length}</p>
-                <p className="text-xs text-green-600">{formatPrecio(montoEmitido)}</p>
+              <div className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5">
+                <p className="text-[10px] text-green-700 leading-tight">Facturadas</p>
+                <p className="text-base font-bold text-green-700 leading-tight">{emitidas.length}</p>
+                <p className="text-[10px] text-green-600 leading-tight">{formatPrecio(montoEmitido)}</p>
               </div>
               {mpDisponible && (
-                <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
-                  <p className="text-xs text-violet-700">Comisiones MP</p>
-                  <p className="text-xl font-bold text-violet-700">{formatPrecio(comisionTotal)}</p>
-                  <p className="text-xs text-violet-600">
-                    {totalMonto > 0 ? `${((comisionTotal / totalMonto) * 100).toFixed(2)}% del total` : '—'}
-                    {sinIdentificar > 0 && ` · ${sinIdentificar} sin identificar`}
+                <div className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5">
+                  <p className="text-[10px] text-violet-700 leading-tight">Comisiones MP</p>
+                  <p className="text-base font-bold text-violet-700 leading-tight">{formatPrecio(comisionTotal)}</p>
+                  <p className="text-[10px] text-violet-600 leading-tight">
+                    {totalMonto > 0 ? `${((comisionTotal / totalMonto) * 100).toFixed(2)}%` : '—'}
+                    {sinIdentificar > 0 && ` · ${sinIdentificar} s/ident.`}
                   </p>
                 </div>
               )}
@@ -998,25 +989,25 @@ export default function FacturacionPage() {
 
           {/* Error de carga */}
           {fetchError && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
               <AlertCircle className="h-4 w-4 shrink-0" /> {fetchError}
             </div>
           )}
 
           {/* Lista */}
           {loading ? (
-            <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
+            <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" /> Cargando hoja Afip…
             </div>
           ) : items.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">
-              <Receipt className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <div className="py-10 text-center text-xs text-muted-foreground">
+              <Receipt className="h-7 w-7 mx-auto mb-2 opacity-30" />
               <p className="font-medium">Sin registros en la hoja "Afip"</p>
               <p className="text-sm mt-1">No hay filas para este mes en el Google Sheet.</p>
             </div>
           ) : (pendientesFiltrados.length === 0 && emitidasFiltradas.length === 0 && excluidasFiltradas.length === 0) ? (
-            <div className="py-12 text-center text-muted-foreground">
-              <Search className="h-8 w-8 mx-auto mb-3 opacity-30" />
+            <div className="py-8 text-center text-xs text-muted-foreground">
+              <Search className="h-6 w-6 mx-auto mb-2 opacity-30" />
               <p className="font-medium">Sin resultados</p>
               <p className="text-sm mt-1">Probá con otro nombre o filtro.</p>
             </div>
@@ -1025,9 +1016,9 @@ export default function FacturacionPage() {
 
               {/* Encabezado de columnas (desktop) — pendientes */}
               {pendientesFiltrados.length > 0 && (
-                <div className="hidden md:grid grid-cols-[1.25rem_2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_8rem] items-center gap-x-3 px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="hidden md:grid grid-cols-[1rem_1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_6rem] items-center gap-x-2 px-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   <input type="checkbox"
-                    className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 cursor-pointer"
                     checked={pendientesFiltrados.length > 0 && pendientesFiltrados.every(i => seleccionados.has(i.afip_row_key))}
                     onChange={e => {
                       const keys = pendientesFiltrados.map(i => i.afip_row_key)
@@ -1052,15 +1043,15 @@ export default function FacturacionPage() {
 
               {/* Pendientes + errores */}
               {pendientesFiltrados.length > 0 && (
-                <ul className="space-y-2">
+                <ul className="space-y-1">
                   {pendientesFiltrados.map(item => renderFila(item))}
                 </ul>
               )}
 
               {/* Emitidas */}
               {emitidasFiltradas.length > 0 && (
-                <div className="space-y-2 pt-2">
-                  <div className="hidden md:grid grid-cols-[2.25rem_1.5fr_1fr_1.5fr_4.5rem_5.5rem_6rem_12rem] items-center gap-x-3 px-4 text-xs font-semibold text-green-700 uppercase tracking-wide">
+                <div className="space-y-1 pt-1">
+                  <div className="hidden md:grid grid-cols-[1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_9rem] items-center gap-x-2 px-2.5 text-[10px] font-semibold text-green-700 uppercase tracking-wide">
                     <span />
                     <span>Cliente</span>
                     <span>DNI</span>
@@ -1070,26 +1061,26 @@ export default function FacturacionPage() {
                     <span className="text-right">Monto</span>
                     <span className="text-right">Comprobante</span>
                   </div>
-                  <ul className="space-y-2">{emitidasFiltradas.map(item => renderFila(item))}</ul>
+                  <ul className="space-y-1">{emitidasFiltradas.map(item => renderFila(item))}</ul>
                 </div>
               )}
 
               {/* Excluidas */}
               {excluidasFiltradas.length > 0 && filtroEstado !== 'todos' && (
-                <div className="space-y-2 pt-1">
-                  <ul className="space-y-2">{excluidasFiltradas.map(item => renderFila(item))}</ul>
+                <div className="space-y-1 pt-1">
+                  <ul className="space-y-1">{excluidasFiltradas.map(item => renderFila(item))}</ul>
                 </div>
               )}
               {/* Excluidas colapsable (solo en vista "todos") */}
               {excluidas.length > 0 && filtroEstado === 'todos' && (
-                <div className="space-y-2 pt-1">
+                <div className="space-y-1 pt-1">
                   <button onClick={() => setMostrarExcluidas(v => !v)}
                     className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-1">
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform ${mostrarExcluidas ? 'rotate-180' : ''}`} />
                     {mostrarExcluidas ? 'Ocultar' : 'Ver'} descartadas ({excluidas.length})
                   </button>
                   {mostrarExcluidas && (
-                    <ul className="space-y-2">{excluidas.map(item => renderFila(item))}</ul>
+                    <ul className="space-y-1">{excluidas.map(item => renderFila(item))}</ul>
                   )}
                 </div>
               )}
@@ -1100,7 +1091,7 @@ export default function FacturacionPage() {
 
       {/* Barra de acción bulk */}
       {bulkProgreso ? (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl bg-gray-900 px-5 py-3 shadow-2xl text-white">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl bg-gray-900 px-3.5 py-2 shadow-2xl text-white">
           <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
           <span className="text-sm font-medium">
             Procesando {bulkProgreso.done}/{bulkProgreso.total}…
@@ -1110,7 +1101,7 @@ export default function FacturacionPage() {
           </span>
         </div>
       ) : seleccionados.size > 0 ? (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 rounded-2xl bg-gray-900 px-5 py-3 shadow-2xl text-white">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-xl bg-gray-900 px-3.5 py-2 shadow-2xl text-white">
           <span className="text-sm font-medium">
             {seleccionados.size} seleccionada{seleccionados.size > 1 ? 's' : ''}
             {' · '}
@@ -1120,12 +1111,12 @@ export default function FacturacionPage() {
             }, 0))}
           </span>
           <button onClick={handleBulkEnviarARCA}
-            className="flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold hover:bg-blue-400 transition-colors">
+            className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-2.5 py-1 text-xs font-semibold hover:bg-blue-400 transition-colors">
             <Send className="h-4 w-4" />
             Enviar a ARCA
           </button>
           <button onClick={handleBulkExcluir}
-            className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold hover:bg-red-500 transition-colors">
+            className="flex items-center gap-1.5 rounded-lg bg-red-600 px-2.5 py-1 text-xs font-semibold hover:bg-red-500 transition-colors">
             <XCircle className="h-4 w-4" />
             Eliminar
           </button>
@@ -1138,9 +1129,9 @@ export default function FacturacionPage() {
 
       {/* ── TAB: Configuración ───────────────────────────────────────────────── */}
       {tab === 'configuracion' && (
-        <div className="space-y-5 max-w-2xl">
+        <div className="space-y-3 max-w-2xl text-sm">
 
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 space-y-3">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
             <div className="flex items-center gap-2 font-semibold text-blue-800">
               <Building2 className="h-5 w-5" /> Integración con ARCA (ex-AFIP)
             </div>
@@ -1154,7 +1145,7 @@ export default function FacturacionPage() {
             </p>
           </div>
 
-          <div className="rounded-xl border bg-card p-5 space-y-5">
+          <div className="rounded-lg border bg-card p-3 space-y-3">
             <h2 className="font-semibold flex items-center gap-2">
               <Settings2 className="h-4 w-4 text-muted-foreground" /> Pasos para activar
             </h2>
@@ -1191,7 +1182,7 @@ export default function FacturacionPage() {
           </div>
 
           {/* Test de conexión */}
-          <div className="rounded-xl border bg-card p-5 space-y-3">
+          <div className="rounded-lg border bg-card p-3 space-y-2">
             <h2 className="font-semibold flex items-center gap-2">
               <Send className="h-4 w-4 text-muted-foreground" /> Probar conexión con ARCA
             </h2>
@@ -1224,7 +1215,7 @@ export default function FacturacionPage() {
             )}
           </div>
 
-          <div className="rounded-xl border bg-card p-5 space-y-3">
+          <div className="rounded-lg border bg-card p-3 space-y-2">
             <h2 className="font-semibold flex items-center gap-2">
               <Info className="h-4 w-4 text-muted-foreground" /> Tipo de factura según categoría fiscal
             </h2>
