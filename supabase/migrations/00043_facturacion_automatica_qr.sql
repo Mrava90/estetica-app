@@ -1,7 +1,7 @@
 -- ============================================================
 -- Facturacion automatica de ventas cobradas por QR de MercadoPago.
 --
--- Un cron corre una vez por dia (9 AM AR), lee los cobros QR directamente
+-- Un cron corre una vez por dia (20:00 AR = 23:00 UTC), lee los cobros QR
 -- de la API de MercadoPago y los factura en ARCA sin intervencion manual.
 --
 -- Por que MercadoPago y no el sheet:

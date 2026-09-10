@@ -121,7 +121,7 @@ export function SwitchFacturacionAuto() {
               </p>
               <p className="text-xs text-amber-800 leading-relaxed">
                 Las facturas emitidas en ARCA <strong>no se pueden borrar</strong> — para anular una hay que
-                emitir una nota de crédito. El proceso corre <strong>una vez por día a las 9 AM</strong> y solo
+                emitir una nota de crédito. El proceso corre <strong>una vez por día a las 20:00</strong> y solo
                 factura ventas que cumplan todas las condiciones de abajo.
               </p>
               <div className="flex gap-2">
