@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/afip-padron",
       "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/cron/facturar-qr",
+      "schedule": "0 12 * * *"
     }
   ]
 }

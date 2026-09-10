@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrecio } from '@/lib/dates'
+import { SwitchFacturacionAuto } from '@/components/facturacion/SwitchFacturacionAuto'
 import {
   Receipt,
   CheckCircle2,
@@ -855,15 +856,18 @@ export default function FacturacionPage() {
             Datos desde hoja "Afip" · Solo MercadoPago · Aprobación manual por ítem
           </p>
         </div>
-        <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
-          <button onClick={() => setTab('lista')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-            <Receipt className="h-3.5 w-3.5" /> Lista
-          </button>
-          <button onClick={() => setTab('configuracion')}
-            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'configuracion' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-            <Settings2 className="h-3.5 w-3.5" /> Config ARCA
-          </button>
+        <div className="flex flex-wrap items-start gap-2">
+          <SwitchFacturacionAuto />
+          <div className="flex gap-1 rounded-lg border bg-muted p-1 self-start">
+            <button onClick={() => setTab('lista')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'lista' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+              <Receipt className="h-3.5 w-3.5" /> Lista
+            </button>
+            <button onClick={() => setTab('configuracion')}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === 'configuracion' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+              <Settings2 className="h-3.5 w-3.5" /> Config ARCA
+            </button>
+          </div>
         </div>
       </div>
 

@@ -25,6 +25,30 @@ export interface PagoMP {
   tipo: TipoPagoMP
   descripcion: string | null
   pagadorEmail: string | null
+  pagadorDoc: string | null    // numero crudo que informa MP (suele ser CUIL)
+  pagadorDni: string | null    // DNI extraido del CUIL, listo para la factura
+}
+
+/**
+ * Extrae el DNI de un CUIL/CUIT.
+ *
+ * Los cobros QR traen `payer.identification.number` con el CUIL del pagador:
+ * 11 digitos = prefijo (20/23/24/27) + DNI (8) + verificador (1).
+ * Ej: 27408560301 → DNI 40856030
+ *
+ * Si el numero ya viene como DNI (7-8 digitos) se devuelve tal cual.
+ * Cualquier otra cosa devuelve null — mejor facturar a Consumidor Final
+ * que meter un documento invalido en ARCA.
+ */
+export function dniDesdeDocumento(doc: string | null | undefined): string | null {
+  if (!doc) return null
+  const n = String(doc).replace(/\D/g, '')
+  if (n.length === 7 || n.length === 8) return n           // ya es un DNI
+  if (n.length === 11 && /^(20|23|24|27|30|33|34)/.test(n)) {
+    const dni = n.slice(2, 10).replace(/^0+/, '')
+    return dni.length >= 7 ? dni : null
+  }
+  return null
 }
 
 /** Clasifica el canal de cobro segun point_of_interaction + payment_type. */
@@ -50,15 +74,39 @@ function diaAR(iso: string): string {
  * Devuelve [] si el token no esta configurado o si MP falla — nunca tira.
  */
 export async function traerPagosDelMes(mes: string): Promise<PagoMP[]> {
-  const token = process.env.MP_ACCESS_TOKEN
-  if (!token) return []
-
   const [y, m] = mes.split('-').map(Number)
   if (!y || !m) return []
-  // Ultimo dia del mes
   const ultimoDia = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  const desde = `${mes}-01T00:00:00.000-03:00`
-  const hasta = `${mes}-${String(ultimoDia).padStart(2, '0')}T23:59:59.999-03:00`
+  return traerPagos(
+    `${mes}-01T00:00:00.000-03:00`,
+    `${mes}-${String(ultimoDia).padStart(2, '0')}T23:59:59.999-03:00`,
+  )
+}
+
+/**
+ * Trae los pagos aprobados de los ultimos N dias (contados en hora AR).
+ * La usa el cron de facturacion automatica: no necesita releer todo el mes,
+ * solo lo reciente.
+ */
+export async function traerPagosUltimosDias(dias: number): Promise<PagoMP[]> {
+  const ahora = new Date()
+  const desde = new Date(ahora.getTime() - dias * 24 * 60 * 60 * 1000)
+  const ymd = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: AR_TZ })
+  return traerPagos(
+    `${ymd(desde)}T00:00:00.000-03:00`,
+    `${ymd(ahora)}T23:59:59.999-03:00`,
+  )
+}
+
+const AR_TZ = 'America/Argentina/Buenos_Aires'
+
+/**
+ * Base de las dos anteriores: pagina /v1/payments/search entre dos ISO.
+ * Nunca tira — ante error devuelve lo que haya podido traer.
+ */
+export async function traerPagos(desde: string, hasta: string): Promise<PagoMP[]> {
+  const token = process.env.MP_ACCESS_TOKEN
+  if (!token) return []
 
   const out: PagoMP[] = []
   let offset = 0
@@ -93,6 +141,7 @@ export async function traerPagosDelMes(mes: string): Promise<PagoMP[]> {
         if (p.status !== 'approved') continue
         const fecha = p.date_approved || p.date_created
         const comision = (p.fee_details || []).reduce((a: number, f: any) => a + (f.amount || 0), 0)
+        const doc = p.payer?.identification?.number ?? null
         out.push({
           id: p.id,
           fecha,
@@ -103,6 +152,8 @@ export async function traerPagosDelMes(mes: string): Promise<PagoMP[]> {
           tipo: clasificar(p),
           descripcion: p.description || null,
           pagadorEmail: p.payer?.email || null,
+          pagadorDoc: doc ? String(doc) : null,
+          pagadorDni: dniDesdeDocumento(doc),
         })
       }
 

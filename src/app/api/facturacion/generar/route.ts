@@ -25,6 +25,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { isAdminUser } from '@/lib/constants'
 import forge from 'node-forge'
 import https from 'https'
+import { timingSafeEqual } from 'crypto'
 import { promisify } from 'util'
 import { gunzip as gunzipCb } from 'zlib'
 
@@ -407,11 +408,27 @@ function extractAllTags(xml: string, tag: string): string[] {
 // ── Endpoint principal ───────────────────────────────────────────────────
 
 export async function POST(request: Request) {
-  const auth = await createServerClient()
-  const { data: { user } } = await auth.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminUser(user)) {
-    return NextResponse.json({ error: 'Solo el admin puede emitir facturas' }, { status: 403 })
+  // Dos vias de autenticacion:
+  //  1. Sesion de usuario admin (uso normal desde /facturacion)
+  //  2. CRON_SECRET (facturacion automatica de cobros QR, /api/cron/facturar-qr)
+  // El secreto del cron se compara con timingSafeEqual para no filtrar
+  // informacion por el tiempo de respuesta.
+  const cronSecret = process.env.CRON_SECRET
+  const headerSecret = request.headers.get('x-cron-secret')
+  let esCron = false
+  if (headerSecret && cronSecret && cronSecret.length >= 16) {
+    const a = Buffer.from(headerSecret)
+    const b = Buffer.from(cronSecret)
+    esCron = a.length === b.length && timingSafeEqual(a, b)
+  }
+
+  if (!esCron) {
+    const auth = await createServerClient()
+    const { data: { user } } = await auth.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    if (!isAdminUser(user)) {
+      return NextResponse.json({ error: 'Solo el admin puede emitir facturas' }, { status: 403 })
+    }
   }
 
   // Verificar credenciales ARCA configuradas
@@ -423,9 +440,11 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { cita_id, afip_row_key, receptor_nombre, receptor_dni, monto, fecha, descripcion } = body
+  const { cita_id, afip_row_key, mp_payment_id, receptor_nombre, receptor_dni, monto, fecha, descripcion } = body
 
-  if ((!cita_id && !afip_row_key) || !monto || !fecha) {
+  // Tres origenes posibles: una cita de la app, una fila del sheet, o un cobro
+  // de MercadoPago (facturacion automatica de QR).
+  if ((!cita_id && !afip_row_key && !mp_payment_id) || !monto || !fecha) {
     return NextResponse.json({ error: 'Faltan campos requeridos.' }, { status: 400 })
   }
 
@@ -433,8 +452,9 @@ export async function POST(request: Request) {
 
   // Verificar que no tenga ya una factura emitida
   const query = supabase.from('facturas').select('id, estado').eq('estado', 'emitida')
-  if (afip_row_key) query.eq('afip_row_key', afip_row_key)
-  else              query.eq('cita_id', cita_id)
+  if (mp_payment_id)     query.eq('mp_payment_id', mp_payment_id)
+  else if (afip_row_key) query.eq('afip_row_key', afip_row_key)
+  else                   query.eq('cita_id', cita_id)
   const { data: existing } = await query.maybeSingle()
 
   if (existing) {
@@ -490,8 +510,9 @@ export async function POST(request: Request) {
       : null
 
     const { error: insertErr } = await supabase.from('facturas').insert({
-      ...(cita_id     ? { cita_id }     : {}),
-      ...(afip_row_key ? { afip_row_key } : {}),
+      ...(cita_id       ? { cita_id }       : {}),
+      ...(afip_row_key  ? { afip_row_key }  : {}),
+      ...(mp_payment_id ? { mp_payment_id } : {}),
       fecha,
       monto: parseFloat(monto),
       descripcion,
@@ -517,10 +538,11 @@ export async function POST(request: Request) {
     console.error('Error generando factura ARCA:', err)
 
     // Guardar el error en la tabla para trazabilidad
-    const conflictCol = afip_row_key ? 'afip_row_key' : 'cita_id'
+    const conflictCol = mp_payment_id ? 'mp_payment_id' : afip_row_key ? 'afip_row_key' : 'cita_id'
     await supabase.from('facturas').upsert({
-      ...(cita_id      ? { cita_id }      : {}),
-      ...(afip_row_key ? { afip_row_key } : {}),
+      ...(cita_id       ? { cita_id }       : {}),
+      ...(afip_row_key  ? { afip_row_key }  : {}),
+      ...(mp_payment_id ? { mp_payment_id } : {}),
       fecha,
       monto: parseFloat(monto),
       descripcion,
