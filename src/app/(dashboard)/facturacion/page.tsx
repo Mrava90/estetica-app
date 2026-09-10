@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrecio } from '@/lib/dates'
 import { SwitchFacturacionAuto } from '@/components/facturacion/SwitchFacturacionAuto'
+import { FacturaManual } from '@/components/facturacion/FacturaManual'
 import {
   Receipt,
   CheckCircle2,
@@ -33,6 +34,7 @@ import {
 type EstadoFactura = 'pendiente' | 'excluida' | 'emitida' | 'error'
 type RowMode = 'idle' | 'confirming' | 'loading'
 type TipoPagoMP = 'QR' | 'Point' | 'Transferencia' | 'Link' | 'Dinero en cuenta' | 'Otro'
+type MedioPago = 'MercadoPago' | 'Efectivo' | 'Otro'
 
 interface ItemFacturacion {
   afip_row_key: string
@@ -41,6 +43,7 @@ interface ItemFacturacion {
   cliente_dni: string | null
   servicio_nombre: string
   monto: number
+  medio_pago: MedioPago
   factura_id: string | null
   factura_estado: EstadoFactura | null
   factura_cae: string | null
@@ -96,8 +99,32 @@ function avatarColor(nombre: string) {
   return AVATAR_COLORS[nombre.charCodeAt(0) % AVATAR_COLORS.length]
 }
 
-/** Badge del canal de cobro (QR / Point / Transferencia). */
-function BadgeCanal({ tipo, match }: { tipo: TipoPagoMP | null; match: ItemFacturacion['mp_match'] }) {
+/**
+ * Badge del canal de cobro.
+ * Para MercadoPago muestra el canal fino (QR / Point / Transferencia).
+ * Para efectivo muestra un badge propio, porque no tiene canal de MP.
+ */
+function BadgeCanal({ tipo, match, medio }: {
+  tipo: TipoPagoMP | null
+  match: ItemFacturacion['mp_match']
+  medio?: MedioPago
+}) {
+  if (medio === 'Efectivo') {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-0.5 rounded border border-emerald-200 bg-emerald-50 px-1 py-0 text-[9px] font-medium text-emerald-700 whitespace-nowrap leading-[1.4]"
+        title="Cobrado en efectivo">
+        <span aria-hidden>$</span> Efectivo
+      </span>
+    )
+  }
+  if (medio === 'Otro') {
+    return (
+      <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-50 px-1 py-0 text-[9px] font-medium text-gray-600 whitespace-nowrap leading-[1.4]"
+        title="Otro medio de pago (ej. gift card)">
+        Otro
+      </span>
+    )
+  }
   if (!tipo) return null
   const estilos: Record<TipoPagoMP, string> = {
     'QR':               'bg-violet-100 text-violet-700 border-violet-200',
@@ -138,7 +165,7 @@ export default function FacturacionPage() {
   const [testLoading, setTestLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'emitida' | 'excluida'>('todos')
-  const [filtroCanal, setFiltroCanal] = useState<'todos' | 'presencial' | 'transferencia'>('todos')
+  const [filtroCanal, setFiltroCanal] = useState<'todos' | 'presencial' | 'transferencia' | 'efectivo'>('todos')
   const [mpDisponible, setMpDisponible] = useState(false)
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [bulkProgreso, setBulkProgreso] = useState<{ done: number; total: number; errores: number } | null>(null)
@@ -429,22 +456,32 @@ export default function FacturacionPage() {
   const conError   = items.filter(i => i.factura_estado === 'error')
 
   // Búsqueda + filtro de estado + filtro de canal de cobro
+  const esPresencial = (i: ItemFacturacion) =>
+    i.medio_pago === 'MercadoPago' && i.tipo_pago != null && CANALES_PRESENCIALES.includes(i.tipo_pago)
+  const esTransferencia = (i: ItemFacturacion) =>
+    i.medio_pago === 'MercadoPago' && i.tipo_pago != null && !CANALES_PRESENCIALES.includes(i.tipo_pago)
+
   function aplicarFiltros(lista: ItemFacturacion[]) {
     return lista.filter(i => {
       if (busqueda && !i.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
-      if (filtroCanal === 'presencial') return i.tipo_pago != null && CANALES_PRESENCIALES.includes(i.tipo_pago)
-      if (filtroCanal === 'transferencia') return i.tipo_pago != null && !CANALES_PRESENCIALES.includes(i.tipo_pago)
+      if (filtroCanal === 'presencial') return esPresencial(i)
+      if (filtroCanal === 'transferencia') return esTransferencia(i)
+      if (filtroCanal === 'efectivo') return i.medio_pago === 'Efectivo'
       return true
     })
   }
 
-  // Totales por canal (para el card de resumen)
-  const itemsPresenciales = items.filter(i => i.tipo_pago != null && CANALES_PRESENCIALES.includes(i.tipo_pago))
-  const itemsTransferencia = items.filter(i => i.tipo_pago != null && !CANALES_PRESENCIALES.includes(i.tipo_pago))
+  // Totales por canal (para las botoneras y el card de resumen)
+  const itemsPresenciales = items.filter(esPresencial)
+  const itemsTransferencia = items.filter(esTransferencia)
+  const itemsEfectivo = items.filter(i => i.medio_pago === 'Efectivo')
   const montoPresencial = itemsPresenciales.reduce((s, i) => s + i.monto, 0)
   const montoTransferencia = itemsTransferencia.reduce((s, i) => s + i.monto, 0)
+  const montoEfectivo = itemsEfectivo.reduce((s, i) => s + i.monto, 0)
   const comisionTotal = items.reduce((s, i) => s + (i.mp_comision ?? 0), 0)
-  const sinIdentificar = items.filter(i => i.tipo_pago == null).length
+  const itemsMP = items.filter(i => i.medio_pago === 'MercadoPago')
+  const montoMP = itemsMP.reduce((s, i) => s + i.monto, 0)
+  const sinIdentificar = itemsMP.filter(i => i.tipo_pago == null).length
   const pendientesFiltrados = (filtroEstado === 'todos' || filtroEstado === 'pendiente') ? aplicarFiltros([...pendientes, ...conError]) : []
   const emitidasFiltradas   = (filtroEstado === 'todos' || filtroEstado === 'emitida')   ? aplicarFiltros([...emitidas].sort((a, b) => b.fecha.localeCompare(a.fecha)))   : []
   const excluidasFiltradas  = (filtroEstado === 'todos' || filtroEstado === 'excluida')  ? aplicarFiltros(excluidas)  : []
@@ -482,7 +519,7 @@ export default function FacturacionPage() {
           {/* Servicio + canal de cobro */}
           <div className="hidden md:flex items-center gap-1.5 min-w-0">
             <p className="text-[11px] text-gray-700 truncate">{item.servicio_nombre}</p>
-            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} />
+            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
           </div>
           {/* Fecha */}
           <p className="hidden md:block text-[10px] text-gray-700 text-right">{isoToDisplay(item.fecha)}</p>
@@ -716,7 +753,7 @@ export default function FacturacionPage() {
             <span className="text-[10px] text-muted-foreground">
               {item.cliente_dni ? formatDNI(item.cliente_dni) : <span className="text-amber-600">Sin DNI</span>}
             </span>
-            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} />
+            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
           </div>
         </div>
 
@@ -736,7 +773,7 @@ export default function FacturacionPage() {
         {/* Servicio + canal de cobro */}
         <div className="hidden md:flex items-center gap-1.5 min-w-0">
           <p className="text-[11px] text-muted-foreground truncate">{item.servicio_nombre}</p>
-          <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} />
+          <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
         </div>
 
         {/* Fecha */}
@@ -848,6 +885,7 @@ export default function FacturacionPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-1.5">
+          <FacturaManual onEmitida={fetchData} />
           <SwitchFacturacionAuto />
           <div className="flex gap-0.5 rounded-md border bg-muted p-0.5 self-start">
             <button onClick={() => setTab('lista')}
@@ -915,40 +953,62 @@ export default function FacturacionPage() {
               )}
             </div>
 
-            {/* Filtro de canal de cobro — solo si MP respondió */}
-            {mpDisponible && (
-              <div className="flex gap-0.5 rounded-md border border-violet-200 bg-violet-50 p-0.5 self-start">
-                <button onClick={() => setFiltroCanal('todos')}
-                  className={`rounded px-2 py-1 text-xs font-medium transition-colors ${filtroCanal === 'todos' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
-                  Todo MP
-                </button>
-                <button onClick={() => setFiltroCanal('presencial')}
-                  title="Cobros presenciales en el local (QR y posnet Point)"
-                  className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'presencial' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
-                  <span className="block">▣ QR / Point</span>
-                  <span className={`block text-[9px] font-normal ${filtroCanal === 'presencial' ? 'text-violet-100' : 'text-violet-500'}`}>
-                    {itemsPresenciales.length} · {formatPrecio(montoPresencial)}
+            {/* Filtro por medio de pago / canal */}
+            <div className="flex gap-0.5 rounded-md border border-violet-200 bg-violet-50 p-0.5 self-start">
+              <button onClick={() => setFiltroCanal('todos')}
+                className={`rounded px-2 py-1 text-xs font-medium transition-colors ${filtroCanal === 'todos' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                Todos
+              </button>
+              {mpDisponible && (
+                <>
+                  <button onClick={() => setFiltroCanal('presencial')}
+                    title="Cobros presenciales con MercadoPago (QR y posnet Point)"
+                    className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'presencial' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                    <span className="block">▣ QR / Point</span>
+                    <span className={`block text-[9px] font-normal ${filtroCanal === 'presencial' ? 'text-violet-100' : 'text-violet-500'}`}>
+                      {itemsPresenciales.length} · {formatPrecio(montoPresencial)}
+                    </span>
+                  </button>
+                  <button onClick={() => setFiltroCanal('transferencia')}
+                    title="Transferencias al alias / CVU"
+                    className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'transferencia' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                    <span className="block">⇄ Transferencia</span>
+                    <span className={`block text-[9px] font-normal ${filtroCanal === 'transferencia' ? 'text-violet-100' : 'text-violet-500'}`}>
+                      {itemsTransferencia.length} · {formatPrecio(montoTransferencia)}
+                    </span>
+                  </button>
+                </>
+              )}
+              {itemsEfectivo.length > 0 && (
+                <button onClick={() => setFiltroCanal('efectivo')}
+                  title="Ventas cobradas en efectivo — se facturan solo a pedido de la clienta"
+                  className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'efectivo' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-700 hover:bg-emerald-100'}`}>
+                  <span className="block">$ Efectivo</span>
+                  <span className={`block text-[9px] font-normal ${filtroCanal === 'efectivo' ? 'text-emerald-100' : 'text-emerald-600'}`}>
+                    {itemsEfectivo.length} · {formatPrecio(montoEfectivo)}
                   </span>
                 </button>
-                <button onClick={() => setFiltroCanal('transferencia')}
-                  title="Transferencias al alias / CVU"
-                  className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'transferencia' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
-                  <span className="block">⇄ Transferencia</span>
-                  <span className={`block text-[9px] font-normal ${filtroCanal === 'transferencia' ? 'text-violet-100' : 'text-violet-500'}`}>
-                    {itemsTransferencia.length} · {formatPrecio(montoTransferencia)}
-                  </span>
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Aviso cuando el filtro de canal está activo */}
-          {mpDisponible && filtroCanal !== 'todos' && (
-            <div className="flex items-center gap-1.5 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] text-violet-800">
+          {filtroCanal !== 'todos' && (
+            <div className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[11px] ${
+              filtroCanal === 'efectivo'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                : 'border-violet-200 bg-violet-50 text-violet-800'
+            }`}>
               <Info className="h-3.5 w-3.5 shrink-0" />
               <span>
-                Solo <strong>{filtroCanal === 'presencial' ? 'QR / Point' : 'transferencias'}</strong>.
-                {' '}Al seleccionar todas, el envío masivo a ARCA incluye únicamente estas.
+                Solo <strong>{
+                  filtroCanal === 'presencial' ? 'QR / Point'
+                  : filtroCanal === 'efectivo' ? 'ventas en efectivo'
+                  : 'transferencias'
+                }</strong>.
+                {filtroCanal === 'efectivo'
+                  ? ' El efectivo nunca se factura automático — se emite solo si la clienta lo pide.'
+                  : ' Al seleccionar todas, el envío masivo a ARCA incluye únicamente estas.'}
               </span>
               <button onClick={() => setFiltroCanal('todos')} className="ml-auto shrink-0 underline hover:no-underline">
                 Quitar
@@ -960,9 +1020,13 @@ export default function FacturacionPage() {
           {!loading && items.length > 0 && (
             <div className={`grid gap-2 ${mpDisponible ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-3'}`}>
               <div className="rounded-lg border bg-card px-2.5 py-1.5">
-                <p className="text-[10px] text-muted-foreground leading-tight">Total MP del mes</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">Total del mes</p>
                 <p className="text-base font-bold text-blue-700 leading-tight">{formatPrecio(totalMonto)}</p>
-                <p className="text-[10px] text-muted-foreground leading-tight">{items.length} ítems</p>
+                <p className="text-[10px] text-muted-foreground leading-tight">
+                  {itemsEfectivo.length > 0
+                    ? <>MP {formatPrecio(montoMP)} · Efvo {formatPrecio(montoEfectivo)}</>
+                    : <>{items.length} ítems</>}
+                </p>
               </div>
               <div className="rounded-lg border bg-card px-2.5 py-1.5">
                 <p className="text-[10px] text-muted-foreground leading-tight">Pendientes</p>

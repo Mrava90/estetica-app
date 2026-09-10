@@ -23,6 +23,9 @@ import { traerPagosDelMes, crearMatcher, type TipoPagoMP } from '@/lib/mercadopa
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
+/** Como se cobro la venta segun el sheet. */
+export type MedioPago = 'MercadoPago' | 'Efectivo' | 'Otro'
+
 export interface ItemFacturacion {
   afip_row_key: string
   fecha: string
@@ -30,6 +33,7 @@ export interface ItemFacturacion {
   cliente_dni: string | null
   servicio_nombre: string
   monto: number
+  medio_pago: MedioPago
   factura_id: string | null
   factura_estado: string | null
   factura_cae: string | null
@@ -83,9 +87,30 @@ interface FilaAfip {
   servicio: string
   monto: number
   dni: string | null
+  medio: MedioPago
 }
 
-function parsearFilas(rows: string[][], prefix: string, targetYear: number, targetMonth: number): FilaAfip[] {
+interface OpcionesParseo {
+  /** Indice de columna del DNI. Las hojas Afip lo tienen en K(10); KW en J(9). */
+  colDni: number
+  /** Si se pasa, solo devuelve las filas cuyo medio de pago cumpla el predicado. */
+  filtroMedio?: (medio: MedioPago) => boolean
+}
+
+function normalizarMedio(raw: string): MedioPago {
+  const v = raw.trim().toLowerCase()
+  if (v.includes('mercado')) return 'MercadoPago'
+  if (v.includes('efectivo')) return 'Efectivo'
+  return 'Otro'   // Gift Card y cualquier cosa rara
+}
+
+function parsearFilas(
+  rows: string[][],
+  prefix: string,
+  targetYear: number,
+  targetMonth: number,
+  opts: OpcionesParseo,
+): FilaAfip[] {
   const filas: FilaAfip[] = []
   let currentDate: string | null = null
 
@@ -103,14 +128,17 @@ function parsearFilas(rows: string[][], prefix: string, targetYear: number, targ
     const [, rowMonthStr] = currentDate.split('-')
     if (parseInt(rowMonthStr, 10) !== targetMonth) continue
 
+    const medio = normalizarMedio(row[5] || '')   // columna F: MEDIO DE PAGO
+    if (opts.filtroMedio && !opts.filtroMedio(medio)) continue
+
     const cliente = (row[1] || '').trim()
     const servicio = (row[2] || '').trim()
-    const monto = parseAmount(row[4] || '')   // columna E: ENTRADA
-    const dni = (row[10] || '').trim() || null  // columna K: DNI
+    const monto = parseAmount(row[4] || '')       // columna E: ENTRADA
+    const dni = (row[opts.colDni] || '').trim() || null
 
     if (!cliente || monto <= 0) continue
 
-    filas.push({ afip_row_key: `${prefix}-${i}`, fecha: currentDate, cliente, servicio, monto, dni })
+    filas.push({ afip_row_key: `${prefix}-${i}`, fecha: currentDate, cliente, servicio, monto, dni, medio })
   }
 
   return filas
@@ -155,17 +183,29 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
     return data.values || []
   }
 
-  // 2. Leer ambas hojas + pagos MP en paralelo
-  const [rowsSSR, rowsKW, pagosMP] = await Promise.all([
+  // 2. Leer las 4 hojas + pagos MP en paralelo.
+  //    Las hojas "Afip *" son un subconjunto de "KW"/"SSR" con solo las ventas
+  //    de MercadoPago. Se siguen usando como fuente de esas para no cambiar los
+  //    afip_row_key de las facturas ya emitidas. De "KW"/"SSR" tomamos solo lo
+  //    que NO es MercadoPago (efectivo y gift card), que no esta en las Afip.
+  const [rowsAfipSSR, rowsAfipKW, rowsKW, rowsSSR, pagosMP] = await Promise.all([
     fetchSheet('Afip SSR'),
     fetchSheet('Afip KW'),
+    fetchSheet('KW'),
+    fetchSheet('SSR'),
     traerPagosDelMes(mes),
   ])
 
   // 3. Parsear y ordenar por fecha
+  const soloNoMP = (m: MedioPago) => m !== 'MercadoPago'
   const filas = [
-    ...parsearFilas(rowsSSR, 'afip-ssr', targetYear, targetMonth),
-    ...parsearFilas(rowsKW, 'afip-kw', targetYear, targetMonth),
+    // MercadoPago — desde las hojas Afip (keys historicas, no tocar)
+    ...parsearFilas(rowsAfipSSR, 'afip-ssr', targetYear, targetMonth, { colDni: 10 }),
+    ...parsearFilas(rowsAfipKW, 'afip-kw', targetYear, targetMonth, { colDni: 10 }),
+    // Efectivo y otros — desde las hojas completas. El DNI en "KW" esta en la
+    // columna J(9), no en la K(10) como en las Afip.
+    ...parsearFilas(rowsKW, 'kw', targetYear, targetMonth, { colDni: 9, filtroMedio: soloNoMP }),
+    ...parsearFilas(rowsSSR, 'ssr', targetYear, targetMonth, { colDni: 10, filtroMedio: soloNoMP }),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha))
 
   // 4. Cruzar con la tabla facturas
@@ -190,7 +230,11 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
 
   const items: ItemFacturacion[] = filas.map(fila => {
     const factura = facturaMap[fila.afip_row_key] ?? null
-    const { pago, match } = matchMP(fila.fecha, fila.monto)
+    // Solo tiene sentido cruzar contra MercadoPago las ventas cobradas por ahi.
+    // Una venta en efectivo no tiene pago de MP asociado.
+    const { pago, match } = fila.medio === 'MercadoPago'
+      ? matchMP(fila.fecha, fila.monto)
+      : { pago: null, match: 'sin_match' as const }
     return {
       afip_row_key:        fila.afip_row_key,
       fecha:               fila.fecha,
@@ -198,6 +242,7 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
       cliente_dni:         fila.dni,
       servicio_nombre:     fila.servicio,
       monto:               fila.monto,
+      medio_pago:          fila.medio,
       factura_id:          factura?.id ?? null,
       factura_estado:      factura?.estado ?? null,
       factura_cae:         factura?.cae ?? null,
@@ -208,7 +253,7 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
       mp_payment_id:       pago?.id ?? null,
       mp_comision:         pago?.comision ?? null,
       mp_neto:             pago?.neto ?? null,
-      mp_match:            pagosMP.length > 0 ? match : null,
+      mp_match:            fila.medio === 'MercadoPago' && pagosMP.length > 0 ? match : null,
     }
   })
 

@@ -99,9 +99,12 @@ export async function GET(request: NextRequest) {
         filasSheet.push(...items)
       }
 
-      // Indexar filas del sheet por dia + monto, sin reusar la misma fila dos veces
+      // Indexar filas del sheet por dia + monto, sin reusar la misma fila dos veces.
+      // Solo las de MercadoPago: una venta en efectivo nunca puede corresponder
+      // a un cobro QR, aunque coincida en fecha y monto.
       const idxSheet = new Map<string, ItemFacturacion[]>()
       for (const f of filasSheet) {
+        if (f.medio_pago !== 'MercadoPago') continue
         const k = `${f.fecha}|${Math.round(f.monto)}`
         if (!idxSheet.has(k)) idxSheet.set(k, [])
         idxSheet.get(k)!.push(f)
