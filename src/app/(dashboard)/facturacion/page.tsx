@@ -31,6 +31,7 @@ import {
 
 type EstadoFactura = 'pendiente' | 'excluida' | 'emitida' | 'error'
 type RowMode = 'idle' | 'confirming' | 'loading'
+type TipoPagoMP = 'QR' | 'Point' | 'Transferencia' | 'Link' | 'Dinero en cuenta' | 'Otro'
 
 interface ItemFacturacion {
   afip_row_key: string
@@ -45,7 +46,16 @@ interface ItemFacturacion {
   factura_numero: string | null
   factura_vencimiento: string | null
   factura_error: string | null
+  // Enriquecimiento MercadoPago — null si MP no esta disponible
+  tipo_pago: TipoPagoMP | null
+  mp_payment_id: number | null
+  mp_comision: number | null
+  mp_neto: number | null
+  mp_match: 'unico' | 'ambiguo' | 'sin_match' | null
 }
+
+/** Canales presenciales (cobro en el local). Son los que se facturan automatico. */
+const CANALES_PRESENCIALES: TipoPagoMP[] = ['QR', 'Point']
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +95,32 @@ function avatarColor(nombre: string) {
   return AVATAR_COLORS[nombre.charCodeAt(0) % AVATAR_COLORS.length]
 }
 
+/** Badge del canal de cobro (QR / Point / Transferencia). */
+function BadgeCanal({ tipo, match }: { tipo: TipoPagoMP | null; match: ItemFacturacion['mp_match'] }) {
+  if (!tipo) return null
+  const estilos: Record<TipoPagoMP, string> = {
+    'QR':               'bg-violet-100 text-violet-700 border-violet-200',
+    'Point':            'bg-indigo-100 text-indigo-700 border-indigo-200',
+    'Transferencia':    'bg-slate-100 text-slate-600 border-slate-200',
+    'Link':             'bg-cyan-100 text-cyan-700 border-cyan-200',
+    'Dinero en cuenta': 'bg-slate-100 text-slate-600 border-slate-200',
+    'Otro':             'bg-gray-100 text-gray-600 border-gray-200',
+  }
+  const iconos: Record<TipoPagoMP, string> = {
+    'QR': '▣', 'Point': '▤', 'Transferencia': '⇄', 'Link': '🔗', 'Dinero en cuenta': '●', 'Otro': '·',
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium whitespace-nowrap ${estilos[tipo]}`}
+      title={match === 'ambiguo' ? 'Varios pagos coinciden en fecha y monto — verificá' : `Cobrado por ${tipo}`}
+    >
+      <span aria-hidden>{iconos[tipo]}</span>
+      {tipo}
+      {match === 'ambiguo' && <span className="text-amber-600 font-bold" title="Coincidencia ambigua">?</span>}
+    </span>
+  )
+}
+
 // ── Componente principal ─────────────────────────────────────────────────────
 
 export default function FacturacionPage() {
@@ -101,6 +137,8 @@ export default function FacturacionPage() {
   const [testLoading, setTestLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'emitida' | 'excluida'>('todos')
+  const [filtroCanal, setFiltroCanal] = useState<'todos' | 'presencial' | 'transferencia'>('todos')
+  const [mpDisponible, setMpDisponible] = useState(false)
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [bulkProgreso, setBulkProgreso] = useState<{ done: number; total: number; errores: number } | null>(null)
   const [emailRow, setEmailRow]       = useState<string | null>(null)
@@ -171,6 +209,7 @@ export default function FacturacionPage() {
     }
     const json = await res.json()
     setItems(json.items || [])
+    setMpDisponible(Boolean(json.mp_disponible))
     setLoading(false)
   }, [mesBase])
 
@@ -388,12 +427,23 @@ export default function FacturacionPage() {
   const excluidas  = items.filter(i => i.factura_estado === 'excluida')
   const conError   = items.filter(i => i.factura_estado === 'error')
 
-  // Búsqueda + filtro de estado
+  // Búsqueda + filtro de estado + filtro de canal de cobro
   function aplicarFiltros(lista: ItemFacturacion[]) {
-    return lista.filter(i =>
-      !busqueda || i.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase())
-    )
+    return lista.filter(i => {
+      if (busqueda && !i.cliente_nombre.toLowerCase().includes(busqueda.toLowerCase())) return false
+      if (filtroCanal === 'presencial') return i.tipo_pago != null && CANALES_PRESENCIALES.includes(i.tipo_pago)
+      if (filtroCanal === 'transferencia') return i.tipo_pago != null && !CANALES_PRESENCIALES.includes(i.tipo_pago)
+      return true
+    })
   }
+
+  // Totales por canal (para el card de resumen)
+  const itemsPresenciales = items.filter(i => i.tipo_pago != null && CANALES_PRESENCIALES.includes(i.tipo_pago))
+  const itemsTransferencia = items.filter(i => i.tipo_pago != null && !CANALES_PRESENCIALES.includes(i.tipo_pago))
+  const montoPresencial = itemsPresenciales.reduce((s, i) => s + i.monto, 0)
+  const montoTransferencia = itemsTransferencia.reduce((s, i) => s + i.monto, 0)
+  const comisionTotal = items.reduce((s, i) => s + (i.mp_comision ?? 0), 0)
+  const sinIdentificar = items.filter(i => i.tipo_pago == null).length
   const pendientesFiltrados = (filtroEstado === 'todos' || filtroEstado === 'pendiente') ? aplicarFiltros([...pendientes, ...conError]) : []
   const emitidasFiltradas   = (filtroEstado === 'todos' || filtroEstado === 'emitida')   ? aplicarFiltros([...emitidas].sort((a, b) => b.fecha.localeCompare(a.fecha)))   : []
   const excluidasFiltradas  = (filtroEstado === 'todos' || filtroEstado === 'excluida')  ? aplicarFiltros(excluidas)  : []
@@ -428,8 +478,13 @@ export default function FacturacionPage() {
               ? <span className="font-mono text-sm font-medium text-gray-900">{formatDNI(item.cliente_dni)}</span>
               : <span className="text-xs text-gray-500 italic">Sin DNI</span>}
           </div>
-          {/* Servicio */}
-          <p className="hidden md:block text-xs text-gray-700 truncate">{item.servicio_nombre}</p>
+          {/* Servicio + canal de cobro */}
+          <div className="hidden md:block min-w-0">
+            <p className="text-xs text-gray-700 truncate">{item.servicio_nombre}</p>
+            {item.tipo_pago && (
+              <div className="mt-0.5"><BadgeCanal tipo={item.tipo_pago} match={item.mp_match} /></div>
+            )}
+          </div>
           {/* Fecha */}
           <p className="hidden md:block text-xs text-gray-700 text-right">{isoToDisplay(item.fecha)}</p>
           {/* ESTADO */}
@@ -662,10 +717,13 @@ export default function FacturacionPage() {
         {/* Nombre */}
         <div className="min-w-0">
           <p className="font-semibold text-sm truncate">{item.cliente_nombre}</p>
-          {/* DNI visible en mobile (debajo del nombre) */}
-          <p className="md:hidden text-xs text-muted-foreground mt-0.5">
-            {item.cliente_dni ? formatDNI(item.cliente_dni) : <span className="text-amber-600">Sin DNI</span>}
-          </p>
+          {/* DNI + canal visibles en mobile (debajo del nombre) */}
+          <div className="md:hidden flex items-center gap-1.5 mt-0.5">
+            <span className="text-xs text-muted-foreground">
+              {item.cliente_dni ? formatDNI(item.cliente_dni) : <span className="text-amber-600">Sin DNI</span>}
+            </span>
+            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} />
+          </div>
         </div>
 
         {/* DNI — columna separada en desktop */}
@@ -681,8 +739,13 @@ export default function FacturacionPage() {
           )}
         </div>
 
-        {/* Servicio */}
-        <p className="hidden md:block text-xs text-muted-foreground truncate">{item.servicio_nombre}</p>
+        {/* Servicio + canal de cobro */}
+        <div className="hidden md:block min-w-0">
+          <p className="text-xs text-muted-foreground truncate">{item.servicio_nombre}</p>
+          {item.tipo_pago && (
+            <div className="mt-0.5"><BadgeCanal tipo={item.tipo_pago} match={item.mp_match} /></div>
+          )}
+        </div>
 
         {/* Fecha */}
         <p className="hidden md:block text-xs text-muted-foreground text-right whitespace-nowrap">{isoToDisplay(item.fecha)}</p>
@@ -856,11 +919,51 @@ export default function FacturacionPage() {
                 </button>
               )}
             </div>
+
+            {/* Filtro de canal de cobro — solo si MP respondió */}
+            {mpDisponible && (
+              <div className="flex gap-1 rounded-lg border border-violet-200 bg-violet-50 p-1 self-start">
+                <button onClick={() => setFiltroCanal('todos')}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${filtroCanal === 'todos' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                  Todo MP
+                </button>
+                <button onClick={() => setFiltroCanal('presencial')}
+                  title="Cobros presenciales en el local (QR y posnet Point)"
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroCanal === 'presencial' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                  <span className="block">▣ QR / Point</span>
+                  <span className={`block text-[10px] font-normal ${filtroCanal === 'presencial' ? 'text-violet-100' : 'text-violet-500'}`}>
+                    {itemsPresenciales.length} · {formatPrecio(montoPresencial)}
+                  </span>
+                </button>
+                <button onClick={() => setFiltroCanal('transferencia')}
+                  title="Transferencias al alias / CVU"
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors leading-tight ${filtroCanal === 'transferencia' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
+                  <span className="block">⇄ Transferencia</span>
+                  <span className={`block text-[10px] font-normal ${filtroCanal === 'transferencia' ? 'text-violet-100' : 'text-violet-500'}`}>
+                    {itemsTransferencia.length} · {formatPrecio(montoTransferencia)}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Aviso cuando el filtro de canal está activo */}
+          {mpDisponible && filtroCanal !== 'todos' && (
+            <div className="flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm text-violet-800">
+              <Info className="h-4 w-4 shrink-0" />
+              <span>
+                Mostrando solo <strong>{filtroCanal === 'presencial' ? 'cobros presenciales (QR / Point)' : 'transferencias'}</strong>.
+                {' '}Al seleccionar todas, el envío masivo a ARCA va a incluir únicamente estas.
+              </span>
+              <button onClick={() => setFiltroCanal('todos')} className="ml-auto shrink-0 text-xs underline hover:no-underline">
+                Quitar filtro
+              </button>
+            </div>
+          )}
 
           {/* Stats */}
           {!loading && items.length > 0 && (
-            <div className="grid grid-cols-3 gap-3">
+            <div className={`grid gap-3 ${mpDisponible ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-3'}`}>
               <div className="rounded-xl border bg-card px-4 py-3">
                 <p className="text-xs text-muted-foreground">Total MP del mes</p>
                 <p className="text-xl font-bold text-blue-700">{formatPrecio(totalMonto)}</p>
@@ -876,6 +979,16 @@ export default function FacturacionPage() {
                 <p className="text-xl font-bold text-green-700">{emitidas.length}</p>
                 <p className="text-xs text-green-600">{formatPrecio(montoEmitido)}</p>
               </div>
+              {mpDisponible && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+                  <p className="text-xs text-violet-700">Comisiones MP</p>
+                  <p className="text-xl font-bold text-violet-700">{formatPrecio(comisionTotal)}</p>
+                  <p className="text-xs text-violet-600">
+                    {totalMonto > 0 ? `${((comisionTotal / totalMonto) * 100).toFixed(2)}% del total` : '—'}
+                    {sinIdentificar > 0 && ` · ${sinIdentificar} sin identificar`}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -925,7 +1038,7 @@ export default function FacturacionPage() {
                   <span />
                   <span>Cliente</span>
                   <span>DNI</span>
-                  <span>Servicio</span>
+                  <span>Servicio / Canal</span>
                   <span className="text-right">Fecha</span>
                   <span className="text-center">Estado</span>
                   <span className="text-right">Monto</span>

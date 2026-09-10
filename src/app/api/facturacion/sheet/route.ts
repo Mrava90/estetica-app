@@ -26,6 +26,7 @@
 import { NextResponse } from 'next/server'
 import { GoogleAuth } from 'google-auth-library'
 import { createClient } from '@supabase/supabase-js'
+import { traerPagosDelMes, crearMatcher } from '@/lib/mercadopago'
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
@@ -161,14 +162,21 @@ export async function GET(request: Request) {
     // Combinar y ordenar por fecha
     const filas = [...filasSSR, ...filasKW].sort((a, b) => a.fecha.localeCompare(b.fecha))
 
-    // ── 4. Cruzar con tabla facturas ───────────────────────────────────────
+    // ── 4. Cruzar con tabla facturas + pagos de MercadoPago ────────────────
     const supabase = getSupabase()
     const keys = filas.map(f => f.afip_row_key)
 
-    const { data: facturas } = await supabase
-      .from('facturas')
-      .select('afip_row_key, id, estado, cae, numero_cbte, cae_vencimiento, error_msg')
-      .in('afip_row_key', keys)
+    // Los pagos de MP se traen en paralelo con las facturas. Si MP falla o el
+    // token no esta configurado, traerPagosDelMes devuelve [] y el modulo sigue
+    // funcionando exactamente como antes (los campos mp_* quedan en null).
+    const [facturasRes, pagosMP] = await Promise.all([
+      supabase
+        .from('facturas')
+        .select('afip_row_key, id, estado, cae, numero_cbte, cae_vencimiento, error_msg')
+        .in('afip_row_key', keys),
+      traerPagosDelMes(mesParam),
+    ])
+    const facturas = facturasRes.data
 
     type FacturaRow = NonNullable<typeof facturas>[number]
     const facturaMap: Record<string, FacturaRow> = {}
@@ -177,8 +185,15 @@ export async function GET(request: Request) {
     }
 
     // ── 5. Combinar y devolver ─────────────────────────────────────────────
+    // El matcher consume cada pago una sola vez, en el orden en que se
+    // recorren las filas (ya ordenadas por fecha). Si dos filas del mismo dia
+    // tienen el mismo monto, la primera se lleva el pago y ambas quedan
+    // marcadas como 'ambiguo' para que el usuario verifique.
+    const matchMP = crearMatcher(pagosMP)
+
     const result = filas.map(fila => {
       const factura = facturaMap[fila.afip_row_key] ?? null
+      const { pago, match } = matchMP(fila.fecha, fila.monto)
       return {
         afip_row_key:        fila.afip_row_key,
         fecha:               fila.fecha,
@@ -194,10 +209,20 @@ export async function GET(request: Request) {
                                : null,
         factura_vencimiento: factura?.cae_vencimiento ?? null,
         factura_error:       factura?.error_msg ?? null,
+        // ── Enriquecimiento MercadoPago (null si MP no respondio) ──
+        tipo_pago:           pago?.tipo ?? null,
+        mp_payment_id:       pago?.id ?? null,
+        mp_comision:         pago?.comision ?? null,
+        mp_neto:             pago?.neto ?? null,
+        mp_match:            pagosMP.length > 0 ? match : null,
       }
     })
 
-    return NextResponse.json({ items: result, total: result.length })
+    return NextResponse.json({
+      items: result,
+      total: result.length,
+      mp_disponible: pagosMP.length > 0,
+    })
 
   } catch (err) {
     console.error('facturacion/sheet error:', err)
