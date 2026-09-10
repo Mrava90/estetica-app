@@ -75,10 +75,12 @@ export async function traerPagosDelMes(mes: string): Promise<PagoMP[]> {
       url.searchParams.set('limit', String(LIMIT))
       url.searchParams.set('offset', String(offset))
 
+      // no-store a proposito: con `next: { revalidate }` Next cacheaba la
+      // respuesta de cuando el token todavia no estaba configurado y seguia
+      // devolviendo vacio. La latencia extra (~1s) es preferible a datos viejos.
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
-        // El modulo de facturacion se consulta seguido; cachear 5 min alcanza
-        next: { revalidate: 300 },
+        cache: 'no-store',
       })
       if (!res.ok) {
         console.error('MP payments/search fallo:', res.status, (await res.text()).slice(0, 200))

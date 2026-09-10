@@ -30,6 +30,11 @@ import { traerPagosDelMes, crearMatcher } from '@/lib/mercadopago'
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
+// El enriquecimiento con MercadoPago depende de env vars que se leen en runtime.
+// Sin esto Next puede intentar cachear la respuesta y servir datos de cuando el
+// token todavia no estaba cargado.
+export const dynamic = 'force-dynamic'
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseAmount(str: string): number {
