@@ -5,151 +5,23 @@ import { createClient } from '@/lib/supabase/client'
 import { formatPrecio } from '@/lib/dates'
 import { SwitchFacturacionAuto } from '@/components/facturacion/SwitchFacturacionAuto'
 import { FacturaManual } from '@/components/facturacion/FacturaManual'
+import { ConfigArca } from '@/components/facturacion/ConfigArca'
+import { FilaFactura, type FilaFacturaProps } from '@/components/facturacion/FilaFactura'
+import { mesLabel } from './helpers'
+import { CANALES_PRESENCIALES, type EdicionFila, type ItemFacturacion, type RowMode } from './tipos'
 import {
   Receipt,
-  CheckCircle2,
-  XCircle,
   AlertCircle,
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Building2,
   Settings2,
-  ExternalLink,
   Info,
-  RotateCcw,
   ChevronDown,
-  CreditCard,
   Send,
   Search,
-  FileText,
-  Mail,
-  X,
-  Pencil,
-  Save,
+  XCircle,
 } from 'lucide-react'
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-type EstadoFactura = 'pendiente' | 'excluida' | 'emitida' | 'error'
-type RowMode = 'idle' | 'confirming' | 'loading'
-type TipoPagoMP = 'QR' | 'Point' | 'Transferencia' | 'Link' | 'Dinero en cuenta' | 'Otro'
-type MedioPago = 'MercadoPago' | 'Efectivo' | 'Otro'
-
-interface ItemFacturacion {
-  afip_row_key: string
-  fecha: string
-  cliente_nombre: string
-  cliente_dni: string | null
-  servicio_nombre: string
-  monto: number
-  medio_pago: MedioPago
-  factura_id: string | null
-  factura_estado: EstadoFactura | null
-  factura_cae: string | null
-  factura_numero: string | null
-  factura_vencimiento: string | null
-  factura_error: string | null
-  // Enriquecimiento MercadoPago — null si MP no esta disponible
-  tipo_pago: TipoPagoMP | null
-  mp_payment_id: number | null
-  mp_comision: number | null
-  mp_neto: number | null
-  mp_match: 'unico' | 'ambiguo' | 'sin_match' | null
-}
-
-/** Canales presenciales (cobro en el local). Son los que se facturan automatico. */
-const CANALES_PRESENCIALES: TipoPagoMP[] = ['QR', 'Point']
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function mesLabel(d: Date) {
-  return d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-}
-
-function isoToDisplay(iso: string) {
-  const [y, m, d] = iso.split('-')
-  return `${d}/${m}/${y}`
-}
-
-function initials(nombre: string) {
-  const parts = nombre.trim().split(' ')
-  return parts.length >= 2
-    ? (parts[0][0] + parts[1][0]).toUpperCase()
-    : parts[0].slice(0, 2).toUpperCase()
-}
-
-function formatDNI(dni: string) {
-  const n = dni.replace(/\D/g, '')
-  if (n.length === 8) return `${n.slice(0, 2)}.${n.slice(2, 5)}.${n.slice(5)}`
-  if (n.length === 7) return `${n.slice(0, 1)}.${n.slice(1, 4)}.${n.slice(4)}`
-  return dni
-}
-
-const AVATAR_COLORS = [
-  'bg-fuchsia-100 text-fuchsia-700',
-  'bg-blue-100 text-blue-700',
-  'bg-amber-100 text-amber-700',
-  'bg-emerald-100 text-emerald-700',
-  'bg-rose-100 text-rose-700',
-  'bg-violet-100 text-violet-700',
-  'bg-sky-100 text-sky-700',
-]
-function avatarColor(nombre: string) {
-  return AVATAR_COLORS[nombre.charCodeAt(0) % AVATAR_COLORS.length]
-}
-
-/**
- * Badge del canal de cobro.
- * Para MercadoPago muestra el canal fino (QR / Point / Transferencia).
- * Para efectivo muestra un badge propio, porque no tiene canal de MP.
- */
-function BadgeCanal({ tipo, match, medio }: {
-  tipo: TipoPagoMP | null
-  match: ItemFacturacion['mp_match']
-  medio?: MedioPago
-}) {
-  if (medio === 'Efectivo') {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-0.5 rounded border border-emerald-200 bg-emerald-50 px-1 py-0 text-[9px] font-medium text-emerald-700 whitespace-nowrap leading-[1.4]"
-        title="Cobrado en efectivo">
-        <span aria-hidden>$</span> Efectivo
-      </span>
-    )
-  }
-  if (medio === 'Otro') {
-    return (
-      <span className="inline-flex shrink-0 items-center rounded border border-gray-200 bg-gray-50 px-1 py-0 text-[9px] font-medium text-gray-600 whitespace-nowrap leading-[1.4]"
-        title="Otro medio de pago (ej. gift card)">
-        Otro
-      </span>
-    )
-  }
-  if (!tipo) return null
-  const estilos: Record<TipoPagoMP, string> = {
-    'QR':               'bg-violet-100 text-violet-700 border-violet-200',
-    'Point':            'bg-indigo-100 text-indigo-700 border-indigo-200',
-    'Transferencia':    'bg-slate-100 text-slate-600 border-slate-200',
-    'Link':             'bg-cyan-100 text-cyan-700 border-cyan-200',
-    'Dinero en cuenta': 'bg-slate-100 text-slate-600 border-slate-200',
-    'Otro':             'bg-gray-100 text-gray-600 border-gray-200',
-  }
-  const iconos: Record<TipoPagoMP, string> = {
-    'QR': '▣', 'Point': '▤', 'Transferencia': '⇄', 'Link': '🔗', 'Dinero en cuenta': '●', 'Otro': '·',
-  }
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-0 text-[9px] font-medium whitespace-nowrap leading-[1.4] ${estilos[tipo]}`}
-      title={match === 'ambiguo' ? 'Varios pagos coinciden en fecha y monto — verificá' : `Cobrado por ${tipo}`}
-    >
-      <span aria-hidden>{iconos[tipo]}</span>
-      {tipo}
-      {match === 'ambiguo' && <span className="text-amber-600 font-bold" title="Coincidencia ambigua">?</span>}
-    </span>
-  )
-}
-
-// ── Componente principal ─────────────────────────────────────────────────────
 
 export default function FacturacionPage() {
   const supabase = createClient()
@@ -161,8 +33,6 @@ export default function FacturacionPage() {
   const [rowMode, setRowMode] = useState<Record<string, RowMode>>({})
   const [rowError, setRowError] = useState<Record<string, string>>({})
   const [mostrarExcluidas, setMostrarExcluidas] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; checks: Record<string, { ok: boolean; detail: string }>; entorno?: string } | null>(null)
-  const [testLoading, setTestLoading] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState<'todos' | 'pendiente' | 'emitida' | 'excluida'>('todos')
   const [filtroCanal, setFiltroCanal] = useState<'todos' | 'presencial' | 'transferencia' | 'efectivo'>('todos')
@@ -173,7 +43,7 @@ export default function FacturacionPage() {
   const [emailInput, setEmailInput]   = useState<Record<string, string>>({})
   const [emailStatus, setEmailStatus] = useState<Record<string, 'idle' | 'loading' | 'sent' | 'error'>>({})
   const [emailError, setEmailError]   = useState<Record<string, string>>({})
-  const [editData, setEditData]       = useState<Record<string, { nombre: string; dni: string; descripcion: string }>>({})
+  const [editData, setEditData]       = useState<Record<string, EdicionFila>>({})
   const [editingRow, setEditingRow]   = useState<string | null>(null)
 
   async function handleEnviarEmail(facturaId: string) {
@@ -197,20 +67,6 @@ export default function FacturacionPage() {
     } catch (e: any) {
       setEmailStatus(s => ({ ...s, [facturaId]: 'error' }))
       setEmailError(s => ({ ...s, [facturaId]: e.message }))
-    }
-  }
-
-  async function testConexion() {
-    setTestLoading(true)
-    setTestResult(null)
-    try {
-      const res = await fetch('/api/facturacion/test')
-      const json = await res.json()
-      setTestResult(json)
-    } catch {
-      setTestResult({ ok: false, checks: { conexion: { ok: false, detail: 'Error de red al contactar el servidor' } } })
-    } finally {
-      setTestLoading(false)
     }
   }
 
@@ -490,383 +346,63 @@ export default function FacturacionPage() {
   const montoEmitido   = emitidas.reduce((s, i) => s + i.monto, 0)
   const montoPendiente = [...pendientes, ...conError].reduce((s, i) => s + i.monto, 0)
 
-  // ── Render de una fila ────────────────────────────────────────────────────
+  // ── Props de una fila ─────────────────────────────────────────────────────
+  // La fila es presentacional: todo su estado y sus acciones salen de aca.
 
-  function renderFila(item: ItemFacturacion) {
-    const k    = item.afip_row_key
-    const mode = rowMode[k] || 'idle'
-    const err  = rowError[k]
-    const esManual = (item as any).datos_json?.manual === true
+  function propsDeFila(item: ItemFacturacion): FilaFacturaProps {
+    const k = item.afip_row_key
+    const fid = item.factura_id ?? ''
+    return {
+      item,
+      mode: rowMode[k] || 'idle',
+      err:  rowError[k],
 
-    // ── Emitida ──────────────────────────────────────────────────────────────
-    if (item.factura_estado === 'emitida') {
-      return (
-        <li key={k} className="grid grid-cols-[1.75rem_1fr_auto] md:grid-cols-[1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_9rem] items-center gap-x-2 gap-y-0 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5">
-          {/* Avatar */}
-          <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
-            {initials(item.cliente_nombre)}
-          </div>
-          {/* Nombre */}
-          <div className="min-w-0">
-            <p className="font-semibold text-xs truncate text-gray-900 leading-tight">{item.cliente_nombre}</p>
-          </div>
-          {/* DNI */}
-          <div className="hidden md:block">
-            {item.cliente_dni
-              ? <span className="font-mono text-[11px] font-medium text-gray-900">{formatDNI(item.cliente_dni)}</span>
-              : <span className="text-[10px] text-gray-500 italic">Sin DNI</span>}
-          </div>
-          {/* Servicio + canal de cobro */}
-          <div className="hidden md:flex items-center gap-1.5 min-w-0">
-            <p className="text-[11px] text-gray-700 truncate">{item.servicio_nombre}</p>
-            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
-          </div>
-          {/* Fecha */}
-          <p className="hidden md:block text-[10px] text-gray-700 text-right">{isoToDisplay(item.fecha)}</p>
-          {/* ESTADO */}
-          <div className="hidden md:flex justify-center">
-            <span className="rounded-full bg-green-200 text-green-800 text-[9px] font-medium px-1.5 py-0.5 whitespace-nowrap">Facturada</span>
-          </div>
-          {/* Monto */}
-          <p className="font-bold text-xs text-right text-gray-900">{formatPrecio(item.monto)}</p>
-          {/* Estado */}
-          <div className="flex items-center gap-1">
-            <div className="flex flex-col items-end gap-0 min-w-[76px]">
-              {item.factura_cae ? (
-                <>
-                  <span className="flex items-center gap-0.5 text-[10px] font-semibold text-gray-900 whitespace-nowrap leading-tight">
-                    <CheckCircle2 className="h-3 w-3 text-green-600" /> N°{item.factura_numero}
-                  </span>
-                  <span className="font-mono text-[9px] text-gray-700 tracking-tight leading-tight">{item.factura_cae}</span>
-                </>
-              ) : (
-                <span className="flex items-center gap-0.5 text-[10px] font-semibold text-gray-900 whitespace-nowrap">
-                  <CheckCircle2 className="h-3 w-3 text-green-600" /> Facturada
-                  <span className="rounded bg-green-200 px-1 text-[9px] font-medium text-green-800">Manual</span>
-                </span>
-              )}
-            </div>
-            {item.factura_id && item.factura_cae && (
-              <a
-                href={`/facturacion/comprobante/${item.factura_id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Ver / descargar comprobante PDF"
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
-              >
-                <FileText className="h-3 w-3" />
-              </a>
-            )}
-            {item.factura_id && item.factura_cae && (
-              <button
-                onClick={() => setEmailRow(emailRow === item.factura_id ? null : item.factura_id!)}
-                title="Enviar comprobante por email"
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-green-300 bg-white text-green-700 hover:bg-green-100 transition-colors"
-              >
-                <Mail className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-          {/* Input de email inline */}
-          {emailRow === item.factura_id && item.factura_id && (
-            <div className="col-span-full mt-2 flex items-center gap-2">
-              {emailStatus[item.factura_id] === 'sent' ? (
-                <span className="flex items-center gap-1.5 text-sm text-green-700 font-medium">
-                  <CheckCircle2 className="h-4 w-4" /> Comprobante enviado
-                </span>
-              ) : (
-                <>
-                  <input
-                    type="email"
-                    placeholder="correo@ejemplo.com"
-                    value={emailInput[item.factura_id] || ''}
-                    onChange={e => setEmailInput(s => ({ ...s, [item.factura_id!]: e.target.value }))}
-                    onKeyDown={e => e.key === 'Enter' && handleEnviarEmail(item.factura_id!)}
-                    className="h-8 flex-1 rounded-md border border-green-300 bg-white dark:bg-zinc-800 dark:text-white dark:border-green-700 dark:placeholder-zinc-400 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => handleEnviarEmail(item.factura_id!)}
-                    disabled={emailStatus[item.factura_id] === 'loading'}
-                    className="flex h-8 items-center gap-1.5 rounded-md bg-green-700 px-3 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50 transition-colors"
-                  >
-                    {emailStatus[item.factura_id] === 'loading'
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Send className="h-3.5 w-3.5" />}
-                    Enviar
-                  </button>
-                  <button
-                    onClick={() => setEmailRow(null)}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  {emailStatus[item.factura_id] === 'error' && (
-                    <span className="text-xs text-red-600">{emailError[item.factura_id]}</span>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </li>
-      )
+      emailAbierto:   Boolean(item.factura_id) && emailRow === item.factura_id,
+      emailValor:     emailInput[fid] || '',
+      emailStatus:    emailStatus[fid] || 'idle',
+      emailError:     emailError[fid],
+      onToggleEmail:  id => setEmailRow(emailRow === id ? null : id),
+      onCambiarEmail: (id, valor) => setEmailInput(s => ({ ...s, [id]: valor })),
+      onEnviarEmail:  handleEnviarEmail,
+      onCerrarEmail:  () => setEmailRow(null),
+
+      seleccionado:  seleccionados.has(k),
+      onSeleccionar: (key, checked) => setSeleccionados(prev => {
+        const next = new Set(prev)
+        if (checked) next.add(key)
+        else next.delete(key)
+        return next
+      }),
+
+      editando: editingRow === k,
+      edicion:  editData[k],
+      onAbrirEdicion: it => {
+        const key = it.afip_row_key
+        setEditingRow(key)
+        setEditData(s => s[key] ? s : { ...s, [key]: {
+          nombre: it.cliente_nombre,
+          dni: it.cliente_dni ?? '',
+          descripcion: it.servicio_nombre ?? '',
+        } })
+      },
+      onCambiarEdicion: (key, patch) => setEditData(s => ({ ...s, [key]: { ...s[key], ...patch } })),
+      onGuardarEdicion: () => setEditingRow(null),
+      onDescartarEdicion: key => {
+        setEditingRow(null)
+        setEditData(s => { const n = { ...s }; delete n[key]; return n })
+      },
+
+      onCheckClick:           handleCheckClick,
+      onEnviarARCA:           handleEnviarARCA,
+      onMarcarManual:         handleMarcarManual,
+      onExcluir:              handleExcluir,
+      onRestaurar:            handleRestaurar,
+      onCancelarConfirmacion: key => setMode(key, 'idle'),
     }
-
-    // ── Excluida ─────────────────────────────────────────────────────────────
-    if (item.factura_estado === 'excluida') {
-      return (
-        <li key={k} className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-2.5 py-1 opacity-50">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-[9px] font-bold">
-            {initials(item.cliente_nombre)}
-          </div>
-          <p className="flex-1 text-xs line-through truncate">{item.cliente_nombre}</p>
-          {item.cliente_dni && <span className="hidden md:block font-mono text-[10px] line-through text-muted-foreground">{formatDNI(item.cliente_dni)}</span>}
-          <p className="text-xs font-medium line-through text-muted-foreground">{formatPrecio(item.monto)}</p>
-          <button onClick={() => handleRestaurar(item)} disabled={mode === 'loading'}
-            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap">
-            {mode === 'loading' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
-            Restaurar
-          </button>
-        </li>
-      )
-    }
-
-    // ── Loading ──────────────────────────────────────────────────────────────
-    if (mode === 'loading') {
-      return (
-        <li key={k} className="flex items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 opacity-60">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
-          <p className="flex-1 text-xs font-medium">{item.cliente_nombre}</p>
-          <p className="text-[10px] text-muted-foreground">Procesando…</p>
-          <p className="font-semibold text-xs">{formatPrecio(item.monto)}</p>
-        </li>
-      )
-    }
-
-    // ── Confirmando ──────────────────────────────────────────────────────────
-    if (mode === 'confirming') {
-      return (
-        <li key={k} className="flex flex-col gap-2 rounded-lg border-2 border-blue-300 bg-blue-50 px-3 py-2.5">
-          {/* Resumen del ítem */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
-              {initials(item.cliente_nombre)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-xs">{item.cliente_nombre}</p>
-            </div>
-            {item.cliente_dni
-              ? <span className="font-mono text-[11px] font-semibold bg-white border rounded px-1.5 py-0.5">{formatDNI(item.cliente_dni)}</span>
-              : <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">Sin DNI · Cons. Final</span>}
-            <p className="font-bold text-sm ml-auto">{formatPrecio(item.monto)}</p>
-          </div>
-
-          {/* Opciones */}
-          <p className="text-[11px] text-blue-700 font-medium">¿Qué querés hacer con esta factura?</p>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              onClick={() => handleEnviarARCA(item)}
-              className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors"
-            >
-              <Send className="h-3.5 w-3.5" />
-              Enviar a ARCA
-            </button>
-            <button
-              onClick={() => handleMarcarManual(item)}
-              className="flex items-center gap-1.5 rounded-md border border-green-300 bg-white px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-50 transition-colors"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Ya fue facturada
-            </button>
-            <button
-              onClick={() => setMode(k, 'idle')}
-              className="flex items-center gap-1.5 rounded-md border bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-
-          {/* Aclaración */}
-          <p className="text-[10px] text-muted-foreground leading-snug">
-            <strong>Enviar a ARCA</strong> genera el CAE automáticamente. · <strong>Ya fue facturada</strong> marca el ítem
-            como procesado sin conectarse a ARCA (para facturas emitidas a mano desde la web de AFIP).
-          </p>
-        </li>
-      )
-    }
-
-    // ── Error ────────────────────────────────────────────────────────────────
-    if (err || item.factura_estado === 'error') {
-      const msg = err || item.factura_error || 'Error desconocido'
-      return (
-        <li key={k} className="flex flex-col gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
-              {initials(item.cliente_nombre)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-xs">{item.cliente_nombre}</p>
-              <p className="text-[10px] text-red-600 leading-snug">{msg}</p>
-            </div>
-            {item.cliente_dni && <span className="font-mono text-[11px] text-muted-foreground">{formatDNI(item.cliente_dni)}</span>}
-            <p className="font-bold text-xs">{formatPrecio(item.monto)}</p>
-          </div>
-          <div className="flex gap-1.5">
-            <button onClick={() => handleCheckClick(k)}
-              className="flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[10px] font-medium text-white hover:bg-blue-700 transition-colors">
-              <RotateCcw className="h-2.5 w-2.5" /> Reintentar
-            </button>
-            <button onClick={() => handleExcluir(item)}
-              className="flex items-center gap-1 rounded-md border px-2.5 py-1 text-[10px] font-medium hover:bg-muted transition-colors">
-              <XCircle className="h-2.5 w-2.5" /> Descartar
-            </button>
-          </div>
-        </li>
-      )
-    }
-
-    // ── Pendiente (idle) ─────────────────────────────────────────────────────
-    return (
-      <li key={k} className="grid grid-cols-[1rem_1.75rem_1fr_auto_auto] md:grid-cols-[1rem_1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_6rem] items-center gap-x-2 rounded-lg border bg-card px-2.5 py-1.5 hover:bg-muted/20 transition-colors">
-
-        {/* Checkbox */}
-        <input type="checkbox"
-          className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 cursor-pointer"
-          checked={seleccionados.has(k)}
-          onChange={e => setSeleccionados(prev => {
-            const next = new Set(prev)
-            e.target.checked ? next.add(k) : next.delete(k)
-            return next
-          })}
-        />
-
-        {/* Avatar */}
-        <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
-          {initials(item.cliente_nombre)}
-        </div>
-
-        {/* Nombre */}
-        <div className="min-w-0">
-          <p className="font-semibold text-xs truncate leading-tight">{item.cliente_nombre}</p>
-          {/* DNI + canal visibles en mobile (debajo del nombre) */}
-          <div className="md:hidden flex items-center gap-1 mt-0.5">
-            <span className="text-[10px] text-muted-foreground">
-              {item.cliente_dni ? formatDNI(item.cliente_dni) : <span className="text-amber-600">Sin DNI</span>}
-            </span>
-            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
-          </div>
-        </div>
-
-        {/* DNI — columna separada en desktop */}
-        <div className="hidden md:flex items-center">
-          {item.cliente_dni ? (
-            <span className="font-mono text-[11px] font-semibold text-gray-800 bg-gray-100 rounded px-1.5 py-0.5">
-              {formatDNI(item.cliente_dni)}
-            </span>
-          ) : (
-            <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 whitespace-nowrap">
-              Sin DNI
-            </span>
-          )}
-        </div>
-
-        {/* Servicio + canal de cobro */}
-        <div className="hidden md:flex items-center gap-1.5 min-w-0">
-          <p className="text-[11px] text-muted-foreground truncate">{item.servicio_nombre}</p>
-          <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
-        </div>
-
-        {/* Fecha */}
-        <p className="hidden md:block text-[10px] text-muted-foreground text-right whitespace-nowrap">{isoToDisplay(item.fecha)}</p>
-
-        {/* ESTADO */}
-        <div className="hidden md:flex justify-center">
-          <span className="rounded-full bg-amber-100 text-amber-700 text-[9px] font-medium px-1.5 py-0.5 whitespace-nowrap">Pendiente</span>
-        </div>
-
-        {/* Monto */}
-        <p className="font-bold text-xs text-right whitespace-nowrap">{formatPrecio(item.monto)}</p>
-
-        {/* Botones ✓ / ✗ / editar */}
-        <div className="flex items-center justify-end gap-1">
-          <button
-            onClick={() => {
-              setEditingRow(k)
-              if (!editData[k]) setEditData(s => ({ ...s, [k]: {
-                nombre: item.cliente_nombre,
-                dni: item.cliente_dni ?? '',
-                descripcion: item.servicio_nombre ?? '',
-              }}))
-            }}
-            title="Editar datos"
-            className="flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-white text-gray-500 hover:bg-gray-100 transition-colors"
-          >
-            <Pencil className="h-3 w-3" />
-          </button>
-          <button
-            onClick={() => handleCheckClick(k)}
-            title="Aprobar / marcar como facturada"
-            className="flex h-6 w-6 items-center justify-center rounded border border-green-400 bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            onClick={() => handleExcluir(item)}
-            title="No facturar este ítem"
-            className="flex h-6 w-6 items-center justify-center rounded border border-red-300 bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
-          >
-            <XCircle className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        {/* Panel de edición inline */}
-        {editingRow === k && editData[k] && (
-          <div className="col-span-full mt-1.5 flex flex-wrap items-end gap-1.5 border-t pt-2">
-            <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide">Nombre</label>
-              <input
-                type="text"
-                value={editData[k].nombre}
-                onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], nombre: e.target.value } }))}
-                className="h-6 rounded border px-1.5 text-xs bg-background"
-              />
-            </div>
-            <div className="flex flex-col gap-0.5 w-28">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide">DNI</label>
-              <input
-                type="text"
-                value={editData[k].dni}
-                onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], dni: e.target.value } }))}
-                placeholder="Sin DNI"
-                className="h-6 rounded border px-1.5 text-xs bg-background"
-              />
-            </div>
-            <div className="flex flex-col gap-0.5 flex-[2] min-w-[150px]">
-              <label className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide">Servicio / Descripción</label>
-              <input
-                type="text"
-                value={editData[k].descripcion}
-                onChange={e => setEditData(s => ({ ...s, [k]: { ...s[k], descripcion: e.target.value } }))}
-                className="h-6 rounded border px-1.5 text-xs bg-background"
-              />
-            </div>
-            <button
-              onClick={() => setEditingRow(null)}
-              className="flex h-6 items-center gap-1 rounded bg-primary px-2 text-[11px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              <Save className="h-3 w-3" /> Guardar
-            </button>
-            <button
-              onClick={() => { setEditingRow(null); setEditData(s => { const n = { ...s }; delete n[k]; return n }) }}
-              className="flex h-6 items-center gap-1 rounded border px-1.5 text-[11px] text-muted-foreground hover:bg-muted transition-colors"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        )}
-      </li>
-    )
   }
+
+  const renderFila = (item: ItemFacturacion) =>
+    <FilaFactura key={item.afip_row_key} {...propsDeFila(item)} />
 
   // ── Render principal ──────────────────────────────────────────────────────
 
@@ -1192,108 +728,7 @@ export default function FacturacionPage() {
       ) : null}
 
       {/* ── TAB: Configuración ───────────────────────────────────────────────── */}
-      {tab === 'configuracion' && (
-        <div className="space-y-3 max-w-2xl text-sm">
-
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
-            <div className="flex items-center gap-2 font-semibold text-blue-800">
-              <Building2 className="h-5 w-5" /> Integración con ARCA (ex-AFIP)
-            </div>
-            <p className="text-sm text-blue-700 leading-relaxed">
-              ARCA usa Web Services SOAP. Flujo: certificado digital →
-              autenticación WSAA (token 12 h) → solicitud WSFEV1 →
-              recibo <strong>CAE</strong> (14 dígitos de validez fiscal).
-            </p>
-            <p className="text-sm text-blue-700">
-              💡 Sin DNI del cliente → se emite a <strong>Consumidor Final</strong> (válido hasta $10.000.000).
-            </p>
-          </div>
-
-          <div className="rounded-lg border bg-card p-3 space-y-3">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Settings2 className="h-4 w-4 text-muted-foreground" /> Pasos para activar
-            </h2>
-            <ol className="space-y-4 text-sm">
-              {[
-                { n: 1, title: 'Ejecutar la migración en Supabase',
-                  body: <>SQL Editor → pegá el contenido de <code className="bg-muted px-1 rounded text-xs">supabase/migrations/00009_facturas.sql</code></> },
-                { n: 2, title: 'Obtener certificado digital X.509 en ARCA',
-                  body: 'arca.gob.ar con tu CUIT → Administrador de Relaciones → WSFEV1 → Descargar certificado' },
-                { n: 3, title: 'Variables de entorno en Vercel',
-                  body: (
-                    <div className="mt-1 rounded-lg bg-muted p-3 font-mono text-xs space-y-0.5">
-                      <p><span className="text-blue-700">AFIP_CUIT</span>=20xxxxxxxxx8</p>
-                      <p><span className="text-blue-700">AFIP_CERT</span>=-----BEGIN CERTIFICATE-----...</p>
-                      <p><span className="text-blue-700">AFIP_KEY</span>=-----BEGIN PRIVATE KEY-----...</p>
-                      <p><span className="text-blue-700">AFIP_PUNTO_VENTA</span>=1</p>
-                      <p><span className="text-blue-700">AFIP_TIPO_CBTE</span>=11 <span className="text-muted-foreground"># 11=Factura C</span></p>
-                      <p><span className="text-blue-700">AFIP_PROD</span>=false <span className="text-muted-foreground"># false=testing</span></p>
-                    </div>
-                  )},
-                { n: 4, title: 'Probar en homologación, luego producción',
-                  body: 'Con AFIP_PROD=false los CAE son de prueba. Cuando funcione todo, cambiá a true.' },
-              ].map(({ n, title, body }) => (
-                <li key={n} className="flex gap-3">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-xs">{n}</span>
-                  <div><p className="font-medium">{title}</p><div className="text-muted-foreground mt-0.5">{body}</div></div>
-                </li>
-              ))}
-            </ol>
-            <a href="https://www.afip.gob.ar/ws/documentacion/ws-factura-electronica.asp" target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline">
-              <ExternalLink className="h-3.5 w-3.5" /> Documentación oficial ARCA
-            </a>
-          </div>
-
-          {/* Test de conexión */}
-          <div className="rounded-lg border bg-card p-3 space-y-2">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Send className="h-4 w-4 text-muted-foreground" /> Probar conexión con ARCA
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Verifica que las variables de entorno estén configuradas, el certificado sea válido y el WSAA responda.
-            </p>
-            <button
-              onClick={testConexion}
-              disabled={testLoading}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {testLoading ? 'Verificando...' : 'Probar conexión'}
-            </button>
-            {testResult && (
-              <div className={`rounded-lg border p-4 space-y-2 ${testResult.ok ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-                <p className={`font-semibold text-sm ${testResult.ok ? 'text-green-800' : 'text-red-800'}`}>
-                  {testResult.ok ? '✓ Conexión exitosa' : '✗ Hay problemas de configuración'}
-                  {testResult.entorno && ` (${testResult.entorno})`}
-                </p>
-                <ul className="space-y-1">
-                  {Object.entries(testResult.checks).map(([key, val]) => (
-                    <li key={key} className="flex items-start gap-2 text-xs">
-                      <span className={val.ok ? 'text-green-600' : 'text-red-600'}>{val.ok ? '✓' : '✗'}</span>
-                      <span className={val.ok ? 'text-green-800' : 'text-red-800'}>{val.detail}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-lg border bg-card p-3 space-y-2">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Info className="h-4 w-4 text-muted-foreground" /> Tipo de factura según categoría fiscal
-            </h2>
-            <div className="text-sm space-y-2 text-muted-foreground">
-              <p><strong className="text-foreground">Factura C (tipo 11)</strong> · Monotributista → consumidor final</p>
-              <p><strong className="text-foreground">Factura B (tipo 6)</strong> · Resp. Inscripto → consumidor final o monotributista</p>
-            </div>
-            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-              Para clientes <strong>sin DNI</strong>: DocTipo=99 (Consumidor Final), DocNro=0. Válido para montos &lt; $10.000.000.
-            </div>
-          </div>
-
-        </div>
-      )}
+      {tab === 'configuracion' && <ConfigArca />}
     </div>
   )
 }
