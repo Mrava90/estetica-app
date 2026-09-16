@@ -11,7 +11,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // Public routes that don't need auth
-  const publicPaths = ['/login', '/reset-password', '/auth/confirm', '/reservar', '/api/mis-turnos', '/api/notificar-turno', '/api/reservar/booking', '/api/reservar/disponibilidad', '/api/promociones/activas', '/api/whatsapp/webhook', '/api/cron', '/api/auth/webauthn']
+  const publicPaths = ['/login', '/reset-password', '/auth/confirm', '/reservar', '/api/mis-turnos', '/api/notificar-turno', '/api/reservar/booking', '/api/reservar/disponibilidad', '/api/promociones/activas', '/api/whatsapp/webhook', '/api/cron', '/api/auth/webauthn',
+    // Se autentica sola: exige el CRON_SECRET o una sesion de admin. Tiene que
+    // pasar el middleware porque el cron facturar-qr la llama sin cookie.
+    '/api/facturacion/generar']
   const isPublic = publicPaths.some((p) => pathname.startsWith(p))
   if (isPublic) return NextResponse.next()
 

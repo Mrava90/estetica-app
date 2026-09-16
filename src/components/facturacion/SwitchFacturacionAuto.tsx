@@ -78,7 +78,7 @@ export function SwitchFacturacionAuto() {
             Facturación automática
           </p>
           <p className={`text-[10px] leading-tight ${activo ? 'text-amber-700' : 'text-muted-foreground'}`}>
-            {activo ? 'Activa · solo ventas QR' : 'Desactivada'}
+            {activo ? 'Activa · ventas QR y Point' : 'Desactivada'}
           </p>
         </div>
 
@@ -147,13 +147,13 @@ export function SwitchFacturacionAuto() {
           <div className="space-y-1.5">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Solo se factura si</p>
             <ul className="space-y-0.5 text-[10px] text-muted-foreground">
-              <li className="flex gap-1.5"><span className="text-green-600">✓</span> El cobro entró por <strong className="text-foreground">QR de MercadoPago</strong></li>
+              <li className="flex gap-1.5"><span className="text-green-600">✓</span> El cobro entró por <strong className="text-foreground">QR o posnet Point de MercadoPago</strong></li>
               <li className="flex gap-1.5"><span className="text-green-600">✓</span> El cruce con MP es <strong className="text-foreground">único</strong> (no ambiguo)</li>
               <li className="flex gap-1.5"><span className="text-green-600">✓</span> No tiene factura ni fue descartada</li>
               <li className="flex gap-1.5"><span className="text-green-600">✓</span> El monto no supera el tope de abajo</li>
             </ul>
             <p className="text-[10px] text-muted-foreground pt-0.5">
-              Las transferencias, el posnet Point y las ventas ambiguas <strong>nunca</strong> se facturan solas.
+              Las transferencias, los links de pago y las ventas ambiguas <strong>nunca</strong> se facturan solas.
             </p>
           </div>
 
@@ -183,7 +183,7 @@ export function SwitchFacturacionAuto() {
               )}
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Una venta QR de más de {formatPrecio(config.facturacion_auto_monto_max)} queda pendiente para que la revises a mano.
+              Una venta QR o Point de más de {formatPrecio(config.facturacion_auto_monto_max)} queda pendiente para que la revises a mano.
             </p>
           </div>
 

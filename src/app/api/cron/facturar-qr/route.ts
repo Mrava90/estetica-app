@@ -1,24 +1,24 @@
 /**
  * GET /api/cron/facturar-qr
  *
- * Factura automaticamente los cobros por QR de MercadoPago.
+ * Factura automaticamente los cobros presenciales de MercadoPago (QR y Point).
  * Solo corre si `configuracion.facturacion_auto_qr` esta en true.
  *
  * ── Fuente HIBRIDA ───────────────────────────────────────────────────────
  * Cada fuente aporta lo que sabe mejor:
  *
- *   MercadoPago  → que cobros son QR (canal), monto y fecha exactos,
+ *   MercadoPago  → que cobros son QR/Point (canal), monto y fecha exactos,
  *                  CUIL del pagador (de ahi sale el DNI), id unico
  *   Sheet        → nombre del servicio y nombre del cliente
  *   Tabla clientes → nombre, cuando el sheet no lo tiene
  *
- * MP manda como disparador: si un cobro no es QR, no se factura solo aunque
+ * MP manda como disparador: si un cobro no es QR/Point, no se factura solo aunque
  * este en el sheet. Y el sheet aporta el detalle: si la venta todavia no
  * esta cargada ahi, el cobro queda pendiente en vez de facturarse con una
  * descripcion generica.
  *
  * ── Que factura ──────────────────────────────────────────────────────────
- *   1. Cobro QR aprobado de los ultimos DIAS_VENTANA dias
+ *   1. Cobro QR o Point aprobado de los ultimos DIAS_VENTANA dias
  *   2. Sin factura previa con ese mp_payment_id
  *   3. Que cruce con UNA fila del sheet (fecha + monto), para tener servicio
  *   4. Monto <= facturacion_auto_monto_max
@@ -41,6 +41,12 @@ export const maxDuration = 300
 
 /** Ventana de dias hacia atras que revisa cada corrida. */
 const DIAS_VENTANA = 7
+
+/**
+ * Canales que se facturan solos: los cobros presenciales en el local.
+ * Transferencias, links de pago y dinero en cuenta quedan siempre a mano.
+ */
+const CANALES_AUTO: PagoMP['tipo'][] = ['QR', 'Point']
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET
@@ -70,9 +76,9 @@ export async function GET(request: NextRequest) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://turnosballester.vercel.app'
 
       // ── 2. Cobros QR de la ventana ───────────────────────────────────────
-      const qr = (await traerPagosUltimosDias(DIAS_VENTANA)).filter(p => p.tipo === 'QR')
+      const qr = (await traerPagosUltimosDias(DIAS_VENTANA)).filter(p => CANALES_AUTO.includes(p.tipo))
       if (qr.length === 0) {
-        await registrarRun(admin, 'Sin cobros QR en la ventana', null)
+        await registrarRun(admin, 'Sin cobros QR/Point en la ventana', null)
         return { emitidas: 0, candidatos: 0 }
       }
 
@@ -211,8 +217,10 @@ export async function GET(request: NextRequest) {
         })
         const json = await res.json().catch(() => ({}))
 
-        if (!res.ok || json.error) {
-          errorFatal = `Pago ${pago.id} (${pago.diaAR}, $${pago.monto}, ${nombre}): ${json.error || `HTTP ${res.status}`}`
+        // Sin CAE no hay factura, aunque el HTTP haya sido 200 (ej. una redireccion
+        // a una pagina HTML). Frenar en vez de darlo por emitido.
+        if (!res.ok || json.error || !json.cae) {
+          errorFatal = `Pago ${pago.id} (${pago.diaAR}, $${pago.monto}, ${nombre}): ${json.error || (res.ok ? 'respuesta sin CAE' : `HTTP ${res.status}`)}`
           break
         }
         emitidas.push({ pagoId: pago.id, cae: json.cae })
