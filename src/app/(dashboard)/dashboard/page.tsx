@@ -147,17 +147,17 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <h1 className="text-lg font-bold sm:text-2xl">Dashboard</h1>
 
       {/* Stats cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Citas hoy</CardTitle>
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.citasHoy}</div>
+            <div className="text-lg font-bold sm:text-2xl">{stats.citasHoy}</div>
           </CardContent>
         </Card>
         <Card>
@@ -166,7 +166,7 @@ export default function DashboardPage() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.citasSemana}</div>
+            <div className="text-lg font-bold sm:text-2xl">{stats.citasSemana}</div>
           </CardContent>
         </Card>
         <Card>
@@ -175,7 +175,7 @@ export default function DashboardPage() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.clientesNuevos}</div>
+            <div className="text-lg font-bold sm:text-2xl">{stats.clientesNuevos}</div>
           </CardContent>
         </Card>
         <Card>
@@ -184,21 +184,21 @@ export default function DashboardPage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatPrecio(stats.facturacionMes)}</div>
+            <div className="text-lg font-bold sm:text-2xl">{formatPrecio(stats.facturacionMes)}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Admin-only: saldos de caja */}
       {isAdmin && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Efectivo (este mes)</CardTitle>
               <Banknote className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
+              <div className="text-lg font-bold sm:text-2xl text-green-600">
                 ${formatMoney(adminStats.efectivo)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">Ingresos en efectivo</p>
@@ -210,7 +210,7 @@ export default function DashboardPage() {
               <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
+              <div className="text-lg font-bold sm:text-2xl text-blue-600">
                 ${formatMoney(adminStats.mercadopago)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">Ingresos por MercadoPago</p>

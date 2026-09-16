@@ -111,7 +111,7 @@ export function SwitchFacturacionAuto() {
 
       {/* Panel desplegable */}
       {abierto && (
-        <div className="absolute right-0 top-full z-40 mt-1.5 w-[22rem] rounded-lg border bg-card p-3 shadow-lg space-y-2.5">
+        <div className="absolute left-0 top-full z-40 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-lg border bg-card p-3 shadow-lg space-y-2.5 sm:left-auto sm:right-0">
 
           {/* Confirmación al activar */}
           {confirmando && (

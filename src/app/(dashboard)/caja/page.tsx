@@ -411,7 +411,7 @@ export default function CajaDiariaPage() {
       <div className="space-y-2">
         {/* Fila 1: Título + Sync */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Caja Diaria</h1>
+          <h1 className="text-lg font-bold sm:text-2xl">Caja Diaria</h1>
           {isAdmin && (
             <Button
               variant="outline"
@@ -487,7 +487,7 @@ export default function CajaDiariaPage() {
       ) : (
         <>
           {/* KPI Cards */}
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Card className="py-2">
               <CardHeader className="flex flex-row items-center justify-between px-4 py-1">
                 <CardTitle className="text-xs font-medium">Efectivo</CardTitle>
@@ -522,7 +522,7 @@ export default function CajaDiariaPage() {
                 </p>
               </CardContent>
             </Card>
-            <Card className="py-2">
+            <Card className="py-2 col-span-2 sm:col-span-1">
               <CardHeader className="flex flex-row items-center justify-between px-4 py-1">
                 <CardTitle className="text-xs font-medium">Total</CardTitle>
                 <Wallet className="h-3.5 w-3.5 text-muted-foreground" />

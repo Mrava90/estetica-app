@@ -24,7 +24,7 @@ const PASOS = [
     n: 3,
     title: 'Variables de entorno en Vercel',
     body: (
-      <div className="mt-1 rounded-lg bg-muted p-3 font-mono text-xs space-y-0.5">
+      <div className="mt-1 rounded-lg bg-muted p-3 font-mono text-xs space-y-0.5 overflow-x-auto">
         <p><span className="text-blue-700">AFIP_CUIT</span>=20xxxxxxxxx8</p>
         <p><span className="text-blue-700">AFIP_CERT</span>=-----BEGIN CERTIFICATE-----...</p>
         <p><span className="text-blue-700">AFIP_KEY</span>=-----BEGIN PRIVATE KEY-----...</p>

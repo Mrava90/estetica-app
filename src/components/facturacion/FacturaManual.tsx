@@ -101,7 +101,7 @@ export function FacturaManual({ onEmitida }: Props) {
       </button>
 
       {abierto && (
-        <div className="absolute right-0 top-full z-40 mt-1.5 w-[23rem] rounded-lg border bg-card p-3 shadow-lg space-y-2.5">
+        <div className="absolute left-0 top-full z-40 mt-1.5 w-[min(23rem,calc(100vw-2rem))] rounded-lg border bg-card p-3 shadow-lg space-y-2.5 sm:left-auto sm:right-0">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold">Nueva factura manual</p>
             <button onClick={cerrar} className="rounded p-0.5 text-muted-foreground hover:bg-muted transition-colors">

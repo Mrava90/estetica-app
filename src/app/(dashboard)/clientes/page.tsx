@@ -109,8 +109,8 @@ export default function ClientesPage() {
           </p>
         )}
         {clientes.map((c) => (
-          <Card key={c.id} className="transition-colors">
-            <CardContent className="flex items-center justify-between p-4">
+          <Card key={c.id} className="py-0 gap-0 transition-colors">
+            <CardContent className="flex items-center justify-between p-3">
               <Link href={`/clientes/${c.id}`} className="min-w-0 flex-1">
                 <p className="font-medium truncate">{c.nombre}{c.apellido ? ` ${c.apellido}` : ''}</p>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">

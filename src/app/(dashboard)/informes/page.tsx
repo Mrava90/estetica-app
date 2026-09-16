@@ -169,7 +169,7 @@ export default function InformesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Informes</h1>
+      <h1 className="text-lg font-bold sm:text-2xl">Informes</h1>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -235,14 +235,14 @@ export default function InformesPage() {
       ) : (
         <>
           {/* KPI Cards */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium">Total citas</CardTitle>
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{resumen.totalCitas}</div>
+                <div className="text-lg font-bold sm:text-2xl">{resumen.totalCitas}</div>
                 <p className="text-xs text-muted-foreground">
                   {resumen.completadas} completadas, {resumen.noAsistio} no asistieron
                 </p>
@@ -254,7 +254,7 @@ export default function InformesPage() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatPrecio(resumen.ingresos)}</div>
+                <div className="text-lg font-bold sm:text-2xl">{formatPrecio(resumen.ingresos)}</div>
                 <p className="text-xs text-muted-foreground">
                   {formatPrecio(resumen.efectivo)} efectivo / {formatPrecio(resumen.mercadopago)} mercadopago
                 </p>
@@ -266,7 +266,7 @@ export default function InformesPage() {
                 <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatPrecio(resumen.ticketPromedio)}</div>
+                <div className="text-lg font-bold sm:text-2xl">{formatPrecio(resumen.ticketPromedio)}</div>
                 <p className="text-xs text-muted-foreground">por cita completada</p>
               </CardContent>
             </Card>
@@ -276,7 +276,7 @@ export default function InformesPage() {
                 <UserX className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-lg font-bold sm:text-2xl">
                   {resumen.totalCitas > 0
                     ? `${Math.round((resumen.noAsistio / resumen.totalCitas) * 100)}%`
                     : '0%'}

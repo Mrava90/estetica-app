@@ -246,10 +246,10 @@ export default function ServiciosPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre</TableHead>
-                <TableHead>Duración</TableHead>
+                <TableHead className="hidden md:table-cell">Duración</TableHead>
                 <TableHead>Efectivo</TableHead>
                 <TableHead>P. Lista</TableHead>
-                <TableHead>Estado</TableHead>
+                <TableHead className="hidden md:table-cell">Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
@@ -279,7 +279,7 @@ export default function ServiciosPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{s.duracion_minutos} min</TableCell>
+                  <TableCell className="hidden md:table-cell">{s.duracion_minutos} min</TableCell>
                   <TableCell>
                     <span className="flex items-center gap-1">
                       <Banknote className="h-3 w-3 text-green-600" />
@@ -292,7 +292,7 @@ export default function ServiciosPage() {
                       {formatPrecio(s.precio_mercadopago)}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Badge
                       variant={s.activo ? 'default' : 'secondary'}
                       className="cursor-pointer"

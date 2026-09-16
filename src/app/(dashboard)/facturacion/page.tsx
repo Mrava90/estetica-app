@@ -407,7 +407,7 @@ export default function FacturacionPage() {
   // ── Render principal ──────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-3 p-4">
+    <div className="space-y-3">
 
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -417,7 +417,7 @@ export default function FacturacionPage() {
             Facturación Electrónica
           </h1>
           <p className="text-[11px] text-muted-foreground mt-0.5">
-            Datos desde hoja "Afip" · Solo MercadoPago · Aprobación manual por ítem
+            Ventas del Google Sheet · MercadoPago y efectivo · Aprobación manual por ítem
           </p>
         </div>
         <div className="flex flex-wrap items-start gap-1.5">
@@ -452,19 +452,19 @@ export default function FacturacionPage() {
             </div>
 
             {/* Búsqueda */}
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input
                 type="text"
                 placeholder="Buscar cliente…"
                 value={busqueda}
                 onChange={e => setBusqueda(e.target.value)}
-                className="pl-7 pr-2 py-1 w-40 rounded-md border bg-card text-xs outline-none focus:ring-2 focus:ring-primary/30"
+                className="pl-7 pr-2 py-1 w-full sm:w-40 rounded-md border bg-card text-xs outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
 
             {/* Filtro de estado */}
-            <div className="flex gap-0.5 rounded-md border bg-muted p-0.5 self-start">
+            <div className="flex flex-wrap gap-0.5 rounded-md border bg-muted p-0.5 self-start">
               <button onClick={() => setFiltroEstado('todos')}
                 className={`rounded px-2 py-1 text-xs font-medium transition-colors ${filtroEstado === 'todos' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
                 Todos
@@ -490,7 +490,7 @@ export default function FacturacionPage() {
             </div>
 
             {/* Filtro por medio de pago / canal */}
-            <div className="flex gap-0.5 rounded-md border border-violet-200 bg-violet-50 p-0.5 self-start">
+            <div className="flex flex-wrap gap-0.5 rounded-md border border-violet-200 bg-violet-50 p-0.5 self-start">
               <button onClick={() => setFiltroCanal('todos')}
                 className={`rounded px-2 py-1 text-xs font-medium transition-colors ${filtroCanal === 'todos' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
                 Todos
@@ -500,7 +500,7 @@ export default function FacturacionPage() {
                   <button onClick={() => setFiltroCanal('presencial')}
                     title="Cobros presenciales con MercadoPago (QR y posnet Point)"
                     className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'presencial' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
-                    <span className="block">▣ QR / Point</span>
+                    <span className="block whitespace-nowrap">▣ QR / Point</span>
                     <span className={`block text-[9px] font-normal ${filtroCanal === 'presencial' ? 'text-violet-100' : 'text-violet-500'}`}>
                       {itemsPresenciales.length} · {formatPrecio(montoPresencial)}
                     </span>
@@ -508,7 +508,7 @@ export default function FacturacionPage() {
                   <button onClick={() => setFiltroCanal('transferencia')}
                     title="Transferencias al alias / CVU"
                     className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'transferencia' ? 'bg-violet-600 text-white shadow-sm' : 'text-violet-700 hover:bg-violet-100'}`}>
-                    <span className="block">⇄ Transferencia</span>
+                    <span className="block whitespace-nowrap">⇄ Transferencia</span>
                     <span className={`block text-[9px] font-normal ${filtroCanal === 'transferencia' ? 'text-violet-100' : 'text-violet-500'}`}>
                       {itemsTransferencia.length} · {formatPrecio(montoTransferencia)}
                     </span>
@@ -519,7 +519,7 @@ export default function FacturacionPage() {
                 <button onClick={() => setFiltroCanal('efectivo')}
                   title="Ventas cobradas en efectivo — se facturan solo a pedido de la clienta"
                   className={`rounded px-2 py-1 text-xs font-medium transition-colors leading-tight ${filtroCanal === 'efectivo' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-700 hover:bg-emerald-100'}`}>
-                  <span className="block">$ Efectivo</span>
+                  <span className="block whitespace-nowrap">$ Efectivo</span>
                   <span className={`block text-[9px] font-normal ${filtroCanal === 'efectivo' ? 'text-emerald-100' : 'text-emerald-600'}`}>
                     {itemsEfectivo.length} · {formatPrecio(montoEfectivo)}
                   </span>
@@ -554,7 +554,7 @@ export default function FacturacionPage() {
 
           {/* Stats */}
           {!loading && items.length > 0 && (
-            <div className={`grid gap-2 ${mpDisponible ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-3'}`}>
+            <div className={`grid grid-cols-2 gap-2 ${mpDisponible ? 'lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
               <div className="rounded-lg border bg-card px-2.5 py-1.5">
                 <p className="text-[10px] text-muted-foreground leading-tight">Total del mes</p>
                 <p className="text-base font-bold text-blue-700 leading-tight">{formatPrecio(totalMonto)}</p>
@@ -691,7 +691,7 @@ export default function FacturacionPage() {
 
       {/* Barra de acción bulk */}
       {bulkProgreso ? (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-xl bg-gray-900 px-3.5 py-2 shadow-2xl text-white">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-center gap-2 rounded-xl bg-gray-900 px-3.5 py-2 shadow-2xl text-white">
           <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
           <span className="text-sm font-medium">
             Procesando {bulkProgreso.done}/{bulkProgreso.total}…
@@ -701,7 +701,7 @@ export default function FacturacionPage() {
           </span>
         </div>
       ) : seleccionados.size > 0 ? (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 rounded-xl bg-gray-900 px-3.5 py-2 shadow-2xl text-white">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-center gap-2.5 rounded-xl bg-gray-900 px-3.5 py-2 shadow-2xl text-white">
           <span className="text-sm font-medium">
             {seleccionados.size} seleccionada{seleccionados.size > 1 ? 's' : ''}
             {' · '}

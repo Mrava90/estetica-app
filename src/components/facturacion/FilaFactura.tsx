@@ -65,7 +65,7 @@ export function FilaFactura(props: FilaFacturaProps) {
   // ── Emitida ──────────────────────────────────────────────────────────────
   if (item.factura_estado === 'emitida') {
     return (
-      <li className="grid grid-cols-[1.75rem_1fr_auto] md:grid-cols-[1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_9rem] items-center gap-x-2 gap-y-0 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5">
+      <li className="grid grid-cols-[1.75rem_1fr_auto_auto] md:grid-cols-[1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_9rem] items-center gap-x-2 gap-y-0 rounded-lg border border-green-200 bg-green-50 px-2.5 py-1.5">
         {/* Avatar */}
         <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarColor(item.cliente_nombre)}`}>
           {initials(item.cliente_nombre)}
@@ -73,6 +73,10 @@ export function FilaFactura(props: FilaFacturaProps) {
         {/* Nombre */}
         <div className="min-w-0">
           <p className="font-semibold text-xs truncate text-gray-900 leading-tight">{item.cliente_nombre}</p>
+          {/* En mobile no hay columna de comprobante: el numero va aca */}
+          <p className="md:hidden text-[10px] text-gray-600 leading-tight truncate">
+            {item.factura_cae ? `N° ${item.factura_numero}` : 'Manual'} · {isoToDisplay(item.fecha)}
+          </p>
         </div>
         {/* DNI */}
         <div className="hidden md:block">
@@ -95,7 +99,7 @@ export function FilaFactura(props: FilaFacturaProps) {
         <p className="font-bold text-xs text-right text-gray-900">{formatPrecio(item.monto)}</p>
         {/* Comprobante */}
         <div className="flex items-center gap-1">
-          <div className="flex flex-col items-end gap-0 min-w-[76px]">
+          <div className="hidden md:flex flex-col items-end gap-0 min-w-[76px]">
             {item.factura_cae ? (
               <>
                 <span className="flex items-center gap-0.5 text-[10px] font-semibold text-gray-900 whitespace-nowrap leading-tight">
@@ -299,7 +303,7 @@ export function FilaFactura(props: FilaFacturaProps) {
 
   // ── Pendiente (idle) ─────────────────────────────────────────────────────
   return (
-    <li className="grid grid-cols-[1rem_1.75rem_1fr_auto_auto] md:grid-cols-[1rem_1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_6rem] items-center gap-x-2 rounded-lg border bg-card px-2.5 py-1.5 hover:bg-muted/20 transition-colors">
+    <li className="grid grid-cols-[1rem_1.75rem_1fr_auto] md:grid-cols-[1rem_1.75rem_1.5fr_1fr_1.5fr_3.75rem_4.5rem_5rem_6rem] items-center gap-x-2 rounded-lg border bg-card px-2.5 py-1.5 hover:bg-muted/20 transition-colors">
 
       {/* Checkbox */}
       <input type="checkbox"
@@ -322,6 +326,7 @@ export function FilaFactura(props: FilaFacturaProps) {
             {item.cliente_dni ? formatDNI(item.cliente_dni) : <span className="text-amber-600">Sin DNI</span>}
           </span>
           <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
+          <span className="ml-auto font-bold text-xs whitespace-nowrap">{formatPrecio(item.monto)}</span>
         </div>
       </div>
 
@@ -353,7 +358,7 @@ export function FilaFactura(props: FilaFacturaProps) {
       </div>
 
       {/* Monto */}
-      <p className="font-bold text-xs text-right whitespace-nowrap">{formatPrecio(item.monto)}</p>
+      <p className="hidden md:block font-bold text-xs text-right whitespace-nowrap">{formatPrecio(item.monto)}</p>
 
       {/* Botones ✓ / ✗ / editar */}
       <div className="flex items-center justify-end gap-1">

@@ -603,20 +603,20 @@ export default function ActividadPage() {
                   <div key={log.id}>
                     <button
                       onClick={() => hasDetail && toggleExpand(log.id)}
-                      className={`w-full flex items-center gap-3 px-6 py-3 hover:bg-muted/40 transition-colors text-left ${hasDetail ? 'cursor-pointer' : ''}`}
+                      className={`w-full flex items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3 hover:bg-muted/40 transition-colors text-left ${hasDetail ? 'cursor-pointer' : ''}`}
                     >
                       <div className="w-4 shrink-0 text-muted-foreground">
                         {hasDetail && (isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />)}
                       </div>
-                      <div className="w-32 shrink-0">
+                      <div className="w-20 shrink-0 sm:w-32">
                         <p className="text-xs font-medium text-foreground tabular-nums">
                           {format(new Date(log.created_at), 'dd/MM HH:mm')}
                         </p>
-                        <p className="text-[11px] text-muted-foreground capitalize">
+                        <p className="hidden sm:block text-[11px] text-muted-foreground capitalize">
                           {format(new Date(log.created_at), "EEEE", { locale: es })}
                         </p>
                       </div>
-                      <div className="w-24 shrink-0">
+                      <div className="hidden w-24 shrink-0 sm:block">
                         <p className="text-xs font-medium truncate">{formatUsuario(log.usuario_email)}</p>
                       </div>
                       <div className="shrink-0">

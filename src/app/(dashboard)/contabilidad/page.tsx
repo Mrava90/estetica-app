@@ -382,7 +382,7 @@ export default function ContabilidadPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight">Contabilidad</h1>
+      <h1 className="text-lg font-bold sm:text-2xl tracking-tight">Contabilidad</h1>
 
       <Tabs defaultValue="resumen">
         <TabsList variant="line">
@@ -396,14 +396,14 @@ export default function ContabilidadPage() {
         <TabsContent value="resumen" className="space-y-4 mt-4">
           <div className="flex justify-end"><YearSelector /></div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Ventas Brutas</CardTitle>
                 <Calculator className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">${formatMoney(totals.ventasBrutas)}</div>
+                <div className="text-lg font-bold sm:text-2xl text-green-600">${formatMoney(totals.ventasBrutas)}</div>
               </CardContent>
             </Card>
             <Card>
@@ -411,7 +411,7 @@ export default function ContabilidadPage() {
                 <CardTitle className="text-sm font-medium">Comisiones</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-500">-${formatMoney(totals.comisiones)}</div>
+                <div className="text-lg font-bold sm:text-2xl text-red-500">-${formatMoney(totals.comisiones)}</div>
               </CardContent>
             </Card>
             <Card>
@@ -419,7 +419,7 @@ export default function ContabilidadPage() {
                 <CardTitle className="text-sm font-medium">Sueldos Fijos</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-500">-${formatMoney(totals.sueldosFijos)}</div>
+                <div className="text-lg font-bold sm:text-2xl text-red-500">-${formatMoney(totals.sueldosFijos)}</div>
               </CardContent>
             </Card>
             <Card>
@@ -427,15 +427,15 @@ export default function ContabilidadPage() {
                 <CardTitle className="text-sm font-medium">Gastos Local</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-500">-${formatMoney(totals.gastosLocal)}</div>
+                <div className="text-lg font-bold sm:text-2xl text-red-500">-${formatMoney(totals.gastosLocal)}</div>
               </CardContent>
             </Card>
-            <Card>
+            <Card className="col-span-2 lg:col-span-1">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Resultado</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${totals.resultado >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                <div className={`text-lg font-bold sm:text-2xl ${totals.resultado >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                   ${formatMoney(totals.resultado)}
                 </div>
                 <p className="text-xs text-muted-foreground">Margen: {totals.margen.toFixed(1)}%</p>
