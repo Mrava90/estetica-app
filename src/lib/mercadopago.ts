@@ -11,6 +11,8 @@
  * seguir funcionando igual (degradacion elegante).
  */
 
+import { createAdminClient } from '@/lib/supabase/admin'
+
 const MP_API = 'https://api.mercadopago.com'
 
 export type TipoPagoMP = 'QR' | 'Point' | 'Transferencia' | 'Link' | 'Dinero en cuenta' | 'Otro'
@@ -101,10 +103,105 @@ export async function traerPagosUltimosDias(dias: number): Promise<PagoMP[]> {
 const AR_TZ = 'America/Argentina/Buenos_Aires'
 
 /**
- * Base de las dos anteriores: pagina /v1/payments/search entre dos ISO.
+ * Base de las dos anteriores: busqueda en MP + memoria de pagos ya vistos.
  * Nunca tira — ante error devuelve lo que haya podido traer.
+ *
+ * /v1/payments/search NO es consistente: llamadas identicas y seguidas
+ * devuelven al azar conjuntos distintos (medido el 15/9/2026: 46 o 43 pagos,
+ * ~50% de las veces, y cuando falta algo son siempre los cobros por Point —
+ * hasta el paging.total cambia). Es un problema entre replicas del lado de
+ * MP y ninguna variante de la consulta lo evita. El GET por id si es
+ * confiable. Entonces:
+ *
+ *   1. Se busca dos veces (en paralelo, es barato) y se une por id.
+ *   2. Todo lo que vino se anota en mp_pagos_vistos.
+ *   3. Lo que esta anotado para ese rango pero no vino, se trae por id.
+ *
+ * Un pago, una vez visto, no se pierde mas. Si la tabla no existe todavia
+ * (migracion 00044 sin correr), se sigue con lo que devolvio la busqueda.
  */
 export async function traerPagos(desde: string, hasta: string): Promise<PagoMP[]> {
+  const token = process.env.MP_ACCESS_TOKEN
+  if (!token) return []
+
+  // 1. Busqueda, dos veces
+  const porId = new Map<number, PagoMP>()
+  const lotes = await Promise.all([traerPagosUnaVez(desde, hasta), traerPagosUnaVez(desde, hasta)])
+  for (const lote of lotes) for (const p of lote) if (!porId.has(p.id)) porId.set(p.id, p)
+
+  try {
+    const admin = createAdminClient()
+
+    // 2. Anotar los vistos
+    if (porId.size > 0) {
+      const { error } = await admin.from('mp_pagos_vistos').upsert(
+        [...porId.values()].map(p => ({ id: p.id, fecha: p.fecha })),
+        { onConflict: 'id', ignoreDuplicates: true },
+      )
+      if (error) throw error
+    }
+
+    // 3. Completar con los que la busqueda se olvido
+    const { data: recordados, error } = await admin
+      .from('mp_pagos_vistos').select('id').gte('fecha', desde).lte('fecha', hasta)
+    if (error) throw error
+    const faltantes = (recordados || []).map(r => Number(r.id)).filter(id => !porId.has(id))
+
+    if (faltantes.length > 0) {
+      const traidos = await Promise.all(faltantes.map(id => traerPagoPorId(id, token)))
+      for (const p of traidos) if (p) porId.set(p.id, p)
+      const idsAhora = new Set(traidos.filter(Boolean).map(p => p!.id))
+      // Ya no esta aprobado (devuelto, cancelado): que no se vuelva a pedir.
+      const olvidar = faltantes.filter(id => !idsAhora.has(id))
+      if (olvidar.length > 0) await admin.from('mp_pagos_vistos').delete().in('id', olvidar)
+      console.warn(`MP search omitio ${faltantes.length} pago(s) ya vistos; ${idsAhora.size} recuperados por id`)
+    }
+  } catch (e: any) {
+    // Sin memoria (tabla inexistente, red) se sigue igual con lo buscado.
+    console.error('MP memoria de pagos vistos no disponible:', e?.message || e)
+  }
+
+  // Orden estable (mas reciente primero) para que el matcher sea determinista.
+  return [...porId.values()].sort((a, b) => b.fecha.localeCompare(a.fecha))
+}
+
+/** GET /v1/payments/:id — confiable, a diferencia de la busqueda. */
+async function traerPagoPorId(id: number, token: string): Promise<PagoMP | null> {
+  try {
+    const res = await fetch(`${MP_API}/v1/payments/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    })
+    if (!res.ok) return null
+    return aPagoMP(await res.json())
+  } catch {
+    return null
+  }
+}
+
+/** Convierte un pago crudo de MP a PagoMP. null si no esta aprobado. */
+function aPagoMP(p: any): PagoMP | null {
+  if (p?.status !== 'approved') return null
+  const fecha = p.date_approved || p.date_created
+  const comision = (p.fee_details || []).reduce((a: number, f: any) => a + (f.amount || 0), 0)
+  const doc = p.payer?.identification?.number ?? null
+  return {
+    id: p.id,
+    fecha,
+    diaAR: diaAR(fecha),
+    monto: p.transaction_amount || 0,
+    comision,
+    neto: p.transaction_details?.net_received_amount ?? ((p.transaction_amount || 0) - comision),
+    tipo: clasificar(p),
+    descripcion: p.description || null,
+    pagadorEmail: p.payer?.email || null,
+    pagadorDoc: doc ? String(doc) : null,
+    pagadorDni: dniDesdeDocumento(doc),
+  }
+}
+
+/** Una sola pasada paginada por /v1/payments/search. Ver traerPagos. */
+async function traerPagosUnaVez(desde: string, hasta: string): Promise<PagoMP[]> {
   const token = process.env.MP_ACCESS_TOKEN
   if (!token) return []
 
@@ -138,23 +235,8 @@ export async function traerPagos(desde: string, hasta: string): Promise<PagoMP[]
       const results = j?.results || []
 
       for (const p of results) {
-        if (p.status !== 'approved') continue
-        const fecha = p.date_approved || p.date_created
-        const comision = (p.fee_details || []).reduce((a: number, f: any) => a + (f.amount || 0), 0)
-        const doc = p.payer?.identification?.number ?? null
-        out.push({
-          id: p.id,
-          fecha,
-          diaAR: diaAR(fecha),
-          monto: p.transaction_amount || 0,
-          comision,
-          neto: p.transaction_details?.net_received_amount ?? ((p.transaction_amount || 0) - comision),
-          tipo: clasificar(p),
-          descripcion: p.description || null,
-          pagadorEmail: p.payer?.email || null,
-          pagadorDoc: doc ? String(doc) : null,
-          pagadorDni: dniDesdeDocumento(doc),
-        })
+        const pago = aPagoMP(p)
+        if (pago) out.push(pago)
       }
 
       const total = j?.paging?.total ?? 0

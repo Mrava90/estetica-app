@@ -43,7 +43,20 @@ export function BadgeCanal({ tipo, match, medio }: Props) {
       </span>
     )
   }
-  if (!tipo) return null
+  // Es MercadoPago segun el sheet, pero ningun pago de MP cruzo por fecha y
+  // monto (o MP no respondio). Decirlo, en vez de no mostrar nada: si no,
+  // parece que la venta no tiene medio de pago.
+  if (!tipo) {
+    if (medio !== 'MercadoPago') return null
+    return (
+      <span className="inline-flex shrink-0 items-center gap-0.5 rounded border border-dashed border-amber-300 bg-amber-50 px-1 py-0 text-[9px] font-medium text-amber-700 whitespace-nowrap leading-[1.4]"
+        title={match === 'sin_match'
+          ? 'MercadoPago según el sheet, pero no hay un pago en MP con esa fecha y monto. Revisá fecha o importe.'
+          : 'MercadoPago según el sheet; no se pudo consultar MP.'}>
+        MP <span aria-hidden>?</span>
+      </span>
+    )
+  }
   return (
     <span
       className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-0 text-[9px] font-medium whitespace-nowrap leading-[1.4] ${ESTILOS[tipo]}`}
