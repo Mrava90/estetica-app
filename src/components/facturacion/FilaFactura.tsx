@@ -179,13 +179,21 @@ export function FilaFactura(props: FilaFacturaProps) {
   // ── Excluida ─────────────────────────────────────────────────────────────
   if (item.factura_estado === 'excluida') {
     return (
-      <li className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-2.5 py-1 opacity-50">
+      <li className="flex items-center gap-2 rounded-lg border border-dashed bg-muted/20 px-2.5 py-1.5 opacity-60">
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground text-[9px] font-bold">
           {initials(item.cliente_nombre)}
         </div>
-        <p className="flex-1 text-xs line-through truncate">{item.cliente_nombre}</p>
+        {/* Nombre + servicio: el detalle hace falta para saber cual se esta restaurando */}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs line-through truncate leading-tight">{item.cliente_nombre}</p>
+          <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+            <p className="text-[11px] text-muted-foreground truncate">{item.servicio_nombre || 'Sin servicio'}</p>
+            <BadgeCanal tipo={item.tipo_pago} match={item.mp_match} medio={item.medio_pago} />
+          </div>
+        </div>
         {item.cliente_dni && <span className="hidden md:block font-mono text-[10px] line-through text-muted-foreground">{formatDNI(item.cliente_dni)}</span>}
-        <p className="text-xs font-medium line-through text-muted-foreground">{formatPrecio(item.monto)}</p>
+        <p className="hidden md:block text-[10px] text-muted-foreground whitespace-nowrap">{isoToDisplay(item.fecha)}</p>
+        <p className="text-xs font-medium line-through text-muted-foreground whitespace-nowrap">{formatPrecio(item.monto)}</p>
         <button onClick={() => props.onRestaurar(item)} disabled={mode === 'loading'}
           className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors shrink-0 whitespace-nowrap">
           {mode === 'loading' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
