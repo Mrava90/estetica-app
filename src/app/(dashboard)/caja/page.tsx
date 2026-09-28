@@ -63,6 +63,7 @@ export default function CajaDiariaPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [exportando, setExportando] = useState(false)
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
 
   // New movement form state
@@ -213,7 +214,7 @@ export default function CajaDiariaPage() {
       return
     }
 
-    const PREFIXES = {
+  const PREFIXES = {
       local: 'Gasto local:',
       adelanto: 'Adelanto comisión:',
       personal: 'Gasto personal:',
@@ -247,6 +248,28 @@ export default function CajaDiariaPage() {
       fetchData()
     }
     setSaving(false)
+  }
+
+  // Vuelca los gastos cargados en la app a la pestaña "PRUEBA - GASTOS APP"
+  // del Google Sheet. Reescribe esa pestaña entera; no toca la hoja real.
+  async function exportarGastosAlSheet() {
+    setExportando(true)
+    try {
+      const res = await fetch('/api/cron/exportar-gastos', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok || json.error) {
+        toast.error(json.error || 'No se pudo exportar')
+      } else {
+        const b = json.porBloque || {}
+        toast.success(
+          `${json.filas} gasto(s) en "${json.hoja}" — local ${b.local ?? 0} · adelantos ${b.adelanto ?? 0} · casa ${b.personal ?? 0}`
+        )
+      }
+    } catch {
+      toast.error('No se pudo conectar con el servidor')
+    } finally {
+      setExportando(false)
+    }
   }
 
   async function handleDeleteMovimiento(id: string) {
@@ -651,6 +674,14 @@ export default function CajaDiariaPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <CardTitle className="text-base">Movimientos manuales</CardTitle>
                 <div className="flex items-center gap-2">
+                  {isAdmin && (
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={exportarGastosAlSheet} disabled={exportando}
+                      title="Vuelca los gastos cargados acá a la pestaña de prueba del Google Sheet">
+                      <Upload className="h-4 w-4 rotate-180" />
+                      <span className="hidden sm:inline">{exportando ? 'Exportando…' : 'Exportar al sheet'}</span>
+                      <span className="sm:hidden">Sheet</span>
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCsvDialogOpen(true)}>
                     <Upload className="h-4 w-4" />
                     <span className="hidden sm:inline">Importar CSV</span>

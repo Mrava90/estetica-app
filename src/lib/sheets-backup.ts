@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 
-async function getSheetsWriteToken(): Promise<string> {
+export async function getSheetsWriteToken(): Promise<string> {
   const auth = new GoogleAuth({
     credentials: {
       client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -15,7 +15,7 @@ async function getSheetsWriteToken(): Promise<string> {
   return tokenRes.token
 }
 
-async function ensureSheetExists(spreadsheetId: string, token: string, sheetName: string): Promise<void> {
+export async function ensureSheetExists(spreadsheetId: string, token: string, sheetName: string): Promise<void> {
   const res = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
     {
@@ -33,7 +33,7 @@ async function ensureSheetExists(spreadsheetId: string, token: string, sheetName
   }
 }
 
-async function clearAndWriteSheet(
+export async function clearAndWriteSheet(
   spreadsheetId: string,
   token: string,
   sheetName: string,
@@ -66,7 +66,7 @@ async function clearAndWriteSheet(
   }
 }
 
-function getSpreadsheetId(): string {
+export function getSpreadsheetId(): string {
   const id = process.env.GOOGLE_SPREADSHEET_ID
   if (!id) throw new Error('Missing GOOGLE_SPREADSHEET_ID')
   return id
