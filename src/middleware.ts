@@ -5,8 +5,15 @@ import { isAdminUser, isStaffUser } from '@/lib/constants'
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Archivos estáticos: nunca pasar por auth
-  if (/\.(?:jpg|jpeg|png|gif|svg|ico|webp|css|js|woff2?|ttf|eot|otf|mp4|pdf)$/i.test(pathname)) {
+  // Archivos estáticos: nunca pasar por auth.
+  //
+  // El manifest va explicito: el navegador lo pide SIN cookies, asi que si lo
+  // mandamos al login Chrome no lo puede leer y deja de ofrecer "Instalar app".
+  // Eso rompio la instalacion como PWA en Android desde 8470d12 (26/02/2026).
+  if (
+    pathname === '/manifest.json' ||
+    /\.(?:jpg|jpeg|png|gif|svg|ico|webp|css|js|woff2?|ttf|eot|otf|mp4|pdf|webmanifest)$/i.test(pathname)
+  ) {
     return NextResponse.next()
   }
 
