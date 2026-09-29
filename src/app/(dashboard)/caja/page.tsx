@@ -56,6 +56,8 @@ export default function CajaDiariaPage() {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [exportando, setExportando] = useState(false)
+  /** Descripciones mas usadas, para cargar de un toque. Se calculan al abrir el dialogo. */
+  const [atajos, setAtajos] = useState<{ texto: string; tipo: 'efectivo' | 'mercadopago'; categoria: 'local' | 'adelanto' | 'personal' }[]>([])
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
 
   // New movement form state
@@ -234,6 +236,61 @@ export default function CajaDiariaPage() {
       fetchData()
     }
     setSaving(false)
+  }
+
+  // El dialogo se abre desde el FAB y desde el boton, los dos con
+  // setDialogOpen(true). onOpenChange no corre en ese caso, asi que los
+  // atajos se cargan aca.
+  useEffect(() => {
+    if (dialogOpen && atajos.length === 0) cargarAtajos()
+  }, [dialogOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Arma los atajos mirando que se cargo en los ultimos 90 dias.
+   * De cada descripcion repetida guarda su medio de pago y categoria mas
+   * frecuentes, asi un toque completa los tres campos.
+   */
+  async function cargarAtajos() {
+    const desde = format(subDays(new Date(), 90), 'yyyy-MM-dd')
+    const { data } = await supabase
+      .from('movimientos_caja')
+      .select('descripcion, tipo, monto')
+      .gte('fecha', desde)
+      .lt('monto', 0)
+    if (!data) return
+
+    const PREF: Record<string, 'local' | 'adelanto' | 'personal'> = {
+      'gasto local': 'local', 'adelanto comisión': 'adelanto', 'gasto personal': 'personal',
+    }
+    const conteo = new Map<string, { n: number; tipos: Record<string, number>; cats: Record<string, number> }>()
+    for (const m of data) {
+      const bruto = (m.descripcion || '').trim()
+      const corte = bruto.indexOf(':')
+      const prefijo = corte > 0 ? bruto.slice(0, corte).toLowerCase() : ''
+      const texto = (corte > 0 ? bruto.slice(corte + 1) : bruto).trim()
+      if (texto.length < 3) continue
+      const clave = texto.toLowerCase()
+      if (!conteo.has(clave)) conteo.set(clave, { n: 0, tipos: {}, cats: {} })
+      const o = conteo.get(clave)!
+      o.n++
+      o.tipos[m.tipo] = (o.tipos[m.tipo] || 0) + 1
+      const cat = PREF[prefijo] || 'local'
+      o.cats[cat] = (o.cats[cat] || 0) + 1
+    }
+    const masUsado = (r: Record<string, number>, fallback: string) =>
+      Object.entries(r).sort((a, b) => b[1] - a[1])[0]?.[0] ?? fallback
+
+    setAtajos(
+      [...conteo.entries()]
+        .filter(([, o]) => o.n >= 2)          // uno solo no es un habito
+        .sort((a, b) => b[1].n - a[1].n)
+        .slice(0, 8)
+        .map(([texto, o]) => ({
+          texto,
+          tipo: masUsado(o.tipos, 'efectivo') as 'efectivo' | 'mercadopago',
+          categoria: masUsado(o.cats, 'local') as 'local' | 'adelanto' | 'personal',
+        }))
+    )
   }
 
   // Vuelca los gastos cargados en la app a la pestaña "PRUEBA - GASTOS APP"
@@ -652,6 +709,16 @@ export default function CajaDiariaPage() {
         profesionales={profesionales}
       />
 
+      {/* FAB — cargar un movimiento sin scrollear hasta la tarjeta */}
+      <button
+        className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center active:scale-95 transition-transform"
+        onClick={() => setDialogOpen(true)}
+        aria-label="Nuevo movimiento"
+        title="Nuevo movimiento"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
+
       {/* Dialog para nuevo movimiento */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open)
@@ -659,7 +726,12 @@ export default function CajaDiariaPage() {
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nuevo movimiento</DialogTitle>
+            <DialogTitle className="flex items-baseline gap-2">
+              Nuevo movimiento
+              <span className="text-xs font-normal text-muted-foreground">
+                {format(fecha, "EEEE d 'de' MMMM", { locale: es })}
+              </span>
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
 
@@ -719,9 +791,12 @@ export default function CajaDiariaPage() {
               <Input
                 type="number"
                 step="0.01"
+                inputMode="decimal"
+                autoFocus
                 placeholder="Ej: 5000"
                 value={newMonto}
                 onChange={(e) => setNewMonto(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && newMonto && newDescripcion.trim()) handleAddMovimiento() }}
               />
             </div>
 
@@ -748,6 +823,25 @@ export default function CajaDiariaPage() {
 
             <div className="space-y-2">
               <Label>Descripción</Label>
+              {/* Un toque completa descripcion + medio + categoria */}
+              {newTipoMov === 'gasto' && atajos.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {atajos.map((a) => (
+                    <button
+                      key={a.texto}
+                      type="button"
+                      onClick={() => { setNewDescripcion(a.texto); setNewTipo(a.tipo); setNewCategoria(a.categoria) }}
+                      className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                        newDescripcion === a.texto
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'bg-muted/40 hover:bg-muted'
+                      }`}
+                    >
+                      {a.texto}
+                    </button>
+                  ))}
+                </div>
+              )}
               <Input
                 placeholder={newTipoMov === 'gasto' ? 'Ej: alquiler, compra insumos...' : 'Ej: cobro extra, seña...'}
                 value={newDescripcion}
