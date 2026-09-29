@@ -20,7 +20,18 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { clearAndWriteSheet, ensureSheetExists, getSheetsWriteToken, getSpreadsheetId } from './sheets-backup'
+import { clearAndWriteSheet, ensureSheetExists, getSheetsWriteToken } from './sheets-backup'
+
+/**
+ * Planilla destino: "Nueva Agenda 2026", que es donde trabajan de verdad.
+ *
+ * OJO: NO es la misma que GOOGLE_SPREADSHEET_ID, que apunta a "Base datos kw"
+ * (la copia que usa la app para sincronizar). Son dos planillas distintas y es
+ * facil confundirlas: las dos tienen pestañas KW, SSR, Gastos y Afip.
+ *
+ * Se puede pisar con GOOGLE_SPREADSHEET_AGENDA_ID si algun dia cambia.
+ */
+const AGENDA_ID = process.env.GOOGLE_SPREADSHEET_AGENDA_ID || '1ope2NNzKTwp43CT8p5dW4MXGD4KUPZVBXJnwfnBTYt4'
 
 export const HOJA_PRUEBA = 'PRUEBA - GASTOS APP'
 
@@ -112,7 +123,7 @@ export async function exportarGastosAppASheet(supabase: SupabaseClient): Promise
   filas.push(['', 'TOTAL', total('local'), '', '', '', '', 'TOTAL', total('adelanto'), '', '', '', 'TOTAL', total('personal')])
 
   // 3. Escribir, creando la pestaña si hace falta
-  const spreadsheetId = getSpreadsheetId()
+  const spreadsheetId = AGENDA_ID
   const token = await getSheetsWriteToken()
   await ensureSheetExists(spreadsheetId, token, HOJA_PRUEBA)
   await clearAndWriteSheet(spreadsheetId, token, HOJA_PRUEBA, filas)
