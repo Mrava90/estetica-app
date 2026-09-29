@@ -2,7 +2,8 @@
  * Exporta los gastos cargados en la app a la pestaña "PRUEBA - GASTOS APP".
  *
  * GET  → lo llama el cron de Vercel con el CRON_SECRET.
- * POST → lo dispara un admin desde /caja para ver el resultado al instante.
+ * POST → lo dispara /caja: el boton del admin, y ademas en automatico despues
+ *        de cada alta o baja de movimiento (ahi va silencioso).
  *
  * Reescribe la pestaña entera en cada corrida, asi que correrlo dos veces no
  * duplica nada. NUNCA toca la hoja "Gastos" real.
@@ -11,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isAdminUser } from '@/lib/constants'
+import { isStaffUser } from '@/lib/constants'
 import { withCronLog } from '@/lib/cron-logger'
 import { exportarGastosAppASheet } from '@/lib/gastos-export'
 
@@ -42,7 +43,11 @@ export async function POST() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  if (!isAdminUser(user)) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
+  // Staff, no solo admin: /caja lo dispara solo despues de cargar o borrar un
+  // gasto, y ahi puede estar cualquiera del personal. La operacion reescribe
+  // siempre la misma pestaña de prueba con datos de la app, asi que repetirla
+  // no rompe nada.
+  if (!isStaffUser(user)) return NextResponse.json({ error: 'Solo personal' }, { status: 403 })
 
   try {
     const result = await exportarGastosAppASheet(createAdminClient())

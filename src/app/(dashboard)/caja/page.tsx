@@ -46,6 +46,21 @@ interface MonthlyStats {
   mercadopago: number
 }
 
+type Categoria = 'local' | 'adelanto' | 'personal'
+
+/** Prefijo que se guarda en la descripcion. Lo lee gastos-export para saber a que bloque va. */
+const PREFIXES: Record<Categoria, string> = {
+  local: 'Gasto local:',
+  adelanto: 'Adelanto comisión:',
+  personal: 'Gasto personal:',
+}
+
+/**
+ * Silvina carga sobre todo gastos propios, asi que a ella el dialogo le abre
+ * en "Personal" en vez de "Gasto local". Puede cambiarlo igual.
+ */
+const EMAIL_CAT_PERSONAL = 'silvina@estetica.local'
+
 
 export default function CajaDiariaPage() {
   const [fecha, setFecha] = useState<Date>(new Date())
@@ -56,16 +71,18 @@ export default function CajaDiariaPage() {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [exportando, setExportando] = useState(false)
-  /** Descripciones mas usadas, para cargar de un toque. Se calculan al abrir el dialogo. */
-  const [atajos, setAtajos] = useState<{ texto: string; tipo: 'efectivo' | 'mercadopago'; categoria: 'local' | 'adelanto' | 'personal' }[]>([])
   const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
+  /**
+   * Categoria que viene marcada al abrir el dialogo. Es 'local' para todos
+   * menos para Silvina, que carga casi siempre gastos personales.
+   */
+  const [catPorDefecto, setCatPorDefecto] = useState<Categoria>('local')
 
   // New movement form state
   const [newMonto, setNewMonto] = useState('')
   const [newTipo, setNewTipo] = useState<'efectivo' | 'mercadopago'>('efectivo')
   const [newTipoMov, setNewTipoMov] = useState<'gasto' | 'ingreso'>('gasto')
-  const [newCategoria, setNewCategoria] = useState<'local' | 'adelanto' | 'personal'>('local')
-  const [newDescripcion, setNewDescripcion] = useState('')
+  const [newCategoria, setNewCategoria] = useState<Categoria>('local')
   const [saving, setSaving] = useState(false)
 
   const [syncing, setSyncing] = useState(false)
@@ -88,6 +105,13 @@ export default function CajaDiariaPage() {
   useEffect(() => {
     async function fetchAdminStats() {
       const { data: userData } = await supabase.auth.getUser()
+
+      // Preseleccion de categoria por usuario (corre para todos, admin o no).
+      if (userData?.user?.email === EMAIL_CAT_PERSONAL) {
+        setCatPorDefecto('personal')
+        setNewCategoria('personal')
+      }
+
       if (!isAdminUser(userData?.user)) return
       setIsAdmin(true)
 
@@ -197,22 +221,9 @@ export default function CajaDiariaPage() {
       toast.error('El monto no puede ser 0')
       return
     }
-    if (!newDescripcion.trim() || newDescripcion.trim().length < 2) {
-      toast.error('Descripción requerida')
-      return
-    }
-
-  const PREFIXES = {
-      local: 'Gasto local:',
-      adelanto: 'Adelanto comisión:',
-      personal: 'Gasto personal:',
-    } as const
-
     const monto = newTipoMov === 'gasto' ? -Math.abs(montoRaw) : Math.abs(montoRaw)
-    const descripcion =
-      newTipoMov === 'gasto'
-        ? `${PREFIXES[newCategoria]} ${newDescripcion.trim()}`
-        : `Ingreso: ${newDescripcion.trim()}`
+    // Sin campo de descripcion: lo que identifica al movimiento es la categoria.
+    const descripcion = newTipoMov === 'gasto' ? PREFIXES[newCategoria] : 'Ingreso:'
 
     setSaving(true)
     const { error } = await supabase.from('movimientos_caja').insert({
@@ -231,78 +242,29 @@ export default function CajaDiariaPage() {
       setNewMonto('')
       setNewTipo('efectivo')
       setNewTipoMov('gasto')
-      setNewCategoria('local')
-      setNewDescripcion('')
+      setNewCategoria(catPorDefecto)
       fetchData()
+      sincronizarSheet()
     }
     setSaving(false)
   }
 
-  // El dialogo se abre desde el FAB y desde el boton, los dos con
-  // setDialogOpen(true). onOpenChange no corre en ese caso, asi que los
-  // atajos se cargan aca.
-  useEffect(() => {
-    if (dialogOpen && atajos.length === 0) cargarAtajos()
-  }, [dialogOpen]) // eslint-disable-line react-hooks/exhaustive-deps
-
   /**
-   * Arma los atajos mirando que se cargo en los ultimos 90 dias.
-   * De cada descripcion repetida guarda su medio de pago y categoria mas
-   * frecuentes, asi un toque completa los tres campos.
+   * Vuelca los gastos cargados en la app a la pestaña "PRUEBA - GASTOS APP"
+   * del Google Sheet. Reescribe esa pestaña entera en cada corrida, asi que
+   * refleja altas, ediciones y bajas por igual. NUNCA toca la hoja real.
+   *
+   * @param silencioso lo llamamos solo despues de guardar o borrar, sin avisar
+   *                   de que salio bien; los errores si se muestran.
    */
-  async function cargarAtajos() {
-    const desde = format(subDays(new Date(), 90), 'yyyy-MM-dd')
-    const { data } = await supabase
-      .from('movimientos_caja')
-      .select('descripcion, tipo, monto')
-      .gte('fecha', desde)
-      .lt('monto', 0)
-    if (!data) return
-
-    const PREF: Record<string, 'local' | 'adelanto' | 'personal'> = {
-      'gasto local': 'local', 'adelanto comisión': 'adelanto', 'gasto personal': 'personal',
-    }
-    const conteo = new Map<string, { n: number; tipos: Record<string, number>; cats: Record<string, number> }>()
-    for (const m of data) {
-      const bruto = (m.descripcion || '').trim()
-      const corte = bruto.indexOf(':')
-      const prefijo = corte > 0 ? bruto.slice(0, corte).toLowerCase() : ''
-      const texto = (corte > 0 ? bruto.slice(corte + 1) : bruto).trim()
-      if (texto.length < 3) continue
-      const clave = texto.toLowerCase()
-      if (!conteo.has(clave)) conteo.set(clave, { n: 0, tipos: {}, cats: {} })
-      const o = conteo.get(clave)!
-      o.n++
-      o.tipos[m.tipo] = (o.tipos[m.tipo] || 0) + 1
-      const cat = PREF[prefijo] || 'local'
-      o.cats[cat] = (o.cats[cat] || 0) + 1
-    }
-    const masUsado = (r: Record<string, number>, fallback: string) =>
-      Object.entries(r).sort((a, b) => b[1] - a[1])[0]?.[0] ?? fallback
-
-    setAtajos(
-      [...conteo.entries()]
-        .filter(([, o]) => o.n >= 2)          // uno solo no es un habito
-        .sort((a, b) => b[1].n - a[1].n)
-        .slice(0, 8)
-        .map(([texto, o]) => ({
-          texto,
-          tipo: masUsado(o.tipos, 'efectivo') as 'efectivo' | 'mercadopago',
-          categoria: masUsado(o.cats, 'local') as 'local' | 'adelanto' | 'personal',
-        }))
-    )
-  }
-
-  // Vuelca los gastos cargados en la app a la pestaña "PRUEBA - GASTOS APP"
-  // del Google Sheet. Reescribe esa pestaña entera; no toca la hoja real.
-  async function exportarGastosAlSheet() {
-    setExportando(true)
+  async function exportarGastosAlSheet(silencioso = false) {
+    if (!silencioso) setExportando(true)
     try {
       const res = await fetch('/api/cron/exportar-gastos', { method: 'POST' })
       const json = await res.json()
       if (!res.ok || json.error) {
-        toast.error(json.error || 'No se pudo exportar')
-      } else {
+        toast.error(json.error || 'No se pudo actualizar el sheet')
+      } else if (!silencioso) {
         const b = json.porBloque || {}
         toast.success(
           `${json.filas} gasto(s) en "${json.hoja}" — local ${b.local ?? 0} · adelantos ${b.adelanto ?? 0} · casa ${b.personal ?? 0}`
@@ -311,8 +273,14 @@ export default function CajaDiariaPage() {
     } catch {
       toast.error('No se pudo conectar con el servidor')
     } finally {
-      setExportando(false)
+      if (!silencioso) setExportando(false)
     }
+  }
+
+  // Despues de cada alta o baja dejamos el sheet al dia, sin esperar al cron
+  // de las 2 AM ni al boton. Va en segundo plano: no bloquea la pantalla.
+  function sincronizarSheet() {
+    void exportarGastosAlSheet(true)
   }
 
   async function handleDeleteMovimiento(id: string) {
@@ -323,6 +291,7 @@ export default function CajaDiariaPage() {
     } else {
       toast.success('Movimiento eliminado')
       fetchData()
+      sincronizarSheet()
     }
   }
 
@@ -632,7 +601,7 @@ export default function CajaDiariaPage() {
                 <CardTitle className="text-base">Movimientos manuales</CardTitle>
                 <div className="flex items-center gap-2">
                   {isAdmin && (
-                    <Button size="sm" variant="outline" className="gap-1.5" onClick={exportarGastosAlSheet} disabled={exportando}
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => exportarGastosAlSheet()} disabled={exportando}
                       title="Vuelca los gastos cargados acá a la pestaña de prueba del Google Sheet">
                       <Upload className="h-4 w-4 rotate-180" />
                       <span className="hidden sm:inline">{exportando ? 'Exportando…' : 'Exportar al sheet'}</span>
@@ -667,7 +636,8 @@ export default function CajaDiariaPage() {
                   )}
                   {movimientosDiarios.map((mov) => (
                     <TableRow key={mov.id}>
-                      <TableCell className="font-medium">{mov.descripcion}</TableCell>
+                      {/* Sin campo de detalle la descripcion es solo el rotulo: le saco los dos puntos del final */}
+                      <TableCell className="font-medium">{mov.descripcion.replace(/:\s*$/, '')}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="gap-1 text-xs">
                           {mov.tipo === 'efectivo' ? (
@@ -722,7 +692,7 @@ export default function CajaDiariaPage() {
       {/* Dialog para nuevo movimiento */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open)
-        if (!open) { setNewTipoMov('gasto'); setNewMonto(''); setNewDescripcion(''); setNewTipo('efectivo'); setNewCategoria('local') }
+        if (!open) { setNewTipoMov('gasto'); setNewMonto(''); setNewTipo('efectivo'); setNewCategoria(catPorDefecto) }
       }}>
         <DialogContent>
           <DialogHeader>
@@ -796,7 +766,7 @@ export default function CajaDiariaPage() {
                 placeholder="Ej: 5000"
                 value={newMonto}
                 onChange={(e) => setNewMonto(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && newMonto && newDescripcion.trim()) handleAddMovimiento() }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && newMonto) handleAddMovimiento() }}
               />
             </div>
 
@@ -819,34 +789,6 @@ export default function CajaDiariaPage() {
                   </Button>
                 ))}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Descripción</Label>
-              {/* Un toque completa descripcion + medio + categoria */}
-              {newTipoMov === 'gasto' && atajos.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {atajos.map((a) => (
-                    <button
-                      key={a.texto}
-                      type="button"
-                      onClick={() => { setNewDescripcion(a.texto); setNewTipo(a.tipo); setNewCategoria(a.categoria) }}
-                      className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
-                        newDescripcion === a.texto
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'bg-muted/40 hover:bg-muted'
-                      }`}
-                    >
-                      {a.texto}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <Input
-                placeholder={newTipoMov === 'gasto' ? 'Ej: alquiler, compra insumos...' : 'Ej: cobro extra, seña...'}
-                value={newDescripcion}
-                onChange={(e) => setNewDescripcion(e.target.value)}
-              />
             </div>
 
             <Button
