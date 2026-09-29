@@ -26,6 +26,8 @@
  * ── Ante errores ─────────────────────────────────────────────────────────
  * Al primer fallo se FRENA la corrida. Lo ya emitido queda emitido (el CAE
  * de ARCA es irreversible); el resto espera a la proxima.
+ * Un 409 de /generar (la venta ya tiene factura) no es un fallo: ese pago se
+ * saltea, queda anotado en `salteadas` y la corrida sigue.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -196,6 +198,7 @@ export async function GET(request: NextRequest) {
 
       // ── 7. Emitir. Al primer error, frenar. ──────────────────────────────
       const emitidas: Array<{ pagoId: number; cae: string }> = []
+      const salteadas: string[] = []
       let errorFatal: string | null = null
 
       for (const cand of elegibles) {
@@ -217,6 +220,13 @@ export async function GET(request: NextRequest) {
         })
         const json = await res.json().catch(() => ({}))
 
+        // 409 = ya hay una factura para esta venta (mismo pago, o misma fecha +
+        // monto + persona). No es un error de ARCA: se saltea y se sigue.
+        if (res.status === 409) {
+          salteadas.push(`Pago ${pago.id} (${pago.diaAR}, ${pago.monto}, ${nombre}): ${json.error || 'ya facturada'}`)
+          continue
+        }
+
         // Sin CAE no hay factura, aunque el HTTP haya sido 200 (ej. una redireccion
         // a una pagina HTML). Frenar en vez de darlo por emitido.
         if (!res.ok || json.error || !json.cae) {
@@ -229,6 +239,7 @@ export async function GET(request: NextRequest) {
       const resumen = errorFatal
         ? `Frenado tras ${emitidas.length}/${elegibles.length} facturas`
         : `${emitidas.length} factura${emitidas.length === 1 ? '' : 's'} emitida${emitidas.length === 1 ? '' : 's'}`
+          + (salteadas.length ? ` · ${salteadas.length} salteada${salteadas.length === 1 ? '' : 's'} por posible duplicado` : '')
 
       await registrarRun(admin, resumen, errorFatal)
 
@@ -238,6 +249,7 @@ export async function GET(request: NextRequest) {
         candidatos: qr.length,
         descartes,
         error: errorFatal,
+        salteadas,
         caes: emitidas.map(e => e.cae),
       }
     })

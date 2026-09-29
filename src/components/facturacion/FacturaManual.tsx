@@ -61,19 +61,29 @@ export function FacturaManual({ onEmitida }: Props) {
     setResultado(null)
     try {
       const key = `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const res = await fetch('/api/facturacion/generar', {
+      const payload = {
+        afip_row_key:    key,
+        receptor_nombre: nombre.trim() || 'Consumidor Final',
+        receptor_dni:    dniLimpio || null,
+        monto:           montoNum,
+        fecha,
+        descripcion:     descripcion.trim() || 'Servicios de estética',
+      }
+      const enviar = (forzar: boolean) => fetch('/api/facturacion/generar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          afip_row_key:    key,
-          receptor_nombre: nombre.trim() || 'Consumidor Final',
-          receptor_dni:    dniLimpio || null,
-          monto:           montoNum,
-          fecha,
-          descripcion:     descripcion.trim() || 'Servicios de estética',
-        }),
+        body: JSON.stringify(forzar ? { ...payload, forzar: true } : payload),
       })
-      const json = await res.json()
+      let res = await enviar(false)
+      let json = await res.json()
+      // Parece ya facturada: preguntar antes de emitir una segunda factura.
+      if (res.status === 409 && json.posible_duplicado &&
+          confirm(`${json.error}
+
+¿Es otra venta y querés emitir igual?`)) {
+        res = await enviar(true)
+        json = await res.json()
+      }
       if (!res.ok || json.error) {
         setResultado({ ok: false, error: json.error || `Error HTTP ${res.status}` })
       } else {

@@ -6,6 +6,7 @@ import { formatPrecio } from '@/lib/dates'
 import { SwitchFacturacionAuto } from '@/components/facturacion/SwitchFacturacionAuto'
 import { FacturaManual } from '@/components/facturacion/FacturaManual'
 import { ConfigArca } from '@/components/facturacion/ConfigArca'
+import { ConciliacionArca } from '@/components/facturacion/ConciliacionArca'
 import { FilaFactura, type FilaFacturaProps } from '@/components/facturacion/FilaFactura'
 import { mesLabel } from './helpers'
 import { CANALES_PRESENCIALES, type EdicionFila, type ItemFacturacion, type RowMode } from './tipos'
@@ -115,19 +116,29 @@ export default function FacturacionPage() {
     setMode(item.afip_row_key, 'loading')
     clearErr(item.afip_row_key)
     try {
-      const res = await fetch('/api/facturacion/generar', {
+      const payload = {
+        afip_row_key:    item.afip_row_key,
+        receptor_nombre: editData[item.afip_row_key]?.nombre ?? item.cliente_nombre,
+        receptor_dni:    editData[item.afip_row_key]?.dni || item.cliente_dni,
+        monto:           item.monto,
+        fecha:           item.fecha,
+        descripcion:     editData[item.afip_row_key]?.descripcion ?? item.servicio_nombre ?? 'Servicio de estética',
+      }
+      const enviar = (forzar: boolean) => fetch('/api/facturacion/generar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          afip_row_key:    item.afip_row_key,
-          receptor_nombre: editData[item.afip_row_key]?.nombre ?? item.cliente_nombre,
-          receptor_dni:    editData[item.afip_row_key]?.dni || item.cliente_dni,
-          monto:           item.monto,
-          fecha:           item.fecha,
-          descripcion:     editData[item.afip_row_key]?.descripcion ?? item.servicio_nombre ?? 'Servicio de estética',
-        }),
+        body: JSON.stringify(forzar ? { ...payload, forzar: true } : payload),
       })
-      const json = await res.json()
+      let res = await enviar(false)
+      let json = await res.json()
+      // Parece ya facturada: preguntar antes de emitir una segunda factura.
+      if (res.status === 409 && json.posible_duplicado &&
+          confirm(`${json.error}
+
+¿Es otra venta y querés emitir igual?`)) {
+        res = await enviar(true)
+        json = await res.json()
+      }
       if (!res.ok || json.error) {
         setErr(item.afip_row_key, json.error || `Error HTTP ${res.status}`)
         setMode(item.afip_row_key, 'idle')
@@ -439,6 +450,9 @@ export default function FacturacionPage() {
       {/* ── TAB: Lista ───────────────────────────────────────────────────────── */}
       {tab === 'lista' && (
         <>
+          {/* Cruce del mes contra ARCA (solo lectura) */}
+          <ConciliacionArca mes={`${mesBase.getFullYear()}-${String(mesBase.getMonth() + 1).padStart(2, '0')}`} />
+
           {/* Selector de mes + búsqueda + filtro */}
           <div className="flex flex-col sm:flex-row flex-wrap items-start gap-2">
             <div className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 self-start w-fit">

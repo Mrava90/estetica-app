@@ -20,6 +20,7 @@
 import { GoogleAuth } from 'google-auth-library'
 import { createClient } from '@supabase/supabase-js'
 import { traerPagosDelMes, crearMatcher, type TipoPagoMP } from '@/lib/mercadopago'
+import { asignarFacturas, claveFila, normalizarNombre } from '@/lib/facturacion-match'
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID!
 
@@ -113,6 +114,9 @@ function parsearFilas(
 ): FilaAfip[] {
   const filas: FilaAfip[] = []
   let currentDate: string | null = null
+  // Cuantas ventas identicas (fecha + cliente + monto) van apareciendo, para el
+  // ordinal de la clave. Ver claveFila en facturacion-match.
+  const repetidas = new Map<string, number>()
 
   for (let i = 1; i < rows.length; i++) {  // fila 0 = encabezado
     const row = rows[i]
@@ -138,7 +142,14 @@ function parsearFilas(
 
     if (!cliente || monto <= 0) continue
 
-    filas.push({ afip_row_key: `${prefix}-${i}`, fecha: currentDate, cliente, servicio, monto, dni, medio })
+    // Clave por contenido, no por numero de fila: si se inserta o se borra
+    // una fila arriba, la clave de esta venta no cambia.
+    const firma = `${currentDate}|${normalizarNombre(cliente)}|${Math.round(monto)}`
+    const ordinal = (repetidas.get(firma) || 0) + 1
+    repetidas.set(firma, ordinal)
+    const afip_row_key = claveFila(prefix, currentDate, cliente, monto, ordinal)
+
+    filas.push({ afip_row_key, fecha: currentDate, cliente, servicio, monto, dni, medio })
   }
 
   return filas
@@ -185,8 +196,8 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
 
   // 2. Leer las 4 hojas + pagos MP en paralelo.
   //    Las hojas "Afip *" son un subconjunto de "KW"/"SSR" con solo las ventas
-  //    de MercadoPago. Se siguen usando como fuente de esas para no cambiar los
-  //    afip_row_key de las facturas ya emitidas. De "KW"/"SSR" tomamos solo lo
+  //    de MercadoPago, y siguen siendo la fuente de esas (el prefijo "afip-" de
+  //    la clave sale de ahi). De "KW"/"SSR" tomamos solo lo
   //    que NO es MercadoPago (efectivo y gift card), que no esta en las Afip.
   const [rowsAfipSSR, rowsAfipKW, rowsKW, rowsSSR, pagosMP] = await Promise.all([
     fetchSheet('Afip SSR'),
@@ -199,7 +210,7 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
   // 3. Parsear y ordenar por fecha
   const soloNoMP = (m: MedioPago) => m !== 'MercadoPago'
   const filas = [
-    // MercadoPago — desde las hojas Afip (keys historicas, no tocar)
+    // MercadoPago — desde las hojas Afip
     ...parsearFilas(rowsAfipSSR, 'afip-ssr', targetYear, targetMonth, { colDni: 10 }),
     ...parsearFilas(rowsAfipKW, 'afip-kw', targetYear, targetMonth, { colDni: 10 }),
     // Efectivo y otros — desde las hojas completas. El DNI en "KW" esta en la
@@ -208,19 +219,25 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
     ...parsearFilas(rowsSSR, 'ssr', targetYear, targetMonth, { colDni: 10, filtroMedio: soloNoMP }),
   ].sort((a, b) => a.fecha.localeCompare(b.fecha))
 
-  // 4. Cruzar con la tabla facturas
+  // 4. Cruzar con la tabla facturas, por contenido (ver facturacion-match).
+  // Se traen las facturas del mes con 3 dias de margen de cada lado, por las
+  // ventas cuya fecha se corrigio en el sheet despues de facturarlas.
   const supabase = getSupabase()
-  const keys = filas.map(f => f.afip_row_key)
-  const { data: facturas } = await supabase
+  const desde = new Date(Date.UTC(targetYear, targetMonth - 1, 1) - 3 * 86_400_000).toISOString().slice(0, 10)
+  const hasta = new Date(Date.UTC(targetYear, targetMonth, 0) + 3 * 86_400_000).toISOString().slice(0, 10)
+  const { data: facturas, error: errFacturas } = await supabase
     .from('facturas')
-    .select('afip_row_key, id, estado, cae, numero_cbte, cae_vencimiento, error_msg')
-    .in('afip_row_key', keys)
+    .select('afip_row_key, id, estado, cae, numero_cbte, cae_vencimiento, error_msg, fecha, monto, receptor_nombre, receptor_dni')
+    .gte('fecha', desde)
+    .lte('fecha', hasta)
+  // Sin facturas no se puede decir que algo este pendiente: mejor fallar que
+  // mostrar todo el mes como "sin facturar".
+  if (errFacturas) throw new Error('No se pudieron leer las facturas: ' + errFacturas.message)
 
-  type FacturaRow = NonNullable<typeof facturas>[number]
-  const facturaMap: Record<string, FacturaRow> = {}
-  for (const f of facturas || []) {
-    if (f.afip_row_key) facturaMap[f.afip_row_key] = f
-  }
+  const facturaMap = asignarFacturas(
+    filas.map(f => ({ clave: f.afip_row_key, fecha: f.fecha, cliente: f.cliente, monto: f.monto, dni: f.dni })),
+    facturas || [],
+  )
 
   // 5. Combinar con MercadoPago.
   // El matcher consume cada pago una sola vez, recorriendo las filas ya
@@ -229,7 +246,7 @@ export async function obtenerFilasFacturacion(mes: string): Promise<ResultadoFac
   const matchMP = crearMatcher(pagosMP)
 
   const items: ItemFacturacion[] = filas.map(fila => {
-    const factura = facturaMap[fila.afip_row_key] ?? null
+    const factura = facturaMap.get(fila.afip_row_key) ?? null
     // Solo tiene sentido cruzar contra MercadoPago las ventas cobradas por ahi.
     // Una venta en efectivo no tiene pago de MP asociado.
     const { pago, match } = fila.medio === 'MercadoPago'
