@@ -5,8 +5,11 @@ import { formatPrecio } from '@/lib/dates'
 import { AlertTriangle, CheckCircle2, Loader2, ShieldCheck, X } from 'lucide-react'
 
 /**
- * Boton + panel que cruza el mes contra lo que ARCA tiene emitido.
- * Solo lectura: llama a /api/cron/conciliar-arca, que no emite nada.
+ * Cruce del mes contra lo que ARCA tiene emitido. Solo lectura: llama a
+ * /api/cron/conciliar-arca, que no emite nada.
+ *
+ * Devuelve dos piezas porque van en lugares distintos de la pantalla: el
+ * boton con su leyenda en el encabezado, y el detalle a lo ancho debajo.
  */
 
 interface Fila { numero: number; fechaVenta?: string; monto: number; receptor?: string | null; dni?: string | null }
@@ -25,7 +28,7 @@ interface Resultado {
 
 const ddmm = (iso?: string) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '')
 
-export function ConciliacionArca({ mes }: { mes: string }) {
+export function useConciliacionArca(mes: string) {
   const [cargando, setCargando] = useState(false)
   const [res, setRes] = useState<Resultado | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -50,8 +53,8 @@ export function ConciliacionArca({ mes }: { mes: string }) {
     ? res.diferencias.length + res.soloArca.length + res.soloApp.length + res.duplicados.length
     : 0
 
-  return (
-    <div className="space-y-2">
+  const boton = (
+    <div className="flex flex-col items-start sm:items-center gap-0.5">
       <button
         type="button"
         onClick={conciliar}
@@ -62,6 +65,21 @@ export function ConciliacionArca({ mes }: { mes: string }) {
         {cargando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />}
         {cargando ? 'Consultando ARCA…' : 'Conciliar con ARCA'}
       </button>
+      {/* Leyenda: que hace, o el resultado de la ultima corrida */}
+      <span className={`text-[10px] leading-tight ${
+        !res ? 'text-muted-foreground' : problemas === 0 ? 'text-green-600' : 'text-amber-600'
+      }`}>
+        {!res
+          ? 'Compara el mes con ARCA · no emite nada'
+          : problemas === 0
+            ? `✓ Coinciden las ${res.coinciden} del mes`
+            : `⚠ ${problemas} diferencia${problemas === 1 ? '' : 's'} · ver detalle abajo`}
+      </span>
+    </div>
+  )
+
+  const panel = (error || res) ? (
+    <div className="space-y-2">
 
       {error && (
         <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
@@ -109,7 +127,9 @@ export function ConciliacionArca({ mes }: { mes: string }) {
         </div>
       )}
     </div>
-  )
+  ) : null
+
+  return { boton, panel }
 }
 
 function Seccion<T>({ titulo, nota, items, render }: {

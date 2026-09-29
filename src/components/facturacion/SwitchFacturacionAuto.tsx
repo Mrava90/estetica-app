@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { formatPrecio } from '@/lib/dates'
 import { formatAR } from '@/lib/timezone'
-import { Zap, Loader2, AlertTriangle, Check, ChevronDown } from 'lucide-react'
+import { Loader2, AlertTriangle, Check, ChevronDown } from 'lucide-react'
 
 interface ConfigAuto {
   facturacion_auto_qr: boolean
@@ -69,18 +69,15 @@ export function SwitchFacturacionAuto() {
 
   return (
     <div className="relative">
-      <div className={`flex items-center gap-2 rounded-md border px-2 py-1 transition-colors ${
-        activo ? 'border-amber-300 bg-amber-50' : 'border-border bg-card'
-      }`}>
-        <Zap className={`h-3.5 w-3.5 shrink-0 ${activo ? 'text-amber-600' : 'text-muted-foreground'}`} />
-        <div className="min-w-0">
-          <p className={`text-xs font-medium leading-tight ${activo ? 'text-amber-900' : 'text-foreground'}`}>
-            Facturación automática
-          </p>
-          <p className={`text-[10px] leading-tight ${activo ? 'text-amber-700' : 'text-muted-foreground'}`}>
-            {activo ? 'Activa · ventas QR y Point' : 'Desactivada'}
-          </p>
-        </div>
+      <div
+        className={`flex items-center gap-1.5 rounded-md border px-1.5 py-1 transition-colors ${
+          activo ? 'border-amber-300 bg-amber-50' : 'border-border bg-card'
+        }`}
+        title={activo ? 'Facturación automática activa · ventas QR y Point, todos los días a las 20:00' : 'Facturación automática desactivada'}
+      >
+        <span className={`text-[11px] font-bold tracking-wide ${activo ? 'text-amber-700' : 'text-muted-foreground'}`}>
+          AUTO
+        </span>
 
         {/* Switch */}
         <button

@@ -103,10 +103,10 @@ export function FacturaManual({ onEmitida }: Props) {
       <button
         type="button"
         onClick={() => setAbierto(v => !v)}
-        className="flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+        className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors"
         title="Emitir una factura cargando los datos a mano"
       >
-        <FilePlus2 className="h-3.5 w-3.5" />
+        <FilePlus2 className="h-4 w-4" />
         Factura manual
       </button>
 

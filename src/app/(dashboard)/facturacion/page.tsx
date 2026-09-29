@@ -6,7 +6,7 @@ import { formatPrecio } from '@/lib/dates'
 import { SwitchFacturacionAuto } from '@/components/facturacion/SwitchFacturacionAuto'
 import { FacturaManual } from '@/components/facturacion/FacturaManual'
 import { ConfigArca } from '@/components/facturacion/ConfigArca'
-import { ConciliacionArca } from '@/components/facturacion/ConciliacionArca'
+import { useConciliacionArca } from '@/components/facturacion/ConciliacionArca'
 import { FilaFactura, type FilaFacturaProps } from '@/components/facturacion/FilaFactura'
 import { mesLabel } from './helpers'
 import { CANALES_PRESENCIALES, type EdicionFila, type ItemFacturacion, type RowMode } from './tipos'
@@ -16,7 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
-  Settings2,
+  Settings,
   Info,
   ChevronDown,
   Send,
@@ -75,6 +75,8 @@ export default function FacturacionPage() {
     const n = new Date()
     return new Date(n.getFullYear(), n.getMonth(), 1)
   })
+  const mesStr = `${mesBase.getFullYear()}-${String(mesBase.getMonth() + 1).padStart(2, '0')}`
+  const conciliacion = useConciliacionArca(mesStr)
   const mesAnterior  = () => setMesBase(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
   const mesSiguiente = () => setMesBase(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
 
@@ -345,10 +347,8 @@ export default function FacturacionPage() {
   const montoPresencial = itemsPresenciales.reduce((s, i) => s + i.monto, 0)
   const montoTransferencia = itemsTransferencia.reduce((s, i) => s + i.monto, 0)
   const montoEfectivo = itemsEfectivo.reduce((s, i) => s + i.monto, 0)
-  const comisionTotal = items.reduce((s, i) => s + (i.mp_comision ?? 0), 0)
   const itemsMP = items.filter(i => i.medio_pago === 'MercadoPago')
   const montoMP = itemsMP.reduce((s, i) => s + i.monto, 0)
-  const sinIdentificar = itemsMP.filter(i => i.tipo_pago == null).length
   const pendientesFiltrados = (filtroEstado === 'todos' || filtroEstado === 'pendiente') ? aplicarFiltros([...pendientes, ...conError]) : []
   const emitidasFiltradas   = (filtroEstado === 'todos' || filtroEstado === 'emitida')   ? aplicarFiltros([...emitidas].sort((a, b) => b.fecha.localeCompare(a.fecha)))   : []
   const excluidasFiltradas  = (filtroEstado === 'todos' || filtroEstado === 'excluida')  ? aplicarFiltros(excluidas)  : []
@@ -431,28 +431,31 @@ export default function FacturacionPage() {
             Ventas del Google Sheet · MercadoPago y efectivo · Aprobación manual por ítem
           </p>
         </div>
-        <div className="flex flex-wrap items-start gap-1.5">
+        {/* Centro: conciliacion con ARCA y su leyenda */}
+        <div className="sm:flex-1 sm:flex sm:justify-center">
+          {conciliacion.boton}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
           <FacturaManual onEmitida={fetchData} />
           <SwitchFacturacionAuto />
-          <div className="flex gap-0.5 rounded-md border bg-muted p-0.5 self-start">
-            <button onClick={() => setTab('lista')}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${tab === 'lista' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Receipt className="h-3 w-3" /> Lista
-            </button>
-            <button onClick={() => setTab('configuracion')}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors ${tab === 'configuracion' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
-              <Settings2 className="h-3 w-3" /> Config ARCA
-            </button>
-          </div>
+          {/* Configuracion de ARCA: la tuerca alterna con la lista */}
+          <button
+            onClick={() => setTab(t => (t === 'configuracion' ? 'lista' : 'configuracion'))}
+            className={`rounded-md border p-1.5 transition-colors ${tab === 'configuracion' ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+            title={tab === 'configuracion' ? 'Volver a la lista' : 'Configuración de ARCA'}
+            aria-label="Configuración de ARCA"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
         </div>
       </div>
+
+      {/* Detalle de la conciliacion, a lo ancho */}
+      {conciliacion.panel}
 
       {/* ── TAB: Lista ───────────────────────────────────────────────────────── */}
       {tab === 'lista' && (
         <>
-          {/* Cruce del mes contra ARCA (solo lectura) */}
-          <ConciliacionArca mes={`${mesBase.getFullYear()}-${String(mesBase.getMonth() + 1).padStart(2, '0')}`} />
-
           {/* Selector de mes + búsqueda + filtro */}
           <div className="flex flex-col sm:flex-row flex-wrap items-start gap-2">
             <div className="flex items-center gap-1.5 rounded-md border bg-card px-2 py-1 self-start w-fit">
@@ -568,7 +571,7 @@ export default function FacturacionPage() {
 
           {/* Stats */}
           {!loading && items.length > 0 && (
-            <div className={`grid grid-cols-2 gap-2 ${mpDisponible ? 'lg:grid-cols-4' : 'sm:grid-cols-3'}`}>
+            <div className="grid grid-cols-3 gap-2">
               <div className="rounded-lg border bg-card px-2.5 py-1.5">
                 <p className="text-[10px] text-muted-foreground leading-tight">Total del mes</p>
                 <p className="text-base font-bold text-blue-700 leading-tight">{formatPrecio(totalMonto)}</p>
@@ -588,16 +591,6 @@ export default function FacturacionPage() {
                 <p className="text-base font-bold text-green-700 leading-tight">{emitidas.length}</p>
                 <p className="text-[10px] text-green-600 leading-tight">{formatPrecio(montoEmitido)}</p>
               </div>
-              {mpDisponible && (
-                <div className="rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1.5">
-                  <p className="text-[10px] text-violet-700 leading-tight">Comisiones MP</p>
-                  <p className="text-base font-bold text-violet-700 leading-tight">{formatPrecio(comisionTotal)}</p>
-                  <p className="text-[10px] text-violet-600 leading-tight">
-                    {totalMonto > 0 ? `${((comisionTotal / totalMonto) * 100).toFixed(2)}%` : '—'}
-                    {sinIdentificar > 0 && ` · ${sinIdentificar} s/ident.`}
-                  </p>
-                </div>
-              )}
             </div>
           )}
 
