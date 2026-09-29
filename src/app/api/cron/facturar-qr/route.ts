@@ -28,6 +28,13 @@
  * de ARCA es irreversible); el resto espera a la proxima.
  * Un 409 de /generar (la venta ya tiene factura) no es un fallo: ese pago se
  * saltea, queda anotado en `salteadas` y la corrida sigue.
+ *
+ * ── Efectivo ─────────────────────────────────────────────────────────────
+ * Antes de facturar, pasa a "excluida" (Eliminadas en la pantalla) toda venta
+ * en efectivo sin factura del mes actual y el anterior. El efectivo solo se
+ * factura si la clienta lo pide: en ese caso se restaura y se emite a mano.
+ * Corre aunque el switch este apagado, porque no emite nada en ARCA, y no
+ * toca las ventas que ya tienen estado (emitida, excluida o con error).
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -63,6 +70,35 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await withCronLog('facturar-qr', async () => {
+      // ── 0. Sheet del mes actual y el anterior ────────────────────────────
+      // El mes anterior entra porque la ventana de 7 dias puede cruzar el
+      // cambio de mes. Lo usan el paso de efectivo y la facturacion.
+      const [anio, mes] = fechaArYMD().split('-').map(Number)
+      const mesActual = `${anio}-${String(mes).padStart(2, '0')}`
+      const mesPrevio = mes === 1 ? `${anio - 1}-12` : `${anio}-${String(mes - 1).padStart(2, '0')}`
+
+      const filasSheet: ItemFacturacion[] = []
+      for (const m of [mesPrevio, mesActual]) {
+        const { items } = await obtenerFilasFacturacion(m)
+        filasSheet.push(...items)
+      }
+
+      // ── 0b. Efectivo → Eliminadas ────────────────────────────────────────
+      // Si falla no frena la facturacion: queda anotado y sigue.
+      let efectivoExcluidas = 0
+      let efectivoError: string | null = null
+      try {
+        efectivoExcluidas = await excluirEfectivo(admin, filasSheet)
+      } catch (err) {
+        efectivoError = err instanceof Error ? err.message : String(err)
+        console.error('[cron facturar-qr] efectivo:', err)
+      }
+      const notaEfectivo = efectivoError
+        ? ` · efectivo: ${efectivoError}`
+        : efectivoExcluidas ? ` · ${efectivoExcluidas} en efectivo a Eliminadas` : ''
+      const registrar = (resultado: string, error: string | null) =>
+        registrarRun(admin, resultado + notaEfectivo, error)
+
       // ── 1. Switch prendido? ──────────────────────────────────────────────
       const { data: config } = await admin
         .from('configuracion')
@@ -71,7 +107,7 @@ export async function GET(request: NextRequest) {
         .single()
 
       if (!config?.facturacion_auto_qr) {
-        return { skipped: true, motivo: 'facturacion automatica desactivada' }
+        return { skipped: true, motivo: 'facturacion automatica desactivada', efectivoExcluidas, efectivoError }
       }
 
       const montoMax = Number(config.facturacion_auto_monto_max) || 100000
@@ -80,8 +116,8 @@ export async function GET(request: NextRequest) {
       // ── 2. Cobros QR de la ventana ───────────────────────────────────────
       const qr = (await traerPagosUltimosDias(DIAS_VENTANA)).filter(p => CANALES_AUTO.includes(p.tipo))
       if (qr.length === 0) {
-        await registrarRun(admin, 'Sin cobros QR/Point en la ventana', null)
-        return { emitidas: 0, candidatos: 0 }
+        await registrar('Sin cobros QR/Point en la ventana', null)
+        return { emitidas: 0, candidatos: 0, efectivoExcluidas, efectivoError }
       }
 
       // ── 3. Descartar los ya facturados ───────────────────────────────────
@@ -94,19 +130,7 @@ export async function GET(request: NextRequest) {
 
       const pendientes = qr.filter(p => !facturados.has(p.id) && p.monto > 0)
 
-      // ── 4. Traer el sheet del mes actual y el anterior ───────────────────
-      // El mes anterior entra porque la ventana de 7 dias puede cruzar el
-      // cambio de mes.
-      const [anio, mes] = fechaArYMD().split('-').map(Number)
-      const mesActual = `${anio}-${String(mes).padStart(2, '0')}`
-      const mesPrevio = mes === 1 ? `${anio - 1}-12` : `${anio}-${String(mes - 1).padStart(2, '0')}`
-
-      const filasSheet: ItemFacturacion[] = []
-      for (const m of [mesPrevio, mesActual]) {
-        const { items } = await obtenerFilasFacturacion(m)
-        filasSheet.push(...items)
-      }
-
+      // ── 4. El sheet ya se leyo en el paso 0 ──────────────────────────────
       // Indexar filas del sheet por dia + monto, sin reusar la misma fila dos veces.
       // Solo las de MercadoPago: una venta en efectivo nunca puede corresponder
       // a un cobro QR, aunque coincida en fecha y monto.
@@ -145,8 +169,8 @@ export async function GET(request: NextRequest) {
       }
 
       if (elegibles.length === 0) {
-        await registrarRun(admin, `Sin pendientes (${JSON.stringify(descartes)})`, null)
-        return { emitidas: 0, candidatos: qr.length, descartes }
+        await registrar(`Sin pendientes (${JSON.stringify(descartes)})`, null)
+        return { emitidas: 0, candidatos: qr.length, descartes, efectivoExcluidas, efectivoError }
       }
 
       // ── 6. Resolver receptor. MercadoPago manda, el sheet es respaldo ────
@@ -241,7 +265,7 @@ export async function GET(request: NextRequest) {
         : `${emitidas.length} factura${emitidas.length === 1 ? '' : 's'} emitida${emitidas.length === 1 ? '' : 's'}`
           + (salteadas.length ? ` · ${salteadas.length} salteada${salteadas.length === 1 ? '' : 's'} por posible duplicado` : '')
 
-      await registrarRun(admin, resumen, errorFatal)
+      await registrar(resumen, errorFatal)
 
       return {
         emitidas: emitidas.length,
@@ -250,6 +274,8 @@ export async function GET(request: NextRequest) {
         descartes,
         error: errorFatal,
         salteadas,
+        efectivoExcluidas,
+        efectivoError,
         caes: emitidas.map(e => e.cae),
       }
     })
@@ -262,6 +288,45 @@ export async function GET(request: NextRequest) {
     } catch { /* ya logueado */ }
     return NextResponse.json({ error: err?.message || 'Error en el cron' }, { status: 500 })
   }
+}
+
+/**
+ * Pasa a "excluida" las ventas en efectivo que todavia no tienen estado.
+ * Solo hasta hoy (dia argentino). Guarda los mismos datos que el boton
+ * "Eliminar" de la pantalla, asi se restauran igual. `datos_json.auto` deja
+ * constancia de que lo hizo el cron. Devuelve cuantas excluyo.
+ */
+async function excluirEfectivo(admin: ReturnType<typeof createAdminClient>, filas: ItemFacturacion[]): Promise<number> {
+  const hoy = fechaArYMD()
+  const aExcluir = filas.filter(f => f.medio_pago === 'Efectivo' && !f.factura_estado && f.fecha <= hoy)
+  if (aExcluir.length === 0) return 0
+
+  // Si alguien la excluyo o facturo mientras corria el cron, gana lo que ya
+  // esta en la tabla. No se usa upsert: el indice unico de afip_row_key es
+  // parcial (WHERE afip_row_key IS NOT NULL) y ON CONFLICT no lo reconoce.
+  const { data: existentes, error: errLectura } = await admin
+    .from('facturas')
+    .select('afip_row_key')
+    .in('afip_row_key', aExcluir.map(f => f.afip_row_key))
+  if (errLectura) throw new Error('No se pudieron leer las facturas: ' + errLectura.message)
+  const yaEstan = new Set((existentes || []).map(f => f.afip_row_key))
+  const nuevas = aExcluir.filter(f => !yaEstan.has(f.afip_row_key))
+  if (nuevas.length === 0) return 0
+
+  const { error } = await admin.from('facturas').insert(
+    nuevas.map(f => ({
+      afip_row_key:    f.afip_row_key,
+      fecha:           f.fecha,
+      monto:           f.monto,
+      descripcion:     f.servicio_nombre,
+      receptor_nombre: f.cliente_nombre,
+      receptor_dni:    f.cliente_dni,
+      estado:          'excluida',
+      datos_json:      { auto: 'efectivo' },
+    })),
+  )
+  if (error) throw new Error('No se pudieron pasar a Eliminadas: ' + error.message)
+  return nuevas.length
 }
 
 async function registrarRun(admin: ReturnType<typeof createAdminClient>, resultado: string, error: string | null) {

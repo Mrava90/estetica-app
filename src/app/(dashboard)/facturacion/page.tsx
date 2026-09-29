@@ -560,7 +560,7 @@ export default function FacturacionPage() {
                   : 'transferencias'
                 }</strong>.
                 {filtroCanal === 'efectivo'
-                  ? ' El efectivo nunca se factura automático — se emite solo si la clienta lo pide.'
+                  ? ' El efectivo no se factura: cada noche a las 20:00 pasa solo a Eliminadas. Si la clienta pide factura, restaurala y emitila.'
                   : ' Al seleccionar todas, el envío masivo a ARCA incluye únicamente estas.'}
               </span>
               <button onClick={() => setFiltroCanal('todos')} className="ml-auto shrink-0 underline hover:no-underline">
