@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner'
 import { RefreshCw, AlertTriangle, CheckCircle2, TrendingUp, Building2, ScrollText, Pencil } from 'lucide-react'
 import { formatPrecio } from '@/lib/dates'
-import { CATEGORIAS_SERVICIOS, getCategoria, getProximaCategoria, calcularRiesgo, calcularFaltante, proximaRecategorizacion } from '@/lib/monotributo'
+import { CATEGORIAS, VIGENCIA_TABLA, getCategoria, getProximaCategoria, calcularRiesgo, calcularFaltante, proximaRecategorizacion } from '@/lib/monotributo'
 import { IngresosManuales } from '@/components/afip/IngresosManuales'
 
 interface Snapshot {
@@ -194,6 +194,9 @@ export default function AfipPage() {
                   <div className="text-right">
                     <div className="text-xs text-muted-foreground">Tope anual</div>
                     <div className="text-lg font-semibold tabular-nums">{formatPrecio(categoria.topeAnual)}</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
+                      Cuota servicios {formatPrecio(categoria.cuotaServicios)}/mes
+                    </div>
                   </div>
                 )}
               </div>
@@ -215,7 +218,7 @@ export default function AfipPage() {
                     <SelectValue placeholder="Elegir..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIAS_SERVICIOS.map((c) => (
+                    {CATEGORIAS.map((c) => (
                       <SelectItem key={c.letra} value={c.letra}>
                         {c.letra} — hasta {formatPrecio(c.topeAnual)}
                       </SelectItem>
@@ -450,9 +453,14 @@ export default function AfipPage() {
           {/* Referencia: tabla de categorías */}
           <Card>
             <CardContent className="p-4 space-y-2">
-              <div className="text-sm font-semibold text-muted-foreground">Tabla de categorías — Servicios</div>
+              <div className="flex flex-wrap items-baseline justify-between gap-1">
+                <div className="text-sm font-semibold text-muted-foreground">Tabla de categorías — Servicios</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Valores ARCA vigentes desde el {VIGENCIA_TABLA.split('-').reverse().join('/')} · se actualizan en febrero y agosto
+                </div>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                {CATEGORIAS_SERVICIOS.map((c) => (
+                {CATEGORIAS.map((c) => (
                   <div
                     key={c.letra}
                     className={`rounded border px-2 py-1.5 ${
@@ -461,6 +469,7 @@ export default function AfipPage() {
                   >
                     <div className="font-semibold">{c.letra}</div>
                     <div className="tabular-nums text-muted-foreground">{formatPrecio(c.topeAnual)}</div>
+                    <div className="tabular-nums text-[10px] text-muted-foreground/80">cuota {formatPrecio(c.cuotaServicios)}/mes</div>
                   </div>
                 ))}
               </div>
