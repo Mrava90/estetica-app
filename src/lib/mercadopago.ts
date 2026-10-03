@@ -1,5 +1,5 @@
 /**
- * Helper de MercadoPago — solo LECTURA de pagos recibidos.
+ * Helper de MercadoPago — solo LECTURA de pagos recibidos (cobros del local).
  *
  * Se usa para enriquecer la facturacion: el sheet dice "MercadoPago" en todas
  * las filas, pero no distingue si el cobro entro por QR del local, por el
@@ -29,6 +29,7 @@ export interface PagoMP {
   pagadorEmail: string | null
   pagadorDoc: string | null    // numero crudo que informa MP (suele ser CUIL)
   pagadorDni: string | null    // DNI extraido del CUIL, listo para la factura
+  collectorId: number | null   // cuenta que RECIBIO la plata (la del local, si es un cobro)
 }
 
 /**
@@ -161,8 +162,13 @@ export async function traerPagos(desde: string, hasta: string): Promise<PagoMP[]
     console.error('MP memoria de pagos vistos no disponible:', e?.message || e)
   }
 
+  // Solo cobros: afuera los pagos que hizo el local. Si no se pudo saber cual
+  // es la cuenta propia, se devuelve todo, como antes.
+  const propio = await idCuentaPropia(token)
+  const cobros = [...porId.values()].filter(p => propio == null || p.collectorId == null || p.collectorId === propio)
+
   // Orden estable (mas reciente primero) para que el matcher sea determinista.
-  return [...porId.values()].sort((a, b) => b.fecha.localeCompare(a.fecha))
+  return cobros.sort((a, b) => b.fecha.localeCompare(a.fecha))
 }
 
 /** GET /v1/payments/:id — confiable, a diferencia de la busqueda. */
@@ -197,7 +203,28 @@ function aPagoMP(p: any): PagoMP | null {
     pagadorEmail: p.payer?.email || null,
     pagadorDoc: doc ? String(doc) : null,
     pagadorDni: dniDesdeDocumento(doc),
+    // En los cobros viene collector_id; en los pagos que hace el local viene
+    // vacio y la cuenta destino esta en collector.id.
+    collectorId: p.collector_id ?? p.collector?.id ?? null,
   }
+}
+
+/**
+ * Id de la cuenta de MP del local (GET /users/me), una vez por proceso.
+ * Hace falta porque /v1/payments/search devuelve tambien los pagos que HACE
+ * el local (la nafta en la Shell por QR, transferencias salientes): sin
+ * filtrarlos, un pago con QR en un comercio entraba como "cobro QR".
+ */
+let idPropioPromise: Promise<number | null> | null = null
+function idCuentaPropia(token: string): Promise<number | null> {
+  if (!idPropioPromise) {
+    idPropioPromise = fetch(`${MP_API}/users/me`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => (typeof j?.id === 'number' ? j.id : null))
+      .catch(() => null)
+      .then(id => { if (id == null) idPropioPromise = null; return id })   // reintentar la proxima vez
+  }
+  return idPropioPromise
 }
 
 /** Una sola pasada paginada por /v1/payments/search. Ver traerPagos. */
