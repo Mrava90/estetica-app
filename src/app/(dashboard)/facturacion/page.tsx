@@ -561,7 +561,9 @@ export default function FacturacionPage() {
                 }</strong>.
                 {filtroCanal === 'efectivo'
                   ? ' El efectivo no se factura: cada noche a las 20:00 pasa solo a Eliminadas. Si la clienta pide factura, restaurala y emitila.'
-                  : ' Al seleccionar todas, el envío masivo a ARCA incluye únicamente estas.'}
+                  : filtroCanal === 'transferencia'
+                    ? ' Las transferencias no se facturan: cada noche a las 20:00 pasan solas a Eliminadas. Si la clienta pide factura, restaurala y emitila.'
+                    : ' Al seleccionar todas, el envío masivo a ARCA incluye únicamente estas.'}
               </span>
               <button onClick={() => setFiltroCanal('todos')} className="ml-auto shrink-0 underline hover:no-underline">
                 Quitar

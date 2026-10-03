@@ -29,10 +29,15 @@
  * Un 409 de /generar (la venta ya tiene factura) no es un fallo: ese pago se
  * saltea, queda anotado en `salteadas` y la corrida sigue.
  *
- * ── Efectivo ─────────────────────────────────────────────────────────────
+ * ── Efectivo y transferencias ────────────────────────────────────────────
  * Antes de facturar, pasa a "excluida" (Eliminadas en la pantalla) toda venta
- * en efectivo sin factura del mes actual y el anterior. El efectivo solo se
- * factura si la clienta lo pide: en ese caso se restaura y se emite a mano.
+ * sin factura del mes actual y el anterior cobrada en efectivo o por
+ * transferencia. Esas solo se facturan si la clienta lo pide: en ese caso se
+ * restaura y se emite a mano.
+ * Una transferencia se elimina solo si MercadoPago la confirma como tal y el
+ * cruce con la venta es unico (mp_match 'unico'). Si hay dos ventas iguales el
+ * mismo dia, o el cobro todavia no aparece en MP, queda pendiente: podria ser
+ * un QR que todavia hay que facturar.
  * Corre aunque el switch este apagado, porque no emite nada en ARCA, y no
  * toca las ventas que ya tienen estado (emitida, excluida o con error).
  */
@@ -83,19 +88,20 @@ export async function GET(request: NextRequest) {
         filasSheet.push(...items)
       }
 
-      // ── 0b. Efectivo → Eliminadas ────────────────────────────────────────
+      // ── 0b. Efectivo y transferencias → Eliminadas ───────────────────────
       // Si falla no frena la facturacion: queda anotado y sigue.
-      let efectivoExcluidas = 0
+      let efectivoExcluidas = { efectivo: 0, transferencia: 0 }
       let efectivoError: string | null = null
       try {
-        efectivoExcluidas = await excluirEfectivo(admin, filasSheet)
+        efectivoExcluidas = await excluirNoFacturables(admin, filasSheet)
       } catch (err) {
         efectivoError = err instanceof Error ? err.message : String(err)
-        console.error('[cron facturar-qr] efectivo:', err)
+        console.error('[cron facturar-qr] efectivo/transferencias:', err)
       }
+      const { efectivo: nEf, transferencia: nTr } = efectivoExcluidas
       const notaEfectivo = efectivoError
-        ? ` · efectivo: ${efectivoError}`
-        : efectivoExcluidas ? ` · ${efectivoExcluidas} en efectivo a Eliminadas` : ''
+        ? ` · eliminar efectivo/transferencias: ${efectivoError}`
+        : (nEf || nTr) ? ` · a Eliminadas: ${nEf} en efectivo, ${nTr} transferencias` : ''
       const registrar = (resultado: string, error: string | null) =>
         registrarRun(admin, resultado + notaEfectivo, error)
 
@@ -290,16 +296,29 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Por que una venta no se factura sola. null = puede facturarse (o no se sabe). */
+function motivoNoFacturable(f: ItemFacturacion): 'efectivo' | 'transferencia' | null {
+  if (f.medio_pago === 'Efectivo') return 'efectivo'
+  // Solo con el cobro confirmado por MP y sin ambiguedad: un QR mal cruzado
+  // no puede terminar en Eliminadas.
+  if (f.medio_pago === 'MercadoPago' && f.tipo_pago === 'Transferencia' && f.mp_match === 'unico') return 'transferencia'
+  return null
+}
+
 /**
- * Pasa a "excluida" las ventas en efectivo que todavia no tienen estado.
- * Solo hasta hoy (dia argentino). Guarda los mismos datos que el boton
- * "Eliminar" de la pantalla, asi se restauran igual. `datos_json.auto` deja
- * constancia de que lo hizo el cron. Devuelve cuantas excluyo.
+ * Pasa a "excluida" las ventas en efectivo o por transferencia que todavia no
+ * tienen estado. Solo hasta hoy (dia argentino). Guarda los mismos datos que
+ * el boton "Eliminar" de la pantalla, asi se restauran igual.
+ * `datos_json.auto` deja constancia de que lo hizo el cron y por que.
  */
-async function excluirEfectivo(admin: ReturnType<typeof createAdminClient>, filas: ItemFacturacion[]): Promise<number> {
+async function excluirNoFacturables(
+  admin: ReturnType<typeof createAdminClient>,
+  filas: ItemFacturacion[],
+): Promise<{ efectivo: number; transferencia: number }> {
   const hoy = fechaArYMD()
-  const aExcluir = filas.filter(f => f.medio_pago === 'Efectivo' && !f.factura_estado && f.fecha <= hoy)
-  if (aExcluir.length === 0) return 0
+  const cero = { efectivo: 0, transferencia: 0 }
+  const aExcluir = filas.filter(f => !f.factura_estado && f.fecha <= hoy && motivoNoFacturable(f))
+  if (aExcluir.length === 0) return cero
 
   // Si alguien la excluyo o facturo mientras corria el cron, gana lo que ya
   // esta en la tabla. No se usa upsert: el indice unico de afip_row_key es
@@ -311,7 +330,7 @@ async function excluirEfectivo(admin: ReturnType<typeof createAdminClient>, fila
   if (errLectura) throw new Error('No se pudieron leer las facturas: ' + errLectura.message)
   const yaEstan = new Set((existentes || []).map(f => f.afip_row_key))
   const nuevas = aExcluir.filter(f => !yaEstan.has(f.afip_row_key))
-  if (nuevas.length === 0) return 0
+  if (nuevas.length === 0) return cero
 
   const { error } = await admin.from('facturas').insert(
     nuevas.map(f => ({
@@ -322,11 +341,14 @@ async function excluirEfectivo(admin: ReturnType<typeof createAdminClient>, fila
       receptor_nombre: f.cliente_nombre,
       receptor_dni:    f.cliente_dni,
       estado:          'excluida',
-      datos_json:      { auto: 'efectivo' },
+      datos_json:      { auto: motivoNoFacturable(f) },
     })),
   )
   if (error) throw new Error('No se pudieron pasar a Eliminadas: ' + error.message)
-  return nuevas.length
+  return {
+    efectivo: nuevas.filter(f => motivoNoFacturable(f) === 'efectivo').length,
+    transferencia: nuevas.filter(f => motivoNoFacturable(f) === 'transferencia').length,
+  }
 }
 
 async function registrarRun(admin: ReturnType<typeof createAdminClient>, resultado: string, error: string | null) {
