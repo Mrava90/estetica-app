@@ -137,14 +137,32 @@ function parseAmount(raw: string): number {
   return isNaN(num) ? 0 : num
 }
 
+/**
+ * Nombre de la columna PROFESIONAL del sheet → id en la tabla profesionales.
+ *
+ * Antes era una lista fija (lola, cami, denise, fabi): una profesional nueva
+ * entraba sin asignar. Le paso a Brisa desde septiembre de 2026: sus ventas
+ * sumaban en la caja pero sin profesional, y sus comisiones no aparecian.
+ * Ahora se busca en la tabla, en este orden:
+ *   1. nombre exacto, sin mayusculas ni acentos ("BRISA" → Brisa)
+ *   2. abreviatura conocida ("cami" → Camila, "fabi" → Fabiana)
+ *   3. una sola profesional cuyo nombre empiece igual ("cam" → Camila)
+ */
+const ALIAS_PROFESIONAL: Record<string, string> = { cami: 'camila', fabi: 'fabiana', fabian: 'fabiana' }
+
+function normalizarNombre(s: string): string {
+  return s.toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+}
+
 function mapProfesional(name: string, profMap: Record<string, string>): string | null {
   if (!name) return null
-  const lower = name.toString().toLowerCase().trim()
-  if (lower === 'lola') return profMap['lola'] || null
-  if (lower === 'cami' || lower === 'camila') return profMap['camila'] || null
-  if (lower === 'denise') return profMap['denise'] || null
-  if (lower === 'fabi' || lower === 'fabian') return profMap['fabi'] || null
-  return null
+  const n = normalizarNombre(name)
+  if (!n) return null
+  if (profMap[n]) return profMap[n]
+  const alias = ALIAS_PROFESIONAL[n]
+  if (alias && profMap[alias]) return profMap[alias]
+  const candidatas = Object.keys(profMap).filter(k => k.startsWith(n) || n.startsWith(k))
+  return candidatas.length === 1 ? profMap[candidatas[0]] : null
 }
 
 function mapMetodoPago(raw: string): 'efectivo' | 'mercadopago' | 'transferencia' {
@@ -268,9 +286,18 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
     throw new Error('Missing GOOGLE_CLIENT_EMAIL or GOOGLE_PRIVATE_KEY')
   }
 
-  // Período de sync: desde el primer día del mes actual
-  const now = new Date()
-  const syncFromDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  // Período de sync: desde el primer día del mes ANTERIOR.
+  //
+  // Con solo el mes actual se perdia el ultimo dia de cada mes: el sync de las
+  // 06:00 del 30/09 todavia no tenia las ventas de ese dia, y el del 01/10 ya
+  // traia solo octubre. Asi faltaron en la app las 5 ventas del 30/09/2026 (dos
+  // de Brisa, tres de Cami), y tampoco llegaba ninguna correccion hecha en el
+  // sheet despues de terminado el mes. Se reemplazan dos meses en vez de uno.
+  // En hora argentina: el server corre en UTC.
+  const [anioAR, mesAR] = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).split('-').map(Number)
+  const mesPrevio = mesAR === 1 ? 12 : mesAR - 1
+  const anioPrevio = mesAR === 1 ? anioAR - 1 : anioAR
+  const syncFromDate = `${anioPrevio}-${String(mesPrevio).padStart(2, '0')}-01`
 
   // 1. Fetch all sheets via Google Sheets API
   const [ssrRows, kwRows, gastosRows] = await Promise.all([
@@ -283,7 +310,7 @@ export async function syncFromSheets(supabase: SupabaseClient): Promise<SyncResu
   const { data: profs } = await supabase.from('profesionales').select('id, nombre')
   const profMap: Record<string, string> = {}
   for (const p of profs || []) {
-    profMap[p.nombre.toLowerCase()] = p.id
+    profMap[normalizarNombre(p.nombre)] = p.id
   }
 
   // 3. Parse sheets (solo registros desde syncFromDate)
