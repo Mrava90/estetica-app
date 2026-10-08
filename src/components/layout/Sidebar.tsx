@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { NAV_ITEMS, isAdminUser } from '@/lib/constants'
+import { NAV_ITEMS, isAdminUser, itemNavVisible } from '@/lib/constants'
 import { Scissors, ChevronLeft, ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -46,11 +46,8 @@ export function Sidebar() {
     })
   }
 
-  const visibleItems = NAV_ITEMS.filter(item => {
-    if (isAdmin) return true
-    if (item.adminOnly) return permisos[item.href] === true
-    return permisos[item.href] !== false
-  })
+  // Visible si ve el item o alguna de sus pestañas (ver itemNavVisible)
+  const visibleItems = NAV_ITEMS.filter(item => itemNavVisible(item, isAdmin, permisos))
 
   const isExpanded = !collapsed || hovered
 

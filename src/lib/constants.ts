@@ -66,28 +66,73 @@ export function isStaffUser(user: UserWithMetadata | null | undefined): boolean 
   return isAdminEmail(user.email) || (user.email?.endsWith('@estetica.local') ?? false)
 }
 
+/**
+ * Una seccion que vive como pestaña dentro de otro item del menu.
+ * Conserva su href original: es la clave de permiso en user_nav_permisos y
+ * la direccion vieja redirige a la pestaña.
+ */
+export interface PestanaNav {
+  valor: string        // ?tab=<valor>
+  label: string
+  href: string         // clave de permiso (y ruta vieja que redirige)
+  icon: LucideIcon
+  adminOnly?: boolean  // como en NavItem: oculta salvo permiso explicito
+  soloAdmin?: boolean  // ni con permiso: solo admin (Contabilidad)
+}
+
 export interface NavItem {
   label: string
   href: string
   icon: LucideIcon
   adminOnly?: boolean
+  /** Secciones que se muestran como pestañas dentro de este item. */
+  pestanas?: PestanaNav[]
 }
 
+/**
+ * Si una usuaria ve una seccion (item o pestaña). Misma regla que tenia el
+ * menu: el admin ve todo; lo adminOnly solo con permiso explicito; el resto
+ * salvo que se lo hayan quitado.
+ */
+export function puedeVerSeccion(
+  s: { href: string; adminOnly?: boolean; soloAdmin?: boolean },
+  isAdmin: boolean,
+  permisos: Record<string, boolean>,
+): boolean {
+  if (isAdmin) return true
+  if (s.soloAdmin) return false
+  if (s.adminOnly) return permisos[s.href] === true
+  return permisos[s.href] !== false
+}
+
+/** El item aparece en el menu si la usuaria ve el item o alguna de sus pestañas. */
+export function itemNavVisible(item: NavItem, isAdmin: boolean, permisos: Record<string, boolean>): boolean {
+  return puedeVerSeccion(item, isAdmin, permisos) ||
+    (item.pestanas || []).some(p => puedeVerSeccion(p, isAdmin, permisos))
+}
+
+// 9 items (eran 14 hasta el 08/10/2026): AFIP, Contabilidad, Accesos,
+// Promociones y Actividad pasaron a ser pestañas. Sus rutas viejas redirigen.
 export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, adminOnly: true },
   { label: 'Calendario', href: '/calendario', icon: CalendarDays },
   { label: 'Caja Diaria', href: '/caja', icon: Wallet },
-  { label: 'Clientes', href: '/clientes', icon: Users },
-  { label: 'Servicios', href: '/servicios', icon: Scissors },
+  { label: 'Clientes', href: '/clientes', icon: Users, pestanas: [
+    { valor: 'accesos', label: 'Accesos', href: '/accesos', icon: KeyRound, adminOnly: true },
+  ] },
+  { label: 'Servicios', href: '/servicios', icon: Scissors, pestanas: [
+    { valor: 'promociones', label: 'Promociones', href: '/promociones', icon: Sparkles, adminOnly: true },
+  ] },
   { label: 'Personal', href: '/personal', icon: UserCog },
-  { label: 'Promociones', href: '/promociones', icon: Sparkles, adminOnly: true },
-  { label: 'Informes', href: '/informes', icon: BarChart3, adminOnly: true },
-  { label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true },
-  { label: 'Facturación', href: '/facturacion', icon: Receipt, adminOnly: true },
-  { label: 'AFIP', href: '/afip', icon: FileText, adminOnly: true },
-  { label: 'Actividad', href: '/actividad', icon: Activity, adminOnly: true },
-  { label: 'Accesos', href: '/accesos', icon: KeyRound, adminOnly: true },
-  { label: 'Configuración', href: '/configuracion', icon: Settings },
+  { label: 'Facturación', href: '/facturacion', icon: Receipt, adminOnly: true, pestanas: [
+    { valor: 'monotributo', label: 'Monotributo (AFIP)', href: '/afip', icon: FileText, adminOnly: true },
+  ] },
+  { label: 'Informes', href: '/informes', icon: BarChart3, adminOnly: true, pestanas: [
+    { valor: 'contabilidad', label: 'Contabilidad', href: '/contabilidad', icon: Calculator, adminOnly: true, soloAdmin: true },
+  ] },
+  { label: 'Configuración', href: '/configuracion', icon: Settings, pestanas: [
+    { valor: 'actividad', label: 'Actividad', href: '/actividad', icon: Activity, adminOnly: true },
+  ] },
 ]
 
 export const STATUS_LABELS: Record<string, string> = {
