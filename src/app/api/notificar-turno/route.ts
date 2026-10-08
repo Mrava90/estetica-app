@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import nodemailer from 'nodemailer'
 import { formatFechaHoraAR } from '@/lib/timezone'
 import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
+import { firmarAcceso } from '@/lib/acceso-turnos'
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -73,35 +74,15 @@ export async function POST(request: NextRequest) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://turnosballester.vercel.app'
 
-  // Generar un MAGIC LINK real via Auth Admin API. Con esto el cliente hace un
-  // solo click desde el email y llega a /reservar/mis-turnos con sesion activa.
-  // Antes se mandaba un link plano a la pagina que despues le pedia otra vez
-  // el email para enviar OTRO email con el magic link -> 2 emails, 2 clicks.
+  // Enlace de un click a /reservar/mis-turnos, valido 7 dias (ver
+  // @/lib/acceso-turnos). Antes era un magic link de Supabase, que vence a la
+  // hora y se gasta si el correo lo abre antes: la clienta caia en /login.
+  // Si no se puede firmar, cae a la pagina que le pide el email.
   let link = `${appUrl}/reservar/mis-turnos`
   try {
-    const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-      type: 'magiclink',
-      email: emailDestino,
-      options: {
-        redirectTo: `${appUrl}/auth/confirm?next=/reservar/mis-turnos`,
-      },
-    })
-    // Preferimos hashed_token + endpoint /auth/confirm en vez de action_link.
-    // action_link es el flow implicito de Supabase que devuelve la sesion en el
-    // fragmento (#access_token=) — el fragmento no llega al server-side y el
-    // callback no lo puede leer, entonces el cliente termina en /login?error=invalid_link.
-    // hashed_token va en query string, /auth/confirm hace verifyOtp() y crea sesion OK.
-    if (!linkErr && linkData?.properties?.hashed_token) {
-      const p = new URLSearchParams({
-        token_hash: linkData.properties.hashed_token,
-        type: 'magiclink',
-        next: '/reservar/mis-turnos',
-      })
-      link = `${appUrl}/auth/confirm?${p.toString()}`
-    }
-    // Si falla la generacion, cae al fallback (link plano que pide email otra vez).
+    link = `${appUrl}/auth/acceso?t=${encodeURIComponent(firmarAcceso(emailDestino))}`
   } catch (e) {
-    console.error('generateLink error:', e)
+    console.error('firmarAcceso error:', e)
   }
 
   const servicio = escapeHtml((cita.servicios as any)?.nombre || '')

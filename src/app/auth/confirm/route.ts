@@ -56,5 +56,11 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Enlaces de clientas (mis-turnos): si fallan, a mis-turnos con aviso para
+  // pedir uno nuevo. Nunca al /login del personal, donde terminaban tocando
+  // "olvide mi contraseña" de una cuenta sin clave.
+  if (next.startsWith('/reservar')) {
+    return NextResponse.redirect(new URL('/reservar/mis-turnos?vencido=1', request.url))
+  }
   return NextResponse.redirect(new URL('/login?error=invalid_link', request.url))
 }

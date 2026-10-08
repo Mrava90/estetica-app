@@ -21,6 +21,8 @@ export default function MisTurnosPage() {
   const [cancelando, setCancelando] = useState<string | null>(null)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState('')
+  // ?vencido=1: llego desde un enlace del mail que ya no sirve
+  const [enlaceVencido] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('vencido'))
   const supabase = createClient()
 
   useEffect(() => {
@@ -155,6 +157,11 @@ export default function MisTurnosPage() {
           <p className="text-sm text-white/80">Ingresá tu email para ver y gestionar tus turnos</p>
         </div>
         <div className="rounded-xl border border-gray-900 bg-white p-5 w-full max-w-sm space-y-4">
+          {enlaceVencido && !linkEnviado && (
+            <p className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              El enlace que usaste venció o ya se usó. Ingresá tu email y te mandamos uno nuevo.
+            </p>
+          )}
           {linkEnviado ? (
             <div className="text-center space-y-2 py-2">
               <CheckCircle className="h-8 w-8 text-green-600 mx-auto" />
