@@ -27,7 +27,9 @@ export async function POST(request: Request) {
     if (username) {
       const email = username.includes('@') ? username : `${username}@estetica.local`
 
-      const listResult = await admin.auth.admin.listUsers()
+      // perPage alto: por defecto vienen 50 y el personal queda fuera entre
+      // las cuentas de clientas (mismo error que tenia /api/users).
+      const listResult = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
       const users = listResult.data?.users ?? []
       const matchedUser = users.find((u) => u.email === email)
 

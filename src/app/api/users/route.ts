@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { isAdminUser } from '@/lib/constants'
+import type { User } from '@supabase/supabase-js'
 
 async function isAdmin(request: NextRequest) {
   const supabase = await createClient()
@@ -20,12 +21,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 403 })
   }
 
+  // listUsers devuelve de a 50 por defecto. Las clientas que entran a
+  // /reservar/mis-turnos tambien tienen usuario: pasadas las 50 cuentas, las
+  // del personal quedaban fuera de la primera pagina y la lista salia vacia.
   const admin = createAdminClient()
-  const { data, error } = await admin.auth.admin.listUsers()
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  const todos: User[] = []
+  for (let page = 1; page <= 50; page++) {
+    const { data: pagina, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    todos.push(...pagina.users)
+    if (pagina.users.length < 1000) break
   }
+  const data = { users: todos }
 
   // Solo mostrar staff (@estetica.local) y admins — los clientes van a /accesos
   const users = data.users

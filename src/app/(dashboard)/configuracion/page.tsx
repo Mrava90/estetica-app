@@ -14,9 +14,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Copy, Check, Plus, Trash2, Shield, KeyRound, Users, Menu, DatabaseBackup, AtSign } from 'lucide-react'
+import { Copy, Check, Plus, Trash2, Shield, KeyRound, Users, Menu, DatabaseBackup, AtSign, Megaphone } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { TabEmpleados } from '@/components/configuracion/TabEmpleados'
+import { TabNovedades } from '@/components/configuracion/TabNovedades'
 import { NAV_ITEMS, isAdminUser } from '@/lib/constants'
 
 import type { AppUser } from './tipos'
@@ -282,6 +283,10 @@ export default function ConfiguracionPage() {
           <TabsTrigger value="empleados" className="gap-1.5">
             <Users className="h-4 w-4" />
             Empleados
+          </TabsTrigger>
+          <TabsTrigger value="novedades" className="gap-1.5">
+            <Megaphone className="h-4 w-4" />
+            Novedades
           </TabsTrigger>
         </TabsList>
 
@@ -663,6 +668,11 @@ export default function ConfiguracionPage() {
         <TabsContent value="empleados" className="space-y-6 mt-6">
           <TabEmpleados users={users} onCuentaGuardada={fetchUsers} />
 
+        </TabsContent>
+
+        {/* ========== TAB NOVEDADES ========== */}
+        <TabsContent value="novedades" className="space-y-6 mt-6">
+          <TabNovedades users={users} />
         </TabsContent>
       </Tabs>
     </div>
