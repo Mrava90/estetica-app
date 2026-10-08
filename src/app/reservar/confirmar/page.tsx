@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
+import { HORAS_MINIMAS_CANCELAR } from '@/lib/constants'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatFechaHora, formatPrecio, capitalizeWords } from '@/lib/dates'
@@ -274,6 +275,9 @@ function ConfirmarContent() {
       >
         {loading ? 'Confirmando...' : 'Confirmar turno'}
       </button>
+      <p className="text-center text-xs text-gray-600">
+        Podés cancelar tu turno hasta {HORAS_MINIMAS_CANCELAR} horas antes desde &quot;Mis turnos&quot;.
+      </p>
     </div>
   )
 }

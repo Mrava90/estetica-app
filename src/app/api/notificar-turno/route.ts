@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer'
 import { formatFechaHoraAR } from '@/lib/timezone'
 import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 import { firmarAcceso } from '@/lib/acceso-turnos'
+import { HORAS_MINIMAS_CANCELAR } from '@/lib/constants'
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
             Ver mis turnos
           </a>
 
-          <p style="color:#9ca3af;font-size:13px;">Desde ese link también podés cancelar tu turno.<br>El acceso es válido por 7 días.</p>
+          <p style="color:#9ca3af;font-size:13px;">Desde ese link podés cancelar tu turno hasta <strong>${HORAS_MINIMAS_CANCELAR} horas antes</strong>.<br>El acceso es válido por 7 días.</p>
         </div>
       `,
     })

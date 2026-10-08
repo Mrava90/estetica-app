@@ -21,9 +21,10 @@ export const ADMIN_EMAILS = ['ravamartin@gmail.com']
 /**
  * Anticipacion minima para que una clienta cancele su turno desde
  * /reservar/mis-turnos. La usan el server (que la hace cumplir) y la
- * pantalla (que muestra o esconde el boton). Era 24; 12 desde el 08/10/2026.
+ * pantalla (que muestra o esconde el boton), y se le avisa a la clienta al
+ * reservar y en el mail de confirmacion. Era 24; 8 desde el 08/10/2026.
  */
-export const HORAS_MINIMAS_CANCELAR = 12
+export const HORAS_MINIMAS_CANCELAR = 8
 
 /**
  * @deprecated Preferir isAdminUser(user) que lee de app_metadata.role.
