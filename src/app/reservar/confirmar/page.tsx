@@ -28,6 +28,8 @@ function ConfirmarContent() {
   const [loading, setLoading] = useState(false)
   const [telLookupLoading, setTelLookupLoading] = useState(false)
   const [clienteEncontrado, setClienteEncontrado] = useState(false)
+  /** Datos que la clienta ya tiene cargados: esos campos no se vuelven a pedir. */
+  const [guardados, setGuardados] = useState<{ apellido: boolean; dni: boolean; email: string | null } | null>(null)
   const [promos, setPromos] = useState<Promocion[]>([])
   const supabase = createClient()
 
@@ -45,13 +47,16 @@ function ConfirmarContent() {
     if (tel.length < 8) return
     setTelLookupLoading(true)
     setClienteEncontrado(false)
+    setGuardados(null)
     try {
       const res = await fetch(`/api/reservar/booking?telefono=${encodeURIComponent(tel)}`)
       const data = await res.json()
-      // Por seguridad el endpoint publico solo devuelve `nombre` (para saludo).
-      // Email/apellido/DNI ya no vienen — el cliente los ingresa manualmente si los quiere completar.
+      // Por seguridad el endpoint publico no devuelve apellido, DNI ni email:
+      // solo cuales estan cargados. Esos campos se ocultan (al guardar no se
+      // pisan) y se piden solo los que faltan.
       if (data.found) {
         if (data.nombre) setNombre(data.nombre)
+        if (data.guardados) setGuardados(data.guardados)
         setClienteEncontrado(true)
       }
     } finally {
@@ -200,7 +205,7 @@ function ConfirmarContent() {
           inputMode="numeric"
           placeholder="1112345678"
           value={telefono}
-          onChange={(e) => { setTelefono(e.target.value); setClienteEncontrado(false) }}
+          onChange={(e) => { setTelefono(e.target.value); setClienteEncontrado(false); setGuardados(null) }}
           onBlur={(e) => buscarPorTelefono(e.target.value)}
           className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
         />
@@ -209,6 +214,12 @@ function ConfirmarContent() {
       {/* Resto de datos */}
       <div className="rounded-xl border border-gray-900 bg-white px-4 py-3 space-y-2.5">
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Tus datos</p>
+        {guardados && (guardados.apellido || guardados.dni || guardados.email) && (
+          <p className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
+            ✓ Ya tenemos {[guardados.apellido && 'tu apellido', guardados.dni && 'tu DNI', guardados.email && 'tu email'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' y $1')}.
+            {guardados.email && <> La confirmación te llega a <strong>{guardados.email}</strong>.</>}
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Nombre</label>
@@ -220,7 +231,7 @@ function ConfirmarContent() {
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
             />
           </div>
-          <div className="space-y-1">
+          {!guardados?.apellido && <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Apellido</label>
             <input
               type="text"
@@ -229,10 +240,10 @@ function ConfirmarContent() {
               onChange={(e) => setApellido(e.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
             />
-          </div>
+          </div>}
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <div className="space-y-1">
+          {!guardados?.dni && <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">DNI</label>
             <input
               type="text"
@@ -242,8 +253,8 @@ function ConfirmarContent() {
               onChange={(e) => setDni(e.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
             />
-          </div>
-          <div className="space-y-1">
+          </div>}
+          {!guardados?.email && <div className="space-y-1">
             <label className="text-xs font-medium text-gray-600">Email <span className="text-gray-400 font-normal">(opcional)</span></label>
             <input
               type="email"
@@ -252,7 +263,7 @@ function ConfirmarContent() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
             />
-          </div>
+          </div>}
         </div>
       </div>
 

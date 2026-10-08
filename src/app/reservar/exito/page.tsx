@@ -19,8 +19,11 @@ function ExitoContent() {
   const [error, setError] = useState('')
   const supabase = createClient()
 
+  // La confirmacion sale siempre que haya cita: el server la manda al email
+  // GUARDADO de la clienta. Antes solo salia si lo escribia en el formulario,
+  // y una clienta que vuelve (con el email ya cargado) no recibia nada.
   useEffect(() => {
-    if (emailParam && citaId) {
+    if (citaId) {
       sendMagicLink()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -72,7 +75,7 @@ function ExitoContent() {
         </div>
       )}
 
-      {emailParam && (
+      {citaId && (
         <div className="rounded-xl border border-fuchsia-200 bg-white p-5 w-full max-w-sm space-y-3">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-fuchsia-500 shrink-0" />
@@ -87,7 +90,9 @@ function ExitoContent() {
             <div className="space-y-1 py-1">
               <p className="text-sm font-medium text-amber-700">Todavía no podemos enviarte el link automáticamente.</p>
               <p className="text-xs text-gray-500">
-                Tu email no está asociado a tu cuenta. Escribinos por WhatsApp para vincularlo y podés gestionar tus turnos vos misma más adelante.
+                {emailParam
+                  ? 'Tu email no está asociado a tu cuenta. Escribinos por WhatsApp para vincularlo y podés gestionar tus turnos vos misma más adelante.'
+                  : 'No tenemos un email tuyo cargado. La próxima vez completalo al reservar y te llega la confirmación con el acceso a tus turnos.'}
               </p>
             </div>
           ) : enviando ? (

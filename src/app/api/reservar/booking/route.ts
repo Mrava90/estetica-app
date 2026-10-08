@@ -51,12 +51,32 @@ export async function GET(request: NextRequest) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('clientes')
-    .select('nombre')
+    .select('nombre, apellido, dni, email')
     .eq('telefono', telNorm)
     .maybeSingle()
 
   if (!data) return NextResponse.json({ found: false })
-  return NextResponse.json({ found: true, nombre: data.nombre })
+  // Este endpoint es publico: cualquiera puede probar un telefono ajeno. Por
+  // eso NO devuelve apellido, DNI ni email — solo SI estan cargados, para que
+  // el formulario no se los vuelva a pedir. El email va enmascarado
+  // ("ma•••@gmail.com") para que la clienta sepa adonde le llega la
+  // confirmacion. Al guardar, la reserva nunca pisa datos existentes.
+  return NextResponse.json({
+    found: true,
+    nombre: data.nombre,
+    guardados: {
+      apellido: Boolean(data.apellido?.trim()),
+      dni: Boolean(data.dni?.trim()),
+      email: data.email?.trim() ? enmascararEmail(data.email.trim()) : null,
+    },
+  })
+}
+
+/** "martin.rava@gmail.com" → "ma•••@gmail.com" */
+function enmascararEmail(email: string): string {
+  const [usuario, dominio] = email.split('@')
+  if (!dominio) return '•••'
+  return `${usuario.slice(0, 2)}•••@${dominio}`
 }
 
 // POST /api/reservar/booking → crea/actualiza cliente + crea cita
