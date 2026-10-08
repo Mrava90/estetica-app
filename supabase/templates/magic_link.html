@@ -1,0 +1,19 @@
+<!-- Plantilla de Supabase Auth. Pegar en Dashboard → Authentication → Emails. -->
+<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px;">
+  <p style="margin:0 0 20px;font-size:13px;letter-spacing:2px;color:#a21caf;font-weight:700;">KAWIRTH</p>
+  <h2 style="color:#a21caf;margin:0 0 8px;">Entrá a tus turnos</h2>
+  <p style="color:#374151;line-height:1.5;">Tocá el botón para ver, confirmar o cancelar tus turnos en <strong>Kawirth</strong>. No hace falta contraseña.</p>
+
+  <a href="{{ .ConfirmationURL }}"
+     style="display:inline-block;margin:16px 0;padding:12px 28px;background:#a21caf;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
+    Ver mis turnos
+  </a>
+
+  <div style="background:#f9f0ff;border-radius:12px;padding:16px;margin:12px 0 20px;">
+    <p style="margin:0 0 6px;color:#374151;font-size:13px;">¿El botón no funciona? Copiá este enlace en el navegador:</p>
+    <p style="margin:0;font-size:12px;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#a21caf;">{{ .ConfirmationURL }}</a></p>
+  </div>
+
+  <p style="color:#9ca3af;font-size:13px;line-height:1.5;">El enlace vence en una hora y sirve una sola vez.<br>Si no lo pediste, ignorá este mail.</p>
+  <p style="color:#9ca3af;font-size:12px;margin-top:24px;">Kawirth · Villa Ballester</p>
+</div>
