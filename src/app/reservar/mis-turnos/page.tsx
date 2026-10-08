@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { HORAS_MINIMAS_CANCELAR } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
 import { formatFechaHora } from '@/lib/dates'
 import type { CitaConRelaciones } from '@/types/database'
@@ -283,7 +284,7 @@ function CitaCard({
   const isCancelado = cita.status === 'cancelada'
   const isCompletado = cita.status === 'completada'
   const horasRestantes = (new Date(cita.fecha_inicio).getTime() - Date.now()) / (1000 * 60 * 60)
-  const puedeCancelar = !isPasado && !isCancelado && !isCompletado && horasRestantes >= 24
+  const puedeCancelar = !isPasado && !isCancelado && !isCompletado && horasRestantes >= HORAS_MINIMAS_CANCELAR
 
   return (
     <div className={`rounded-xl border bg-white p-4 space-y-3 ${isCancelado ? 'opacity-60' : ''}`}>
@@ -347,7 +348,7 @@ function CitaCard({
       )}
 
       {!readonly && !puedeCancelar && !isPasado && !isCancelado && !isCompletado && (
-        <p className="text-xs text-gray-400">No se puede cancelar con menos de 24hs de anticipación</p>
+        <p className="text-xs text-gray-400">No se puede cancelar con menos de {HORAS_MINIMAS_CANCELAR}hs de anticipación</p>
       )}
     </div>
   )

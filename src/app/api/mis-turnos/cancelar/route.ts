@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-const MIN_HOURS_TO_CANCEL = 24
+import { HORAS_MINIMAS_CANCELAR as MIN_HOURS_TO_CANCEL } from '@/lib/constants'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
