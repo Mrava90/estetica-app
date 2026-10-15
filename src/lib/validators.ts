@@ -18,6 +18,8 @@ export const servicioSchema = z.object({
   nombre: z.string().min(2, 'Nombre requerido'),
   descripcion: z.string().optional(),
   duracion_minutos: z.number().min(5, 'Mínimo 5 minutos'),
+  // Si empieza en las ultimas 2 hs de la jornada (ver lib/disponibilidad)
+  duracion_ultimo_turno_minutos: z.number().int().min(5, 'Mínimo 5 minutos').nullable().optional(),
   precio_efectivo: z.number().min(0, 'Precio inválido'),
   precio_mercadopago: z.number().min(0, 'Precio inválido'),
   es_promo: z.boolean(),

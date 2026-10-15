@@ -26,6 +26,8 @@ export interface Servicio {
   nombre: string
   descripcion: string | null
   duracion_minutos: number
+  /** Si empieza en las ultimas 2 hs de la jornada (ver lib/disponibilidad) */
+  duracion_ultimo_turno_minutos?: number | null
   precio_efectivo: number
   precio_mercadopago: number
   activo: boolean

@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
   // 1. Servicio activo + duracion
   const { data: servicio } = await admin
     .from('servicios')
-    .select('id, duracion_minutos, activo')
+    .select('id, duracion_minutos, duracion_ultimo_turno_minutos, activo')
     .eq('id', servicioId)
     .eq('activo', true)
     .maybeSingle()
@@ -155,6 +155,11 @@ export async function GET(request: NextRequest) {
     ]
 
     const tolerancia = prof.tolerancia_solapamiento_min || 0
+    // Cierre del dia de la profesional (ultimo tramo), para la regla de ultimo turno
+    const finDia = todosHorarios.length
+      ? new Date(Math.max(...todosHorarios.map(h => parseTimeToDateAR(fecha, h.hora_fin).getTime())))
+      : null
+    const ultimoTurno = finDia ? { duracion: servicio.duracion_ultimo_turno_minutos, finDia } : null
     const disponibles: Array<{ inicio: Date; fin: Date }> = []
     for (const horario of todosHorarios) {
       disponibles.push(...calcularSlotsDisponibles(
@@ -166,6 +171,7 @@ export async function GET(request: NextRequest) {
         bloqueos,
         tolerancia,
         parseTimeToDateAR,  // interpreta HH:mm como hora AR (server-side en UTC)
+        ultimoTurno,
       ))
     }
 

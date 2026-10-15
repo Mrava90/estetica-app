@@ -67,7 +67,7 @@ export default function ServiciosPage() {
 
   function openNew() {
     setEditingId(null)
-    reset({ nombre: '', descripcion: '', duracion_minutos: 30, precio_efectivo: 0, precio_mercadopago: 0, es_promo: false, categoria: null })
+    reset({ nombre: '', descripcion: '', duracion_minutos: 30, duracion_ultimo_turno_minutos: null, precio_efectivo: 0, precio_mercadopago: 0, es_promo: false, categoria: null })
     setDialogOpen(true)
   }
 
@@ -77,6 +77,7 @@ export default function ServiciosPage() {
       nombre: servicio.nombre,
       descripcion: servicio.descripcion || '',
       duracion_minutos: servicio.duracion_minutos,
+      duracion_ultimo_turno_minutos: servicio.duracion_ultimo_turno_minutos ?? null,
       precio_efectivo: servicio.precio_efectivo,
       precio_mercadopago: servicio.precio_mercadopago,
       es_promo: servicio.es_promo ?? false,
@@ -279,7 +280,10 @@ export default function ServiciosPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">{s.duracion_minutos} min</TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {s.duracion_minutos} min
+                    {s.duracion_ultimo_turno_minutos ? <span className="block text-[11px] text-muted-foreground">al cierre: {s.duracion_ultimo_turno_minutos} min</span> : null}
+                  </TableCell>
                   <TableCell>
                     <span className="flex items-center gap-1">
                       <Banknote className="h-3 w-3 text-green-600" />
@@ -336,6 +340,20 @@ export default function ServiciosPage() {
               <Input type="number" {...register('duracion_minutos', { valueAsNumber: true })} />
               {errors.duracion_minutos && (
                 <p className="text-sm text-destructive">{errors.duracion_minutos.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Duración si es el último turno <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+              <Input
+                type="number"
+                placeholder="Ej: 120"
+                {...register('duracion_ultimo_turno_minutos', { setValueAs: (v) => (v === '' || v == null ? null : Number(v)) })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Si el turno online empieza en las últimas 2 horas de la jornada de la profesional, ocupa estos minutos en vez de la duración normal. Vacío = siempre la duración normal.
+              </p>
+              {errors.duracion_ultimo_turno_minutos && (
+                <p className="text-sm text-destructive">{errors.duracion_ultimo_turno_minutos.message}</p>
               )}
             </div>
             <div className="grid grid-cols-2 gap-4">

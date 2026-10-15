@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { toAR, diaSemanaAR } from '@/lib/timezone'
 import { calcularPrecioConPromo } from '@/lib/promociones'
+import { duracionSegunHorario } from '@/lib/disponibilidad'
 import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 import type { Promocion } from '@/types/database'
 
@@ -130,7 +131,7 @@ export async function POST(request: NextRequest) {
   // + validar que el profesional realiza ese servicio (hallazgo #6)
   // + traer dias_anticipacion_reserva de configuracion (para respetar la ventana del negocio).
   const [servCheck, profCheck, profServCheck, configCheck] = await Promise.all([
-    admin.from('servicios').select('id, precio_efectivo, duracion_minutos').eq('id', servicioId).eq('activo', true).maybeSingle(),
+    admin.from('servicios').select('id, precio_efectivo, duracion_minutos, duracion_ultimo_turno_minutos').eq('id', servicioId).eq('activo', true).maybeSingle(),
     admin.from('profesionales').select('id, tolerancia_solapamiento_min').eq('id', profesionalId).eq('activo', true).eq('visible_calendario', true).maybeSingle(),
     admin.from('profesional_servicios').select('profesional_id').eq('servicio_id', servicioId).limit(1000),
     admin.from('configuracion').select('dias_anticipacion_reserva').eq('id', 1).maybeSingle(),
@@ -160,15 +161,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Solo se puede reservar con hasta ${diasAnticipacionMax} días de anticipación` }, { status: 400 })
   }
   const duracionMin = servCheck.data.duracion_minutos ?? 30
-  const fFin = new Date(fInicio.getTime() + duracionMin * 60_000)
+  // Puede extenderse mas abajo si es el ultimo turno del dia (ver duracionSegunHorario)
+  let fFin = new Date(fInicio.getTime() + duracionMin * 60_000)
   // fechaFin como string ISO para usar mas abajo donde el codigo espera un string
-  const fechaFin = fFin.toISOString()
+  let fechaFin = fFin.toISOString()
 
   // Validar que la cita cae dentro del horario laboral del profesional o de un desbloqueo excepcional.
   // Sin esta validación, un cliente con navegador manipulado o estado stale podría reservar
   // horarios que no debían aparecer disponibles. Se usa hora AR para consultar horarios/desbloqueos.
   const fInicioAR = toAR(fInicio)
-  const fFinAR = toAR(fFin)
+  let fFinAR = toAR(fFin)
   const dateStr = `${fInicioAR.getFullYear()}-${String(fInicioAR.getMonth() + 1).padStart(2, '0')}-${String(fInicioAR.getDate()).padStart(2, '0')}`
   const diaSemana = diaSemanaAR(fInicio)
 
@@ -192,6 +194,16 @@ export async function POST(request: NextRequest) {
     return h * 60 + m
   }
   const iniMinAR = fInicioAR.getHours() * 60 + fInicioAR.getMinutes()
+
+  // Ultimo turno del dia: misma regla que la disponibilidad (lib/disponibilidad).
+  // El cierre es el del ultimo tramo de la profesional ese dia.
+  const finDiaMin = Math.max(...bloques.map(b => toMin(b.fin)))
+  const duracionReal = duracionSegunHorario(duracionMin, servCheck.data.duracion_ultimo_turno_minutos, finDiaMin - iniMinAR)
+  if (duracionReal !== duracionMin) {
+    fFin = new Date(fInicio.getTime() + duracionReal * 60_000)
+    fechaFin = fFin.toISOString()
+    fFinAR = toAR(fFin)
+  }
   const finMinAR = fFinAR.getHours() * 60 + fFinAR.getMinutes()
 
   const dentroDeBloque = bloques.some(b => iniMinAR >= toMin(b.inicio) && finMinAR <= toMin(b.fin))

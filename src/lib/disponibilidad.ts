@@ -21,6 +21,24 @@ interface BloqueoExistente {
   fecha_fin: string
 }
 
+/**
+ * "Ultimo turno": si un servicio tiene duracion_ultimo_turno_minutos y el turno
+ * empieza dentro de las ultimas VENTANA_ULTIMO_TURNO_MIN de la jornada de la
+ * profesional (cierre del dia, no de cada tramo), ocupa esa duracion en vez de
+ * la normal. Caso: el nail art dura 80-90 min pero al cierre siempre se estira.
+ * El resto del dia el servicio sigue ocupando su duracion normal.
+ */
+export const VENTANA_ULTIMO_TURNO_MIN = 120
+
+export function duracionSegunHorario(
+  duracion: number,
+  duracionUltimoTurno: number | null | undefined,
+  minutosHastaCierre: number,
+): number {
+  if (!duracionUltimoTurno || duracionUltimoTurno <= duracion) return duracion
+  return minutosHastaCierre <= VENTANA_ULTIMO_TURNO_MIN ? duracionUltimoTurno : duracion
+}
+
 /** Firma para la funcion que interpreta "HH:mm" sobre una fecha base */
 export type ParseTimeFn = (fecha: Date, timeStr: string) => Date
 
@@ -33,6 +51,8 @@ export function calcularSlotsDisponibles(
   bloqueos: BloqueoExistente[] = [],
   toleranciaSolapamientoMin: number = 0,
   parseTime: ParseTimeFn = parseTimeToDate,
+  /** Regla de ultimo turno: duracion extendida y cierre del dia de la profesional. */
+  ultimoTurno: { duracion: number | null | undefined; finDia: Date } | null = null,
 ): SlotDisponible[] {
   if (!horario) return []
 
@@ -51,8 +71,18 @@ export function calcularSlotsDisponibles(
   const slots: SlotDisponible[] = []
   let cursor = inicioJornada
 
-  while (addMinutes(cursor, duracionServicio) <= finJornada) {
-    const slotFin = addMinutes(cursor, duracionServicio)
+  while (cursor < finJornada) {
+    // La duracion puede depender del horario (ultimo turno del dia). Un slot que
+    // no entra se saltea y se sigue probando: con la regla, uno posterior
+    // tampoco entra, asi que el resultado sin regla es el mismo que antes.
+    const duracion = ultimoTurno
+      ? duracionSegunHorario(duracionServicio, ultimoTurno.duracion, (ultimoTurno.finDia.getTime() - cursor.getTime()) / 60_000)
+      : duracionServicio
+    const slotFin = addMinutes(cursor, duracion)
+    if (slotFin > finJornada) {
+      cursor = addMinutes(cursor, intervalo)
+      continue
+    }
 
     // Conflicto con citas = la superposición TOTAL acumulada supera la tolerancia.
     // Sumamos overlaps con todas las citas para evitar que un slot se "meta" entre dos
