@@ -24,6 +24,12 @@ import { toAR, fechaArYMD } from '@/lib/timezone'
  *   en reenganches_enviados, sobrevive al sync-sheets).
  * - El cliente ya volvio (cita del mismo cliente entre hace 21 dias y hoy).
  * - El cliente tiene turno futuro pendiente/confirmado en los proximos 30 dias.
+ *
+ * Pospuestas (tabla reenganches_pospuestos, ver /posponer):
+ * - Mientras hasta > hoy, la alerta no aparece en Pendientes.
+ * - Desde ese dia vuelve con la nota, aunque este fuera de la ventana y aunque
+ *   ya se le haya mandado el WhatsApp. Se cae si la clienta saco turno despues
+ *   de la visita. ?tipo=programadas lista las que todavia no vencieron.
  */
 
 const ESTADOS_VALIDOS = ['pendiente', 'confirmada', 'completada']
@@ -37,6 +43,22 @@ export async function GET(request: Request) {
 
   const tipo = new URL(request.url).searchParams.get('tipo') || 'pendientes'
   const soloEnviados = tipo === 'enviados'
+
+  const hoyYMDAR = fechaArYMD(new Date())
+  const { data: pospuestosRaw } = await admin
+    .from('reenganches_pospuestos')
+    .select('cliente_id, hasta, nota, ultima_visita, servicio_nombre, profesional_nombre, clientes(nombre, apellido, telefono)')
+  const pospuestos = new Map((pospuestosRaw || []).map(p => [p.cliente_id as string, p]))
+
+  if (tipo === 'programadas') {
+    const items = (pospuestosRaw || [])
+      .filter(p => (p.hasta as string) > hoyYMDAR)
+      .map(p => itemDePospuesto(p, hoyYMDAR))
+      .filter(Boolean)
+      .sort((a, b) => a!.pospuesto!.hasta.localeCompare(b!.pospuesto!.hasta))
+    const { data: cfg } = await admin.from('configuracion').select('mensaje_reenganche').eq('id', 1).single()
+    return NextResponse.json({ items, mensaje_template: cfg?.mensaje_reenganche || MENSAJE_DEFAULT })
+  }
 
   // Dia calendario en Argentina (evita off-by-one con el TZ del server)
   const hoyAR = toAR(new Date())
@@ -85,6 +107,7 @@ export async function GET(request: Request) {
     dias_transcurridos: number
     ventana_min: number
     ventana_max: number
+    pospuesto?: { hasta: string; nota: string | null }
   }
   const enriquecidas: Candidata[] = []
 
@@ -174,6 +197,40 @@ export async function GET(request: Request) {
     }
   }
 
+  // 6. Pospuestas
+  if (soloEnviados) {
+    // Marcar las que tienen un recordatorio programado
+    for (const c of porCliente.values()) {
+      const p = pospuestos.get(c.cliente_id)
+      if (p) c.pospuesto = { hasta: p.hasta as string, nota: (p.nota as string) || null }
+    }
+  } else {
+    // 6a. Todavia no llego el dia: fuera de Pendientes
+    for (const [id, p] of pospuestos) if ((p.hasta as string) > hoyYMDAR) porCliente.delete(id)
+
+    // 6b. Ya llego el dia: vuelve, salvo que haya sacado turno despues de esa visita
+    const vencidas = [...pospuestos.values()].filter(p => (p.hasta as string) <= hoyYMDAR)
+    if (vencidas.length > 0) {
+      const ids = vencidas.map(p => p.cliente_id as string)
+      const desdeVisita = vencidas.map(p => p.ultima_visita as string).sort()[0]
+      const { data: posteriores } = await admin.from('citas').select('cliente_id, fecha_inicio')
+        .in('cliente_id', ids)
+        .in('status', ESTADOS_VALIDOS)
+        .gt('fecha_inicio', desdeVisita)
+      const volvio = new Set<string>()
+      for (const c of posteriores || []) {
+        const p = pospuestos.get(c.cliente_id as string)
+        // Otra cita en un dia posterior al de la visita de la alerta
+        if (p && fechaArYMD(c.fecha_inicio as string) > fechaArYMD(p.ultima_visita as string)) volvio.add(c.cliente_id as string)
+      }
+      for (const p of vencidas) {
+        if (volvio.has(p.cliente_id as string)) continue
+        const item = itemDePospuesto(p, hoyYMDAR)
+        if (item) porCliente.set(p.cliente_id as string, item)
+      }
+    }
+  }
+
   const { data: config } = await admin
     .from('configuracion')
     .select('mensaje_reenganche')
@@ -182,9 +239,48 @@ export async function GET(request: Request) {
 
   return NextResponse.json({
     items: Array.from(porCliente.values()),
-    mensaje_template: config?.mensaje_reenganche ||
-      '¡Hola {nombre}! Hace {dias} días te atendimos con {servicio}. ¿Te gustaría reservar tu próximo turno? 💅✨',
+    mensaje_template: config?.mensaje_reenganche || MENSAJE_DEFAULT,
   })
+}
+
+const MENSAJE_DEFAULT = '¡Hola {nombre}! Hace {dias} días te atendimos con {servicio}. ¿Te gustaría reservar tu próximo turno? 💅✨'
+
+type ItemReenganche = {
+  cita_id: string
+  cliente_id: string
+  nombre: string
+  apellido: string | null
+  telefono: string | null
+  fecha_servicio: string
+  servicio_nombre: string
+  profesional_nombre: string | null
+  dias_transcurridos: number
+  ventana_min: number
+  ventana_max: number
+  pospuesto?: { hasta: string; nota: string | null }
+}
+
+/** Arma un item de la lista a partir de una fila de reenganches_pospuestos. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function itemDePospuesto(p: any, hoyYMD: string): ItemReenganche | null {
+  const cli = Array.isArray(p.clientes) ? p.clientes[0] : p.clientes
+  if (!cli?.nombre) return null
+  const servicio = p.servicio_nombre || 'servicio'
+  const [vmin, vmax] = ventanaPorServicio(servicio)
+  return {
+    cita_id: 'pos-' + p.cliente_id,
+    cliente_id: p.cliente_id,
+    nombre: cli.nombre,
+    apellido: cli.apellido,
+    telefono: cli.telefono,
+    fecha_servicio: p.ultima_visita,
+    servicio_nombre: servicio,
+    profesional_nombre: p.profesional_nombre || null,
+    dias_transcurridos: diffDiasYMD(hoyYMD, fechaArYMD(p.ultima_visita)),
+    ventana_min: vmin,
+    ventana_max: vmax,
+    pospuesto: { hasta: p.hasta, nota: p.nota || null },
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────

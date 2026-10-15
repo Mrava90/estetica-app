@@ -57,6 +57,8 @@ export async function POST(request: NextRequest) {
         sent_by: user.email || null,
       }, { onConflict: 'cliente_id' })
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
+    // Si estaba pospuesta, este envio la cumple: no tiene que volver a aparecer.
+    await admin.from('reenganches_pospuestos').delete().eq('cliente_id', clienteId)
   } else {
     const { error: delErr } = await admin
       .from('reenganches_enviados')

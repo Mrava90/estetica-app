@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { format } from 'date-fns'
+import { addDays, format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { MessageCircle, Check, Loader2, Phone, Sparkles, X, RotateCcw } from 'lucide-react'
+import { MessageCircle, Loader2, Phone, Sparkles, X, RotateCcw, CalendarClock, BellRing } from 'lucide-react'
 
 interface ReengancheItem {
   cita_id: string
@@ -18,6 +18,8 @@ interface ReengancheItem {
   servicio_nombre: string
   profesional_nombre: string | null
   dias_transcurridos: number
+  /** Recordatorio pospuesto (ver /api/reenganches/posponer) */
+  pospuesto?: { hasta: string; nota: string | null } | null
 }
 
 interface Props {
@@ -25,7 +27,24 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'pendientes' | 'enviados'
+type Tab = 'pendientes' | 'programadas' | 'enviados'
+
+const TABS: { valor: Tab; label: string }[] = [
+  { valor: 'pendientes', label: 'Pendientes' },
+  { valor: 'programadas', label: 'Programadas' },
+  { valor: 'enviados', label: 'Enviados' },
+]
+
+/** Atajos para posponer, en dias desde hoy. */
+const ATAJOS = [
+  { label: '3 días', dias: 3 },
+  { label: '1 semana', dias: 7 },
+  { label: '2 semanas', dias: 14 },
+]
+
+const ymd = (d: Date) => format(d, 'yyyy-MM-dd')
+/** "2026-10-21" → "mié 21/10" */
+const diaCorto = (s: string) => format(new Date(s + 'T12:00:00'), 'EEE d/MM', { locale: es })
 
 export function ReenganchesDialog({ open, onClose }: Props) {
   const [items, setItems] = useState<ReengancheItem[]>([])
@@ -33,9 +52,14 @@ export function ReenganchesDialog({ open, onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [enviando, setEnviando] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('pendientes')
+  // Panel de posponer abierto (cita_id de la fila) y sus campos
+  const [posponiendo, setPosponiendo] = useState<string | null>(null)
+  const [fechaPos, setFechaPos] = useState('')
+  const [notaPos, setNotaPos] = useState('')
 
   const fetchData = useCallback(async (t: Tab = tab) => {
     setLoading(true)
+    setPosponiendo(null)
     try {
       const res = await fetch(`/api/reenganches?tipo=${t}`)
       const data = await res.json()
@@ -110,11 +134,12 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     const mensaje = encodeURIComponent(buildMensaje(item))
     window.open(`https://wa.me/${num}?text=${mensaje}`, '_blank')
 
-    // Auto-marcar como enviado y sacarlo del listado
+    // Auto-marcar como enviado (y, si estaba pospuesta, la cumple) y sacarlo del listado
     setEnviando(item.cita_id)
     try {
       const ok = await marcarEnviado(item)
-      if (ok) setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
+      if (ok && tab !== 'enviados') setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
+      if (ok && tab === 'enviados') setItems(prev => prev.map(i => i.cita_id === item.cita_id ? { ...i, pospuesto: null } : i))
     } finally {
       setEnviando(null)
     }
@@ -134,6 +159,80 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     }
   }
 
+  // ── Posponer ──────────────────────────────────────────────
+
+  function abrirPosponer(item: ReengancheItem) {
+    if (posponiendo === item.cita_id) { setPosponiendo(null); return }
+    setPosponiendo(item.cita_id)
+    setFechaPos(item.pospuesto?.hasta || ymd(addDays(new Date(), 7)))
+    setNotaPos(item.pospuesto?.nota || '')
+  }
+
+  async function guardarPosponer(item: ReengancheItem) {
+    if (!fechaPos || fechaPos <= ymd(new Date())) {
+      toast.error('Elegí una fecha posterior a hoy')
+      return
+    }
+    setEnviando(item.cita_id)
+    try {
+      const res = await fetch('/api/reenganches/posponer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cliente_id: item.cliente_id,
+          hasta: fechaPos,
+          nota: notaPos,
+          fecha_visita: item.fecha_servicio,
+          servicio_nombre: item.servicio_nombre,
+          profesional_nombre: item.profesional_nombre,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || 'No se pudo posponer')
+        return
+      }
+      toast.success(`Te la recuerdo el ${diaCorto(fechaPos)}`)
+      setPosponiendo(null)
+      const pospuesto = { hasta: fechaPos, nota: notaPos.trim() || null }
+      if (tab === 'pendientes') setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
+      else if (tab === 'enviados') setItems(prev => prev.map(i => i.cita_id === item.cita_id ? { ...i, pospuesto } : i))
+      else fetchData('programadas')
+    } finally {
+      setEnviando(null)
+    }
+  }
+
+  async function quitarPospuesto(item: ReengancheItem) {
+    if (!confirm(`¿Quitar el recordatorio de ${item.nombre}?`)) return
+    setEnviando(item.cita_id)
+    try {
+      const res = await fetch('/api/reenganches/posponer', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cliente_id: item.cliente_id }),
+      })
+      if (!res.ok) { toast.error('No se pudo quitar'); return }
+      toast.success('Recordatorio quitado')
+      if (tab === 'programadas') setItems(prev => prev.filter(i => i.cita_id !== item.cita_id))
+      else setItems(prev => prev.map(i => i.cita_id === item.cita_id ? { ...i, pospuesto: null } : i))
+    } finally {
+      setEnviando(null)
+    }
+  }
+
+  const descripcion = {
+    pendientes: 'Clientes atendidos hace 21-28 días que aún no volvieron, y los recordatorios pospuestos que vencen hoy.',
+    programadas: 'Recordatorios pospuestos. Cada uno vuelve a Pendientes el día indicado, salvo que la clienta saque turno antes.',
+    enviados: 'Clientes que ya fueron marcados como contactados en los últimos 60 días. Si te pidió que la contactes más adelante, usá Posponer.',
+  }[tab]
+
+  const vacio = {
+    pendientes: ['Ningún cliente pendiente de reenganche hoy.', 'Aparecen clientes que se atendieron hace 21-28 días y no volvieron ni tienen turno próximo.'],
+    programadas: ['No hay recordatorios programados.', 'Usá "Posponer" en Pendientes o Enviados cuando una clienta te pida que la contactes más adelante.'],
+    enviados: ['Aún no hay ningún cliente marcado como enviado.', 'Los envíos de los últimos 60 días aparecen acá.'],
+  }[tab]
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="flex max-h-[90vh] w-full max-w-3xl flex-col">
@@ -142,34 +241,23 @@ export function ReenganchesDialog({ open, onClose }: Props) {
             <Sparkles className="h-5 w-5 text-fuchsia-500" />
             Recordatorio de servicios
           </DialogTitle>
-          <p className="text-xs text-muted-foreground pt-1">
-            {tab === 'pendientes'
-              ? 'Clientes atendidos hace 21-28 días que aún no volvieron. Ideal para recontactar y captar un nuevo turno.'
-              : 'Clientes que ya fueron marcados como contactados en los últimos 60 días. Podés devolverlos a pendientes si el WhatsApp no se envió.'}
-          </p>
+          <p className="text-xs text-muted-foreground pt-1">{descripcion}</p>
 
           {/* Tabs */}
           <div className="flex gap-1 pt-3 border-b -mx-6 px-6">
-            <button
-              onClick={() => setTab('pendientes')}
-              className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                tab === 'pendientes'
-                  ? 'border-fuchsia-500 text-fuchsia-600 dark:text-fuchsia-400'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Pendientes
-            </button>
-            <button
-              onClick={() => setTab('enviados')}
-              className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                tab === 'enviados'
-                  ? 'border-fuchsia-500 text-fuchsia-600 dark:text-fuchsia-400'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Enviados
-            </button>
+            {TABS.map(t => (
+              <button
+                key={t.valor}
+                onClick={() => setTab(t.valor)}
+                className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  tab === t.valor
+                    ? 'border-fuchsia-500 text-fuchsia-600 dark:text-fuchsia-400'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </DialogHeader>
 
@@ -181,91 +269,112 @@ export function ReenganchesDialog({ open, onClose }: Props) {
           ) : items.length === 0 ? (
             <div className="text-center py-12 space-y-2">
               <Sparkles className="h-8 w-8 text-muted-foreground/40 mx-auto" />
-              <p className="text-sm text-muted-foreground">
-                {tab === 'pendientes' ? 'Ningún cliente pendiente de reenganche hoy.' : 'Aún no hay ningún cliente marcado como enviado.'}
-              </p>
-              <p className="text-[11px] text-muted-foreground/70">
-                {tab === 'pendientes'
-                  ? 'Aparecen clientes que se atendieron hace 21-28 días y no volvieron ni tienen turno próximo.'
-                  : 'Los envíos de los últimos 60 días aparecen acá.'}
-              </p>
+              <p className="text-sm text-muted-foreground">{vacio[0]}</p>
+              <p className="text-[11px] text-muted-foreground/70">{vacio[1]}</p>
             </div>
           ) : (
             <div className="divide-y">
               {items.map(item => {
                 const nombreCompleto = `${item.nombre}${item.apellido ? ' ' + item.apellido : ''}`
                 const isEnviando = enviando === item.cita_id
+                const panelAbierto = posponiendo === item.cita_id
                 return (
-                  <div key={item.cita_id} className="py-3 px-2 flex items-center gap-3 hover:bg-muted/30 rounded transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <p className="font-medium text-sm truncate">{nombreCompleto}</p>
-                        <span className="text-[11px] text-muted-foreground shrink-0">
-                          hace <strong className="text-foreground">{item.dias_transcurridos} días</strong>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                        <span className="truncate">{item.servicio_nombre}</span>
-                        {item.profesional_nombre && (
-                          <span className="text-muted-foreground/70">con {item.profesional_nombre}</span>
-                        )}
-                        {item.telefono && (
-                          <span className="flex items-center gap-1 text-muted-foreground/70">
-                            <Phone className="h-3 w-3" />
-                            {item.telefono}
+                  <div key={item.cita_id} className="py-3 px-2 rounded hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <p className="font-medium text-sm truncate">{nombreCompleto}</p>
+                          <span className="text-[11px] text-muted-foreground shrink-0">
+                            hace <strong className="text-foreground">{item.dias_transcurridos} días</strong>
                           </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                          <span className="truncate">{item.servicio_nombre}</span>
+                          {item.profesional_nombre && (
+                            <span className="text-muted-foreground/70">con {item.profesional_nombre}</span>
+                          )}
+                          {item.telefono && (
+                            <span className="flex items-center gap-1 text-muted-foreground/70">
+                              <Phone className="h-3 w-3" />
+                              {item.telefono}
+                            </span>
+                          )}
+                        </div>
+                        {item.pospuesto && (
+                          <p className={`mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] ${
+                            tab === 'pendientes' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300' : 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-950/40 dark:text-fuchsia-300'
+                          }`}>
+                            {tab === 'pendientes' ? <BellRing className="h-3 w-3" /> : <CalendarClock className="h-3 w-3" />}
+                            {tab === 'pendientes' ? 'Recordatorio pospuesto' : `Vuelve el ${diaCorto(item.pospuesto.hasta)}`}
+                            {item.pospuesto.nota && <span className="text-current/80">· {item.pospuesto.nota}</span>}
+                          </p>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {tab === 'pendientes' ? (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => ocultarSinEnviar(item)}
-                            disabled={isEnviando}
-                            title="Ocultar sin enviar"
-                          >
+                      <div className="flex items-center gap-1 shrink-0">
+                        {tab === 'pendientes' && (
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => ocultarSinEnviar(item)} disabled={isEnviando} title="Ocultar sin enviar">
                             <X className="h-4 w-4" />
                           </Button>
-                          <Button
-                            size="sm"
-                            className="h-8 gap-1.5 bg-green-600 hover:bg-green-700"
-                            onClick={() => abrirWhatsApp(item)}
-                            disabled={isEnviando || !item.telefono}
-                          >
-                            {isEnviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
-                            WhatsApp
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 gap-1.5"
-                            onClick={() => desmarcar(item)}
-                            disabled={isEnviando}
-                            title="Devolver a pendientes"
-                          >
+                        )}
+                        {tab === 'enviados' && (
+                          <Button size="sm" variant="outline" className="h-8 gap-1.5"
+                            onClick={() => desmarcar(item)} disabled={isEnviando} title="Devolver a pendientes">
                             {isEnviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-                            Reenviar
+                            <span className="hidden sm:inline">Reenviar</span>
                           </Button>
-                          <Button
-                            size="sm"
-                            className="h-8 gap-1.5 bg-green-600 hover:bg-green-700"
-                            onClick={() => abrirWhatsApp(item)}
-                            disabled={isEnviando || !item.telefono}
-                            title="Reenviar WhatsApp (queda marcado como enviado)"
-                          >
-                            <MessageCircle className="h-3.5 w-3.5" />
-                            WhatsApp
+                        )}
+                        {tab === 'programadas' && (
+                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => quitarPospuesto(item)} disabled={isEnviando} title="Quitar recordatorio">
+                            <X className="h-4 w-4" />
                           </Button>
-                        </>
-                      )}
+                        )}
+                        <Button size="sm" variant={panelAbierto ? 'secondary' : 'outline'} className="h-8 gap-1.5"
+                          onClick={() => abrirPosponer(item)} disabled={isEnviando}
+                          title={item.pospuesto ? 'Cambiar la fecha del recordatorio' : 'Recordármelo otro día'}>
+                          <CalendarClock className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">{tab === 'programadas' ? 'Cambiar' : 'Posponer'}</span>
+                        </Button>
+                        <Button size="sm" className="h-8 gap-1.5 bg-green-600 hover:bg-green-700"
+                          onClick={() => abrirWhatsApp(item)} disabled={isEnviando || !item.telefono}
+                          title={tab === 'enviados' ? 'Reenviar WhatsApp (queda marcado como enviado)' : undefined}>
+                          {isEnviando && tab !== 'enviados' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+                          WhatsApp
+                        </Button>
+                      </div>
                     </div>
+
+                    {/* Panel de posponer */}
+                    {panelAbierto && (
+                      <div className="mt-2 ml-1 rounded-md border-l-2 border-fuchsia-400 bg-muted/40 px-3 py-2.5 space-y-2">
+                        <p className="text-xs font-medium">¿Cuándo te la recuerdo?</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {ATAJOS.map(a => {
+                            const f = ymd(addDays(new Date(), a.dias))
+                            return (
+                              <button key={a.dias} type="button" onClick={() => setFechaPos(f)}
+                                className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${fechaPos === f ? 'border-fuchsia-500 bg-fuchsia-500 text-white' : 'bg-background hover:bg-muted'}`}>
+                                {a.label}
+                              </button>
+                            )
+                          })}
+                          <input type="date" value={fechaPos} min={ymd(addDays(new Date(), 1))}
+                            onChange={e => setFechaPos(e.target.value)}
+                            className="h-7 rounded-md border bg-background px-2 text-xs" />
+                          {fechaPos && <span className="text-xs text-muted-foreground">→ {diaCorto(fechaPos)}</span>}
+                        </div>
+                        <input type="text" value={notaPos} onChange={e => setNotaPos(e.target.value)} maxLength={200}
+                          placeholder="Nota (opcional): ej. puede recién la semana que viene"
+                          className="h-8 w-full rounded-md border bg-background px-2 text-xs" />
+                        <div className="flex justify-end gap-2">
+                          <Button size="sm" variant="ghost" className="h-7" onClick={() => setPosponiendo(null)}>Cancelar</Button>
+                          <Button size="sm" className="h-7" onClick={() => guardarPosponer(item)} disabled={isEnviando}>
+                            {isEnviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Guardar'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -276,6 +385,7 @@ export function ReenganchesDialog({ open, onClose }: Props) {
         {!loading && items.length > 0 && (
           <div className="shrink-0 pt-2 border-t text-[11px] text-muted-foreground">
             💡 Al enviar el WhatsApp, se marca como enviado y no vuelve a aparecer.
+            Si la clienta te pide que la contactes más adelante, usá <strong>Posponer</strong>: vuelve a Pendientes ese día.
             El mensaje se puede editar desde <strong>Configuración → Mensaje de reenganche</strong>.
           </div>
         )}
