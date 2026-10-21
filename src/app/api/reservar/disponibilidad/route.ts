@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { calcularSlotsDisponibles } from '@/lib/disponibilidad'
+import { tramosDelDia, COLUMNAS_ESPECIALES, type HorarioEspecial } from '@/lib/horarios'
 import { parseTimeToDateAR, diaSemanaAR } from '@/lib/timezone'
 import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 
@@ -111,9 +112,9 @@ export async function GET(request: NextRequest) {
   const finDiaAR = `${dateStr}T24:00:00-03:00`
 
   // 3. Horarios/desbloqueos/citas/bloqueos del dia + intervalo desde config, en paralelo
-  const [horariosRes, desbloqRes, citasRes, bloqRes, configRes] = await Promise.all([
+  const [horariosRes, desbloqRes, citasRes, bloqRes, configRes, especialesRes] = await Promise.all([
     admin.from('horarios')
-      .select('profesional_id, hora_inicio, hora_fin')
+      .select('profesional_id, dia_semana, hora_inicio, hora_fin')
       .in('profesional_id', profIds).eq('dia_semana', diaSemana).eq('activo', true)
       .order('hora_inicio'),
     admin.from('desbloqueos')
@@ -128,7 +129,13 @@ export async function GET(request: NextRequest) {
       .in('profesional_id', profIds)
       .gte('fecha_inicio', inicioDiaAR).lt('fecha_inicio', finDiaAR),
     admin.from('configuracion').select('intervalo_citas_minutos').eq('id', 1).maybeSingle(),
+    // Horarios especiales que cubren el dia (reemplazan al semanal)
+    admin.from('horarios_especiales').select(COLUMNAS_ESPECIALES)
+      .in('profesional_id', profIds).lte('fecha_desde', dateStr).gte('fecha_hasta', dateStr),
   ])
+  // Sin la tabla (migracion 00048 sin correr) se sigue con el horario semanal.
+  if (especialesRes.error) console.error('horarios_especiales:', especialesRes.error.message)
+  const especiales = (especialesRes.error ? [] : especialesRes.data || []) as HorarioEspecial[]
 
   // Si alguna query fallo, devolver 503 explicito en vez de "no hay horarios" silencioso.
   // Antes: un error de Supabase se traducia a slots vacios y el cliente creia que la
@@ -150,7 +157,8 @@ export async function GET(request: NextRequest) {
     const profDesbloqueos = (desbloqRes.data || []).filter((d) => d.profesional_id === prof.id)
 
     const todosHorarios = [
-      ...horarios.map((h) => ({ hora_inicio: h.hora_inicio, hora_fin: h.hora_fin })),
+      // Semanal, o el especial si hay uno para este dia (lib/horarios)
+      ...tramosDelDia(dateStr, diaSemana, horarios, especiales.filter((e) => e.profesional_id === prof.id)).tramos,
       ...profDesbloqueos.map((d) => ({ hora_inicio: d.hora_inicio, hora_fin: d.hora_fin })),
     ]
 

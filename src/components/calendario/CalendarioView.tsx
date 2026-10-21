@@ -5,6 +5,7 @@ import { format, addDays, subDays } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
 import type { CitaConRelaciones, Profesional, Horario, Bloqueo, Desbloqueo } from '@/types/database'
+import { COLUMNAS_ESPECIALES, type HorarioEspecial } from '@/lib/horarios'
 import { CalendarioResourceDayView } from './CalendarioResourceDayView'
 import { CitaDialog } from './CitaDialog'
 import { CitaDetailPanel } from './CitaDetailPanel'
@@ -35,6 +36,8 @@ export function CalendarioView() {
   const [horarios, setHorarios] = useState<Record<string, Horario[]>>({})
   const [bloqueos, setBloqueos] = useState<Bloqueo[]>([])
   const [desbloqueos, setDesbloqueos] = useState<Desbloqueo[]>([])
+  // Horarios especiales por periodo (reemplazan al semanal, ver lib/horarios)
+  const [especiales, setEspeciales] = useState<HorarioEspecial[]>([])
   const [modoBloqueo, setModoBloqueo] = useState(false)
   const [bloqueoDialogOpen, setBloqueoDialogOpen] = useState(false)
   const [selectedBloqueo, setSelectedBloqueo] = useState<Bloqueo | null>(null)
@@ -115,7 +118,7 @@ export function CalendarioView() {
     const desdeStr = desde.toISOString().split('T')[0]
     const hastaStr = hasta.toISOString().split('T')[0]
 
-    const [citasRes, profRes, bloqueosRes, desbloqueosRes] = await Promise.all([
+    const [citasRes, profRes, bloqueosRes, desbloqueosRes, especialesRes] = await Promise.all([
       supabase
         .from('citas')
         .select('*, clientes(*), profesionales(*), servicios(*)')
@@ -132,9 +135,13 @@ export function CalendarioView() {
         .gte('fecha', desdeStr)
         .lte('fecha', hastaStr)
         .order('fecha'),
+      supabase.from('horarios_especiales').select(COLUMNAS_ESPECIALES)
+        .lte('fecha_desde', hastaStr)
+        .gte('fecha_hasta', desdeStr),
     ])
 
     if (citasRes.data) setCitas(citasRes.data)
+    setEspeciales(especialesRes.error ? [] : (especialesRes.data || []) as HorarioEspecial[])
     if (bloqueosRes.data) setBloqueos(bloqueosRes.data)
     if (desbloqueosRes.data) setDesbloqueos(desbloqueosRes.data)
 
@@ -383,7 +390,7 @@ export function CalendarioView() {
               onClick={() => setModoBloqueo(!modoBloqueo)}
             >
               <Ban className="h-3.5 w-3.5" />
-              Bloquear
+              Bloquear / Habilitar
             </Button>
           )}
           {!isToday && (
@@ -432,7 +439,7 @@ export function CalendarioView() {
                 onClick={() => setModoBloqueo(!modoBloqueo)}
               >
                 <Ban className="h-3.5 w-3.5" />
-                Bloquear
+                Bloquear / Habilitar
               </Button>
               <Button
                 variant="outline"
@@ -512,6 +519,7 @@ export function CalendarioView() {
           bloqueos={bloqueos}
           desbloqueos={desbloqueos}
           horarios={horarios}
+          especiales={especiales}
           onSlotClick={isReadOnly ? () => {} : handleSlotClick}
           onCitaClick={handleCitaClick}
           onBloqueoClick={isReadOnly ? undefined : handleBloqueoClick}
@@ -553,6 +561,7 @@ export function CalendarioView() {
         defaultStart={bloqueoDefaultStart}
         defaultEnd={bloqueoDefaultEnd}
         horarios={Object.values(horarios).flat()}
+        especiales={especiales}
       />
 
       <RecordatoriosDialog

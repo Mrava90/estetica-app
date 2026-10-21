@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { toAR, diaSemanaAR } from '@/lib/timezone'
 import { calcularPrecioConPromo } from '@/lib/promociones'
 import { duracionSegunHorario } from '@/lib/disponibilidad'
+import { tramosDelDia, COLUMNAS_ESPECIALES, type HorarioEspecial } from '@/lib/horarios'
 import { check as rateLimit, getClientIp } from '@/lib/rate-limit'
 import type { Promocion } from '@/types/database'
 
@@ -174,14 +175,17 @@ export async function POST(request: NextRequest) {
   const dateStr = `${fInicioAR.getFullYear()}-${String(fInicioAR.getMonth() + 1).padStart(2, '0')}-${String(fInicioAR.getDate()).padStart(2, '0')}`
   const diaSemana = diaSemanaAR(fInicio)
 
-  const [horariosRes, desbloqRes, bloqRes] = await Promise.all([
-    admin.from('horarios').select('hora_inicio, hora_fin').eq('profesional_id', profesionalId).eq('dia_semana', diaSemana).eq('activo', true),
+  const [horariosRes, desbloqRes, bloqRes, especialesRes] = await Promise.all([
+    admin.from('horarios').select('dia_semana, hora_inicio, hora_fin').eq('profesional_id', profesionalId).eq('dia_semana', diaSemana).eq('activo', true),
     admin.from('desbloqueos').select('hora_inicio, hora_fin').eq('profesional_id', profesionalId).eq('fecha', dateStr),
     admin.from('bloqueos').select('fecha_inicio, fecha_fin').eq('profesional_id', profesionalId).gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
+    admin.from('horarios_especiales').select(COLUMNAS_ESPECIALES).eq('profesional_id', profesionalId).lte('fecha_desde', dateStr).gte('fecha_hasta', dateStr),
   ])
+  const especiales = (especialesRes.error ? [] : especialesRes.data || []) as HorarioEspecial[]
 
   const bloques = [
-    ...(horariosRes.data || []).map(h => ({ inicio: h.hora_inicio.slice(0, 5), fin: h.hora_fin.slice(0, 5) })),
+    // Semanal, o el especial si hay uno para este dia (lib/horarios)
+    ...tramosDelDia(dateStr, diaSemana, horariosRes.data || [], especiales).tramos.map(h => ({ inicio: h.hora_inicio.slice(0, 5), fin: h.hora_fin.slice(0, 5) })),
     ...(desbloqRes.data || []).map(d => ({ inicio: d.hora_inicio.slice(0, 5), fin: d.hora_fin.slice(0, 5) })),
   ]
 

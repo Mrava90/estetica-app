@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { tramosDelDia, type HorarioEspecial } from '@/lib/horarios'
 import { createClient } from '@/lib/supabase/client'
 import type { Bloqueo, Desbloqueo, Horario } from '@/types/database'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -33,6 +34,8 @@ interface Props {
   defaultStart?: string
   defaultEnd?: string
   horarios?: Horario[]
+  /** Horarios especiales por periodo (ver lib/horarios) */
+  especiales?: HorarioEspecial[]
 }
 
 export function BloqueoDialog({
@@ -46,6 +49,7 @@ export function BloqueoDialog({
   defaultStart,
   defaultEnd,
   horarios = [],
+  especiales = [],
 }: Props) {
   const [horaInicio, setHoraInicio] = useState(defaultStart || '10:00')
   const [horaFin, setHoraFin] = useState(defaultEnd || '11:00')
@@ -59,8 +63,10 @@ export function BloqueoDialog({
 
   // Determinar si el profesional NO trabaja este día
   const diaSemana = fecha.getDay()
+  const fechaYMD = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
   const noTrabajaHoy = profesionalId
-    ? horarios.filter((h) => h.profesional_id === profesionalId && h.dia_semana === diaSemana).length === 0
+    ? tramosDelDia(fechaYMD, diaSemana, horarios.filter((h) => h.profesional_id === profesionalId),
+        especiales.filter((e) => e.profesional_id === profesionalId)).tramos.length === 0
     : false
 
   // Reset form when dialog opens
@@ -149,7 +155,7 @@ export function BloqueoDialog({
   function getTitle() {
     if (isEditingBloqueo) return 'Bloqueo existente'
     if (isEditingDesbloqueo) return 'Horario habilitado'
-    return noTrabajaHoy ? 'Gestionar horario' : 'Bloquear horario'
+    return 'Gestionar horario'
   }
 
   return (
@@ -169,11 +175,18 @@ export function BloqueoDialog({
           {/* Crear nuevo (ni editando bloqueo ni desbloqueo) */}
           {!isEditingBloqueo && !isEditingDesbloqueo && (
             <>
-              {/* Toggle bloquear/desbloquear solo si no trabaja hoy */}
-              {noTrabajaHoy && (
-                <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3">
-                  <p className="text-xs text-amber-700 dark:text-amber-400 font-medium mb-2">
-                    Este profesional no trabaja este día normalmente.
+              {/* Habilitar o bloquear, cualquier dia. Habilitar suma ese horario
+                  aunque este fuera de la configuracion de la profesional (ej.
+                  quedarse hasta las 21 un dia). Por defecto: habilitar si ese dia
+                  no trabaja, bloquear si trabaja. */}
+              {(
+                <div className={noTrabajaHoy
+                  ? 'rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-3'
+                  : 'rounded-lg border p-3'}>
+                  <p className={`text-xs font-medium mb-2 ${noTrabajaHoy ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                    {noTrabajaHoy
+                      ? 'Este profesional no trabaja este día normalmente.'
+                      : 'Habilitá un horario extra o bloqueá uno de su jornada.'}
                   </p>
                   <div className="flex gap-2">
                     <Button

@@ -13,6 +13,7 @@ import Image from 'next/image'
 import { ServiciosProfesional } from '@/components/personal/ServiciosProfesional'
 import { ToleranciaSolapamiento } from '@/components/personal/ToleranciaSolapamiento'
 import { AliasPago } from '@/components/personal/AliasPago'
+import { HorariosEspeciales } from '@/components/personal/HorariosEspeciales'
 
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const DIAS_MAP = [1, 2, 3, 4, 5, 6, 0] // Lun=1 ... Dom=0
@@ -394,6 +395,9 @@ export default function PersonalPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Horarios por periodo: reemplazan al semanal en esas fechas */}
+      {prof && <HorariosEspeciales key={prof.id} profesionalId={prof.id} profesionalNombre={prof.nombre} />}
     </div>
   )
 }

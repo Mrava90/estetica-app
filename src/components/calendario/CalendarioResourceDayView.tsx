@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useEffect, useRef, useState } from 'react'
+import { tramosDelDia, type HorarioEspecial } from '@/lib/horarios'
 import type { CitaConRelaciones, Profesional, Bloqueo, Desbloqueo, Horario } from '@/types/database'
 import { STATUS_COLORS } from '@/lib/constants'
 import { formatPrecio } from '@/lib/dates'
@@ -35,6 +36,8 @@ interface Props {
   bloqueos?: Bloqueo[]
   desbloqueos?: Desbloqueo[]
   horarios?: Record<string, Horario[]>
+  /** Horarios especiales por periodo (reemplazan al semanal, ver lib/horarios) */
+  especiales?: HorarioEspecial[]
   onSlotClick: (profesionalId: string, start: Date, end: Date) => void
   onCitaClick: (cita: CitaConRelaciones) => void
   onBloqueoClick?: (bloqueo: Bloqueo) => void
@@ -49,6 +52,7 @@ export function CalendarioResourceDayView({
   bloqueos = [],
   desbloqueos = [],
   horarios = {},
+  especiales = [],
   onSlotClick,
   onCitaClick,
   onBloqueoClick,
@@ -135,9 +139,11 @@ export function CalendarioResourceDayView({
   // Franjas fuera de horario laboral por profesional (para sombrear el calendario)
   const fueraDeHorarioPorProfesional = useMemo(() => {
     const diaSemana = fecha.getDay() // 0=Dom, 1=Lun, ...
+    const fechaYMD = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
     const result = new Map<string, { top: number; height: number }[]>()
     profesionales.forEach((prof) => {
-      const horariosProf = (horarios[prof.id] || []).filter((h) => h.dia_semana === diaSemana)
+      // Semanal, o el especial si hay uno para este dia (lib/horarios)
+      const horariosProf = tramosDelDia(fechaYMD, diaSemana, horarios[prof.id] || [], especiales.filter((e) => e.profesional_id === prof.id)).tramos
       const desbloqueosProf = desbloqueosPorProfesional.get(prof.id) || []
 
       // Combinar horarios regulares + desbloqueos en una lista de bloques activos
@@ -183,7 +189,7 @@ export function CalendarioResourceDayView({
       result.set(prof.id, franjas)
     })
     return result
-  }, [horarios, profesionales, fecha, desbloqueosPorProfesional])
+  }, [horarios, especiales, profesionales, fecha, desbloqueosPorProfesional])
 
   const bloqueosPorProfesional = useMemo(() => {
     const map = new Map<string, Bloqueo[]>()
@@ -470,20 +476,22 @@ export function CalendarioResourceDayView({
   const fromMin = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
   function getAvailability(profId: string) {
-    const profHorarios = horarios[profId] || []
     const diaSemana = fecha.getDay()
-    const horarioHoy = profHorarios.find((h) => h.dia_semana === diaSemana)
+    const fechaYMD = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
+    // Todos los tramos del dia (antes se tomaba solo el primero: a Lola, que
+    // corta al mediodia, no se le contaba la tarde). Semanal o especial.
+    const tramosHoy = tramosDelDia(fechaYMD, diaSemana, horarios[profId] || [], especiales.filter((e) => e.profesional_id === profId)).tramos
     const desbloqueosProf = desbloqueosPorProfesional.get(profId) || []
 
-    // Si no tiene horario regular ni desbloqueos, no trabaja
-    if (!horarioHoy && desbloqueosProf.length === 0) return null
+    // Si no tiene horario ni desbloqueos, no trabaja
+    if (tramosHoy.length === 0 && desbloqueosProf.length === 0) return null
 
     const profCitas = citasPorProfesional.get(profId) || []
     const profBloqs = bloqueosPorProfesional.get(profId) || []
 
     // Combinar horarios regulares + desbloqueos para definir la jornada
     const workBlocks = [
-      ...(horarioHoy ? [{ start: toMin(horarioHoy.hora_inicio), end: toMin(horarioHoy.hora_fin) }] : []),
+      ...tramosHoy.map((h) => ({ start: toMin(h.hora_inicio), end: toMin(h.hora_fin) })),
       ...desbloqueosProf.map((d) => ({ start: toMin(d.hora_inicio), end: toMin(d.hora_fin) })),
     ].sort((a, b) => a.start - b.start)
 

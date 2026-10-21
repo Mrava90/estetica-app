@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { tramosDelDia, COLUMNAS_ESPECIALES, type HorarioEspecial } from '@/lib/horarios'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClient } from '@/lib/supabase/client'
@@ -283,16 +284,19 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     const diaSemana = fechaIni.getDay()
     const dateStr = `${fechaIni.getFullYear()}-${String(fechaIni.getMonth() + 1).padStart(2, '0')}-${String(fechaIni.getDate()).padStart(2, '0')}`
 
-    const [horariosRes, desbloqRes, bloqRes, profRes] = await Promise.all([
-      supabase.from('horarios').select('hora_inicio, hora_fin').eq('profesional_id', profId).eq('dia_semana', diaSemana).eq('activo', true),
+    const [horariosRes, desbloqRes, bloqRes, profRes, especialesRes] = await Promise.all([
+      supabase.from('horarios').select('dia_semana, hora_inicio, hora_fin').eq('profesional_id', profId).eq('dia_semana', diaSemana).eq('activo', true),
       supabase.from('desbloqueos').select('hora_inicio, hora_fin').eq('profesional_id', profId).eq('fecha', dateStr),
       supabase.from('bloqueos').select('fecha_inicio, fecha_fin').eq('profesional_id', profId).gte('fecha_inicio', `${dateStr}T00:00:00`).lt('fecha_inicio', `${dateStr}T23:59:59`),
       supabase.from('profesionales').select('nombre').eq('id', profId).single(),
+      supabase.from('horarios_especiales').select(COLUMNAS_ESPECIALES).eq('profesional_id', profId).lte('fecha_desde', dateStr).gte('fecha_hasta', dateStr),
     ])
+    const especiales = (especialesRes.error ? [] : especialesRes.data || []) as HorarioEspecial[]
 
     const nombreProf = profRes.data?.nombre || 'Profesional'
     const bloques = [
-      ...(horariosRes.data || []).map(h => ({ inicio: h.hora_inicio.slice(0, 5), fin: h.hora_fin.slice(0, 5) })),
+      // Semanal, o el especial si hay uno para este dia (lib/horarios)
+      ...tramosDelDia(dateStr, diaSemana, horariosRes.data || [], especiales).tramos.map(h => ({ inicio: h.hora_inicio.slice(0, 5), fin: h.hora_fin.slice(0, 5) })),
       ...(desbloqRes.data || []).map(d => ({ inicio: d.hora_inicio.slice(0, 5), fin: d.hora_fin.slice(0, 5) })),
     ]
 
