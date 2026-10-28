@@ -45,7 +45,11 @@ export async function GET(request: NextRequest) {
   ])
   if (error) return NextResponse.json({ novedades: [] })   // sin tabla todavia: no molestar
   const yaVistas = new Set((vistas || []).map(v => v.novedad_id))
+  // created_at hace de "mostrar desde": una novedad programada (fecha futura)
+  // no se muestra hasta esa hora.
+  const ahora = Date.now()
   const pendientes = (todas || []).filter(n =>
+    new Date(n.created_at).getTime() <= ahora &&
     !yaVistas.has(n.id) &&
     (!n.destinatarios || n.destinatarios.map((d: string) => d.toLowerCase()).includes(email)))
   return NextResponse.json({ novedades: pendientes.map(n => ({ id: n.id, titulo: n.titulo, cuerpo: n.cuerpo, created_at: n.created_at })) })
@@ -54,7 +58,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const user = await usuario()
   if (!user || !isAdminUser(user)) return NextResponse.json({ error: 'Solo admin' }, { status: 403 })
-  const { titulo, cuerpo, destinatarios } = await request.json()
+  const { titulo, cuerpo, destinatarios, mostrar_desde } = await request.json()
+  // Opcional: ISO con zona. Se guarda en created_at (ver GET pendientes).
+  const desde = mostrar_desde && !isNaN(new Date(mostrar_desde).getTime()) ? new Date(mostrar_desde).toISOString() : null
   if (!titulo?.trim() || !cuerpo?.trim()) return NextResponse.json({ error: 'Falta el título o el mensaje' }, { status: 400 })
   const lista = Array.isArray(destinatarios) ? destinatarios.filter((d: unknown) => typeof d === 'string' && d.includes('@')) : []
   if (lista.length === 0) return NextResponse.json({ error: 'Elegí al menos una destinataria' }, { status: 400 })
@@ -64,6 +70,7 @@ export async function POST(request: NextRequest) {
     cuerpo: cuerpo.trim().slice(0, 4000),
     destinatarios: lista.map((d: string) => d.toLowerCase()),
     creado_por: user.id,
+    ...(desde ? { created_at: desde } : {}),
   }).select('id').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true, id: data.id })

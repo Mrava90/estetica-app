@@ -40,6 +40,8 @@ export function TabNovedades({ users }: { users: AppUser[] }) {
   const personal = users.filter(u => !u.is_admin)
   const [titulo, setTitulo] = useState('')
   const [cuerpo, setCuerpo] = useState('')
+  // "Mostrar desde" (opcional): datetime-local en hora de Argentina
+  const [desde, setDesde] = useState('')
   const [elegidas, setElegidas] = useState<Set<string>>(new Set())
   const [enviando, setEnviando] = useState(false)
   const [novedades, setNovedades] = useState<NovedadAdmin[]>([])
@@ -65,12 +67,12 @@ export function TabNovedades({ users }: { users: AppUser[] }) {
       const r = await fetch('/api/novedades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ titulo, cuerpo, destinatarios: [...elegidas] }),
+        body: JSON.stringify({ titulo, cuerpo, destinatarios: [...elegidas], mostrar_desde: desde ? desde + ':00-03:00' : null }),
       })
       const j = await r.json()
       if (!r.ok) { toast.error(j.error || 'No se pudo publicar'); return }
       toast.success('Novedad publicada: la van a ver al entrar')
-      setTitulo(''); setCuerpo('')
+      setTitulo(''); setCuerpo(''); setDesde('')
       cargar()
     } finally {
       setEnviando(false)
@@ -98,6 +100,11 @@ export function TabNovedades({ users }: { users: AppUser[] }) {
           <div className="space-y-2">
             <Label>Mensaje</Label>
             <Textarea rows={5} placeholder="Qué cambió y qué tienen que hacer distinto." value={cuerpo} onChange={e => setCuerpo(e.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Mostrar desde <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+            <Input type="datetime-local" value={desde} onChange={e => setDesde(e.target.value)} className="w-56" />
+            <p className="text-xs text-muted-foreground">Vacío = aparece apenas la publicás. Con fecha, le aparece a cada una recién desde esa hora.</p>
           </div>
           <div className="space-y-2">
             <Label>Para</Label>
@@ -131,7 +138,11 @@ export function TabNovedades({ users }: { users: AppUser[] }) {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-medium text-sm">{n.titulo}</p>
-                      <p className="text-xs text-muted-foreground">{fechaHora(n.created_at)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(n.created_at).getTime() > Date.now()
+                          ? <span className="text-amber-700">Programada: se muestra desde el {fechaHora(n.created_at)}</span>
+                          : fechaHora(n.created_at)}
+                      </p>
                     </div>
                     <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => borrar(n.id)} aria-label="Borrar">
                       <Trash2 className="h-3.5 w-3.5" />
