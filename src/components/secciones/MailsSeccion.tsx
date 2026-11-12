@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Mail, Plus, Pencil, Trash2, Send, Loader2, Users } from 'lucide-react'
+import { Mail, Plus, Pencil, Trash2, Send, Loader2, Users, X } from 'lucide-react'
 
 interface Plantilla {
   id: string
@@ -37,6 +37,37 @@ const LOTE = 15 // igual que LOTE en src/lib/mails.ts
 const SIN_PROMO = 'ninguna'
 
 const vacia = { id: '', nombre: '', asunto: '', cuerpo: '', promocion_id: SIN_PROMO }
+
+/** Clientas con mail que coinciden con el texto (nombre, apellido o mail). */
+function useBuscarClientas(texto: string) {
+  const [res, setRes] = useState<Destinataria[]>([])
+  useEffect(() => {
+    if (texto.trim().length < 2) return
+    const t = setTimeout(async () => {
+      const q = texto.trim().replace(/[%,()]/g, '')
+      const { data } = await createClient().from('clientes').select('id, nombre, apellido, email')
+        .or(`nombre.ilike.%${q}%,apellido.ilike.%${q}%,email.ilike.%${q}%`).not('email', 'is', null).limit(8)
+      setRes((data || []).filter(c => c.email?.trim()).map(c => ({ ...c, email: c.email!.trim() })))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [texto])
+  return texto.trim().length < 2 ? [] : res
+}
+
+/** Lista de resultados de busqueda; al elegir una, la agrega. */
+function Resultados({ items, excluir, onElegir }: { items: Destinataria[]; excluir: Set<string>; onElegir: (c: Destinataria) => void }) {
+  const visibles = items.filter(c => !excluir.has(c.id))
+  if (visibles.length === 0) return null
+  return (
+    <div className="rounded-md border divide-y bg-background">
+      {visibles.map(c => (
+        <button key={c.id} type="button" className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted" onClick={() => onElegir(c)}>
+          {c.nombre} {c.apellido} <span className="text-muted-foreground">· {c.email}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /** Igual que completar() de src/lib/mails.ts, para la vista previa. */
 function completar(texto: string, nombre: string, apellido: string | null) {
@@ -61,8 +92,12 @@ export default function MailsSeccion() {
   const [dias, setDias] = useState('60')
   const [servicioId, setServicioId] = useState('')
   const [busqueda, setBusqueda] = useState('')
-  const [clientaId, setClientaId] = useState('')
-  const [clientasBusqueda, setClientasBusqueda] = useState<{ id: string; nombre: string; apellido: string | null; email: string | null }[]>([])
+  // "Elegir a mano": las clientas sumadas una por una
+  const [elegidas, setElegidas] = useState<Destinataria[]>([])
+  // Buscador para sumar clientas a la lista ya calculada
+  const [busquedaAgregar, setBusquedaAgregar] = useState('')
+  const resultados = useBuscarClientas(tipo === 'clienta' ? busqueda : '')
+  const resultadosAgregar = useBuscarClientas(busquedaAgregar)
   // Exclusiones: por defecto no se le manda a quien vino hace poco ni a quien ya tiene turno
   const [excluirRecientes, setExcluirRecientes] = useState(true)
   const [recientesDias, setRecientesDias] = useState('20')
@@ -102,20 +137,8 @@ export default function MailsSeccion() {
     router.replace('/servicios?tab=mails')
   }, [promoParam, promos, plantillas, router])
 
-  // Busqueda de una clienta puntual
-  useEffect(() => {
-    if (tipo !== 'clienta' || busqueda.trim().length < 2) { setClientasBusqueda([]); return }
-    const t = setTimeout(async () => {
-      const q = busqueda.trim().replace(/[%,()]/g, '')
-      const { data } = await createClient().from('clientes').select('id, nombre, apellido, email')
-        .or(`nombre.ilike.%${q}%,apellido.ilike.%${q}%,email.ilike.%${q}%`).not('email', 'is', null).limit(8)
-      setClientasBusqueda(data || [])
-    }, 300)
-    return () => clearTimeout(t)
-  }, [busqueda, tipo])
-
   // Cambiar el segmento o la plantilla invalida la lista calculada
-  useEffect(() => { setLista(null) }, [plantillaId, tipo, dias, servicioId, clientaId, excluirRecientes, recientesDias, excluirConTurno])
+  useEffect(() => { setLista(null) }, [plantillaId, tipo, dias, servicioId, elegidas, excluirRecientes, recientesDias, excluirConTurno])
 
   const plantilla = plantillas.find(p => p.id === plantillaId)
 
@@ -148,8 +171,9 @@ export default function MailsSeccion() {
     try {
       const r = await fetch('/api/mails/destinatarias', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plantilla_id: plantillaId || null, segmento: { tipo, dias: Number(dias), servicio_id: servicioId, cliente_id: clientaId },
-          excluir: { recientes_dias: excluirRecientes ? Number(recientesDias) : 0, con_turno: excluirConTurno },
+        body: JSON.stringify({ plantilla_id: plantillaId || null, segmento: { tipo, dias: Number(dias), servicio_id: servicioId, cliente_ids: elegidas.map(e => e.id) },
+          // Elegidas a mano: se manda a esas, sin exclusiones
+          excluir: tipo === 'clienta' ? {} : { recientes_dias: excluirRecientes ? Number(recientesDias) : 0, con_turno: excluirConTurno },
         }),
       })
       const j = await r.json()
@@ -243,7 +267,7 @@ export default function MailsSeccion() {
                   <SelectItem value="todas">Todas las clientas con mail</SelectItem>
                   <SelectItem value="inactivas">Las que no vienen hace un tiempo</SelectItem>
                   <SelectItem value="servicio">Las que se hicieron un servicio</SelectItem>
-                  <SelectItem value="clienta">Una clienta</SelectItem>
+                  <SelectItem value="clienta">Elegir a mano (una o varias)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -264,21 +288,23 @@ export default function MailsSeccion() {
           )}
           {tipo === 'clienta' && (
             <div className="space-y-2 md:w-1/2">
-              <Input placeholder="Buscar por nombre o mail" value={busqueda} onChange={e => { setBusqueda(e.target.value); setClientaId('') }} />
-              {clientasBusqueda.length > 0 && !clientaId && (
-                <div className="rounded-md border divide-y">
-                  {clientasBusqueda.map(c => (
-                    <button key={c.id} type="button" className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted"
-                      onClick={() => { setClientaId(c.id); setBusqueda(`${c.nombre} ${c.apellido || ''}`.trim()) }}>
-                      {c.nombre} {c.apellido} <span className="text-muted-foreground">· {c.email}</span>
-                    </button>
+              {elegidas.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {elegidas.map(c => (
+                    <span key={c.id} className="inline-flex items-center gap-1 rounded-full bg-fuchsia-50 px-2.5 py-0.5 text-xs text-fuchsia-800">
+                      {c.nombre} {c.apellido}
+                      <button type="button" aria-label="Quitar" onClick={() => setElegidas(elegidas.filter(e => e.id !== c.id))}><X className="h-3 w-3" /></button>
+                    </span>
                   ))}
                 </div>
               )}
+              <Input placeholder="Buscar por nombre o mail y tocarla para sumarla" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+              <Resultados items={resultados} excluir={new Set(elegidas.map(e => e.id))}
+                onElegir={c => { setElegidas([...elegidas, c]); setBusqueda('') }} />
             </div>
           )}
 
-          <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
+          {tipo !== 'clienta' && <div className="space-y-2 rounded-md bg-muted/40 p-3 text-sm">
             <p className="text-xs font-medium text-muted-foreground">No mandar a…</p>
             <label className="flex flex-wrap items-center gap-2 cursor-pointer">
               <Checkbox checked={excluirRecientes} onCheckedChange={v => setExcluirRecientes(!!v)} />
@@ -290,10 +316,10 @@ export default function MailsSeccion() {
               <Checkbox checked={excluirConTurno} onCheckedChange={v => setExcluirConTurno(!!v)} />
               las que ya tienen un turno reservado
             </label>
-          </div>
+          </div>}
 
           <Button variant="outline" className="gap-2" onClick={verDestinatarias}
-            disabled={buscando || (tipo === 'servicio' && !servicioId) || (tipo === 'clienta' && !clientaId)}>
+            disabled={buscando || (tipo === 'servicio' && !servicioId) || (tipo === 'clienta' && elegidas.length === 0)}>
             {buscando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />} Ver destinatarias
           </Button>
 
@@ -307,10 +333,21 @@ export default function MailsSeccion() {
                 {omitidas.con_turno > 0 && <span className="text-muted-foreground"> · {omitidas.con_turno} ya tienen turno</span>}
               </p>
               {lista.length > 0 && (
-                <p className="text-xs text-muted-foreground line-clamp-2">
-                  {lista.slice(0, 12).map(d => `${d.nombre} ${d.apellido || ''}`.trim()).join(', ')}{lista.length > 12 ? '…' : ''}
-                </p>
+                <div className="max-h-64 overflow-y-auto rounded-md border divide-y">
+                  {lista.map(d => (
+                    <div key={d.id} className="flex items-center gap-2 px-3 py-1 text-sm">
+                      <span className="flex-1 min-w-0 truncate">{d.nombre} {d.apellido} <span className="text-muted-foreground">· {d.email}</span></span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" aria-label="Sacar de la lista"
+                        onClick={() => setLista(lista.filter(x => x.id !== d.id))}><X className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  ))}
+                </div>
               )}
+              <div className="space-y-1.5">
+                <Input placeholder="Sumar otra clienta: buscar por nombre o mail" value={busquedaAgregar} onChange={e => setBusquedaAgregar(e.target.value)} className="h-8 text-sm" />
+                <Resultados items={resultadosAgregar} excluir={new Set(lista.map(d => d.id))}
+                  onElegir={c => { setLista([...lista, c]); setBusquedaAgregar('') }} />
+              </div>
               {vistaPrevia && plantilla && (
                 <div className="rounded-md bg-muted/40 p-3 space-y-2 text-sm">
                   <p className="text-xs text-muted-foreground">Vista previa (para {ejemplo!.nombre})</p>

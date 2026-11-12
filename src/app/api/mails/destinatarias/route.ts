@@ -3,7 +3,7 @@
  * Servicios > Mails. Solo admin. No manda nada: es la vista previa.
  *
  * POST { plantilla_id?, segmento: { tipo: 'todas' | 'inactivas' | 'servicio' | 'clienta',
- *        dias?, servicio_id?, cliente_id? },
+ *        dias?, servicio_id?, cliente_ids? },
  *        excluir?: { recientes_dias?, con_turno? } }
  * → { destinatarias: [{ id, nombre, apellido, email }], omitidas: { baja, repetidas, recientes, con_turno } }
  *
@@ -71,7 +71,10 @@ export async function POST(request: NextRequest) {
   try {
     let clientas = await todas<{ id: string; nombre: string; apellido: string | null; email: string | null; mail_baja_at: string | null }>((d, h) => {
       let q = admin.from('clientes').select('id, nombre, apellido, email, mail_baja_at').not('email', 'is', null)
-      if (tipo === 'clienta') q = q.eq('id', segmento.cliente_id || '00000000-0000-0000-0000-000000000000')
+      if (tipo === 'clienta') {
+        const ids = (Array.isArray(segmento.cliente_ids) ? segmento.cliente_ids : []).filter((x: unknown) => typeof x === 'string').slice(0, 500)
+        q = q.in('id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000'])
+      }
       return q.order('nombre').range(d, h)
     })
     clientas = clientas.filter(c => EMAIL_RE.test((c.email || '').trim()))
