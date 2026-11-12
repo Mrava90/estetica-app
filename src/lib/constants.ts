@@ -13,6 +13,7 @@ import {
   KeyRound,
   FileText,
   Sparkles,
+  Mail,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -122,6 +123,7 @@ export const NAV_ITEMS: NavItem[] = [
   ] },
   { label: 'Servicios', href: '/servicios', icon: Scissors, pestanas: [
     { valor: 'promociones', label: 'Promociones', href: '/promociones', icon: Sparkles, adminOnly: true },
+    { valor: 'mails', label: 'Mails', href: '/mails', icon: Mail, adminOnly: true },
   ] },
   { label: 'Personal', href: '/personal', icon: UserCog },
   { label: 'Facturación', href: '/facturacion', icon: Receipt, adminOnly: true, pestanas: [

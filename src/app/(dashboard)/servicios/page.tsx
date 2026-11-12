@@ -5,6 +5,7 @@ import { Suspense } from 'react'
 import { SeccionConPestanas } from '@/components/layout/SeccionConPestanas'
 import ServiciosSeccion from '@/components/secciones/ServiciosSeccion'
 import PromocionesSeccion from '@/components/secciones/PromocionesSeccion'
+import MailsSeccion from '@/components/secciones/MailsSeccion'
 
 export default function Page() {
   return (
@@ -12,7 +13,7 @@ export default function Page() {
       <SeccionConPestanas
         href="/servicios"
         principal={{ valor: 'servicios', label: 'Servicios', contenido: <ServiciosSeccion /> }}
-        contenidos={{ promociones: <PromocionesSeccion /> }}
+        contenidos={{ promociones: <PromocionesSeccion />, mails: <MailsSeccion /> }}
       />
     </Suspense>
   )

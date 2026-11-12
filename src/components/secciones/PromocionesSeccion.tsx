@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import type { Promocion, Servicio, Profesional } from '@/types/database'
@@ -13,7 +14,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Sparkles, Clock, CalendarDays, Percent, Loader2, Search, ImageIcon, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, Sparkles, Clock, CalendarDays, Percent, Loader2, Search, ImageIcon, X, Mail } from 'lucide-react'
 import { descripcionDescuento, descripcionHorario } from '@/lib/promociones'
 
 const DIAS = [
@@ -124,6 +125,7 @@ function formToPayload(f: FormState) {
 }
 
 export default function PromocionesPage() {
+  const router = useRouter()
   const [promos, setPromos] = useState<Promocion[]>([])
   const [servicios, setServicios] = useState<Servicio[]>([])
   const [profesionales, setProfesionales] = useState<Profesional[]>([])
@@ -362,6 +364,10 @@ export default function PromocionesPage() {
                     <Button variant="outline" size="sm" onClick={() => openEdit(p)} className="flex-1 gap-1.5">
                       <Pencil className="h-3.5 w-3.5" />
                       Editar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => router.push(`/servicios?tab=mails&promo=${p.id}`)} className="gap-1.5">
+                      <Mail className="h-3.5 w-3.5" />
+                      Enviar por mail
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => handleDelete(p)} className="text-destructive hover:text-destructive">
                       <Trash2 className="h-4 w-4" />
