@@ -687,30 +687,27 @@ export function CalendarioResourceDayView({
                 const endMinutes = eh * 60 + em
                 const top = ((startMinutes - HORA_INICIO * 60) / 60) * HORA_HEIGHT
                 const height = Math.max(((endMinutes - startMinutes) / 60) * HORA_HEIGHT, 24)
-                const isSmall = height < 40
+                // El verde es solo fondo: el clic pasa a la grilla para cargar turnos
+                // dentro del rango habilitado. Solo la etiqueta abre editar/borrar.
                 return (
                   <div
                     key={desbloqueo.id}
-                    data-cita
-                    className="absolute left-1 right-1 rounded-md border border-dashed border-green-400 dark:border-green-600 bg-green-100/70 dark:bg-green-900/30 px-1.5 py-0.5 overflow-hidden cursor-pointer transition-colors z-[1]"
-                    style={{ top: `${top}px`, height: `${height}px`, pointerEvents: isDragging ? 'none' : 'auto' }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onDesbloqueoClick?.(desbloqueo)
-                    }}
+                    className="absolute left-0 right-0 border-y border-dashed border-green-400 dark:border-green-600 bg-green-100/50 dark:bg-green-900/20 pointer-events-none z-0"
+                    style={{ top: `${top}px`, height: `${height}px` }}
                   >
-                    {isSmall ? (
-                      <p className="text-[12px] font-semibold text-green-600 dark:text-green-400 truncate leading-snug">Habilitado</p>
-                    ) : (
-                      <>
-                        <p className="text-[10px] text-green-500 dark:text-green-400 leading-tight">
-                          {desbloqueo.hora_inicio.slice(0, 5)} - {desbloqueo.hora_fin.slice(0, 5)}
-                        </p>
-                        <p className="text-[13px] font-semibold text-green-600 dark:text-green-400 truncate leading-tight mt-0.5">
-                          {desbloqueo.motivo || 'Habilitado'}
-                        </p>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      data-cita
+                      className="absolute top-0.5 right-1 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-tight bg-green-200/90 dark:bg-green-800/80 text-green-700 dark:text-green-300 hover:bg-green-300 dark:hover:bg-green-700 max-w-[90%] truncate"
+                      style={{ pointerEvents: isDragging || !onDesbloqueoClick ? 'none' : 'auto' }}
+                      title="Editar o quitar la habilitación"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDesbloqueoClick?.(desbloqueo)
+                      }}
+                    >
+                      {desbloqueo.motivo || 'Habilitado'} {desbloqueo.hora_inicio.slice(0, 5)}-{desbloqueo.hora_fin.slice(0, 5)}
+                    </button>
                   </div>
                 )
               })}
