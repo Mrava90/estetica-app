@@ -13,6 +13,11 @@ function ExitoContent() {
   const citaId = searchParams.get('cita')
   const emailParam = searchParams.get('email')
 
+  // Turnos de diciembre 2026: se pide seña por transferencia (hora AR)
+  const mesTurno = fecha ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit' }).format(new Date(fecha)) : ''
+  const pideSena = mesTurno === '2026-12'
+  const [aliasCopiado, setAliasCopiado] = useState(false)
+
   const [enviando, setEnviando] = useState(false)
   const [linkEnviado, setLinkEnviado] = useState(false)
   const [emailNoRegistrado, setEmailNoRegistrado] = useState(false)
@@ -72,6 +77,24 @@ function ExitoContent() {
         <div className="rounded-xl border border-gray-900 bg-white p-6 text-center shadow-sm w-full max-w-sm">
           <p className="text-sm text-gray-500">Fecha del turno</p>
           <p className="text-lg font-semibold text-gray-900 mt-1">{formatFechaHora(fecha)}</p>
+        </div>
+      )}
+
+      {pideSena && (
+        <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-5 w-full max-w-sm space-y-3 text-center">
+          <p className="text-sm font-semibold text-amber-900">Para confirmar tu turno de diciembre</p>
+          <p className="text-sm text-amber-900">
+            Transferí la seña de <span className="font-bold">$15.000</span> al alias:
+          </p>
+          <button
+            type="button"
+            onClick={() => { navigator.clipboard?.writeText('ka.ballester').then(() => setAliasCopiado(true)).catch(() => {}) }}
+            className="mx-auto block rounded-lg border border-amber-400 bg-white px-4 py-2 font-mono text-lg font-bold text-gray-900"
+          >
+            ka.ballester
+          </button>
+          <p className="text-xs text-amber-800">{aliasCopiado ? '¡Alias copiado!' : 'Tocá el alias para copiarlo'}</p>
+          <p className="text-xs text-amber-800">Después mandanos el comprobante por WhatsApp. La seña se descuenta del total el día del turno.</p>
         </div>
       )}
 
