@@ -10,7 +10,13 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { MessageCircle, Pencil, X, Banknote, Smartphone, Building2, Clock, Scissors } from 'lucide-react'
+import { MessageCircle, Pencil, X, Banknote, Smartphone, Building2, Clock, Scissors, BadgeDollarSign } from 'lucide-react'
+
+/** Seña fija (diciembre 2026). */
+const SENA_MONTO = 15000
+const MEDIOS_SENA: Record<string, string> = { mercadopago: 'Mercado Pago', transferencia: 'Transferencia', efectivo: 'Efectivo' }
+
+type Sena = { sena_monto: number | null; sena_medio: string | null; sena_fecha: string | null }
 
 interface Props {
   open: boolean
@@ -22,9 +28,43 @@ interface Props {
 
 export function CitaDetailPanel({ open, cita, onClose, onEdit, readOnly }: Props) {
   const [loading, setLoading] = useState(false)
+  // Seña: lo recien guardado pisa lo que vino en la cita (hasta que se recargue)
+  const [senaLocal, setSenaLocal] = useState<{ id: string; sena: Sena } | null>(null)
+  const [cargandoSena, setCargandoSena] = useState(false)
+  const [medioSena, setMedioSena] = useState('mercadopago')
+  const [montoSena, setMontoSena] = useState(String(SENA_MONTO))
   const supabase = createClient()
 
   if (!cita) return null
+
+  const sena: Sena = senaLocal?.id === cita.id ? senaLocal.sena
+    : { sena_monto: cita.sena_monto ?? null, sena_medio: cita.sena_medio ?? null, sena_fecha: cita.sena_fecha ?? null }
+  const precioTurno = cita.precio_cobrado ?? cita.servicios?.precio_efectivo ?? null
+  const saldo = sena.sena_monto && precioTurno != null ? Math.max(0, precioTurno - sena.sena_monto) : null
+  const fechaSena = sena.sena_fecha ? sena.sena_fecha.split('-').reverse().slice(0, 2).join('/') : ''
+
+  async function guardarSena(nueva: Sena) {
+    setLoading(true)
+    const { error } = await supabase.from('citas').update({ ...nueva, updated_at: new Date().toISOString() }).eq('id', cita!.id)
+    setLoading(false)
+    if (error) { toast.error('No se pudo guardar la seña: ' + error.message); return }
+    setSenaLocal({ id: cita!.id, sena: nueva })
+    setCargandoSena(false)
+    toast.success(nueva.sena_monto ? 'Seña registrada' : 'Seña quitada')
+  }
+
+  function registrarSena() {
+    const hoy = new Date()
+    const ymd = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    const monto = Number(montoSena.replace(/\D/g, ''))
+    if (!monto) { toast.error('Poné el monto de la seña'); return }
+    guardarSena({ sena_monto: monto, sena_medio: medioSena, sena_fecha: ymd })
+  }
+
+  function quitarSena() {
+    if (!confirm('¿Quitar la seña de este turno?')) return
+    guardarSena({ sena_monto: null, sena_medio: null, sena_fecha: null })
+  }
 
   const inicio = new Date(cita.fecha_inicio)
   const fin = new Date(cita.fecha_fin)
@@ -46,7 +86,8 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit, readOnly }: Props
   }
 
   async function handleAnular() {
-    if (!confirm('¿Anular esta cita?')) return
+    const avisoSena = sena.sena_monto ? `\n\n⚠️ Este turno tiene una SEÑA PAGA de ${formatPrecio(sena.sena_monto)}. Si la clienta reprograma, registrásela en el turno nuevo.` : ''
+    if (!confirm(`¿Anular esta cita?${avisoSena}`)) return
     setLoading(true)
     const { error } = await supabase
       .from('citas')
@@ -62,7 +103,8 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit, readOnly }: Props
   }
 
   async function handleEliminar() {
-    if (!confirm('¿Eliminar esta cita permanentemente? Esta acción no se puede deshacer.')) return
+    const avisoSena = sena.sena_monto ? `\n\n⚠️ Este turno tiene una SEÑA PAGA de ${formatPrecio(sena.sena_monto)}.` : ''
+    if (!confirm(`¿Eliminar esta cita permanentemente? Esta acción no se puede deshacer.${avisoSena}`)) return
     setLoading(true)
     const { error } = await supabase.from('citas').delete().eq('id', cita!.id)
     setLoading(false)
@@ -154,10 +196,62 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit, readOnly }: Props
             </div>
           )}
 
+          {/* Seña */}
+          {sena.sena_monto ? (
+            <div className="rounded-lg border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
+                  <BadgeDollarSign className="h-4 w-4" /> Seña paga {formatPrecio(sena.sena_monto)}
+                </span>
+                <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                  {MEDIOS_SENA[sena.sena_medio || ''] || sena.sena_medio}{fechaSena ? ` · ${fechaSena}` : ''}
+                </span>
+              </div>
+              {saldo != null && (
+                <p className="text-sm text-amber-900 dark:text-amber-200">
+                  Cobrar en el turno: <span className="font-bold">{formatPrecio(saldo)}</span>
+                  <span className="text-xs text-amber-700 dark:text-amber-400"> ({formatPrecio(precioTurno!)} − seña)</span>
+                </p>
+              )}
+              {!readOnly && (
+                <button type="button" onClick={quitarSena} disabled={loading} className="text-[11px] text-amber-700 hover:text-destructive hover:underline">
+                  Quitar seña
+                </button>
+              )}
+            </div>
+          ) : !readOnly && cita.status !== 'cancelada' && (
+            cargandoSena ? (
+              <div className="rounded-lg border border-dashed px-3 py-2.5 space-y-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium">Seña paga $</p>
+                  <input inputMode="numeric" value={montoSena} onChange={e => setMontoSena(e.target.value)}
+                    className="h-7 w-24 rounded-md border bg-background px-2 text-sm" aria-label="Monto de la seña" />
+                </div>
+                <p className="text-xs text-muted-foreground">¿Cómo la pagó?</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(MEDIOS_SENA).map(([v, l]) => (
+                    <button key={v} type="button" onClick={() => setMedioSena(v)}
+                      className={`rounded-full border px-2.5 py-0.5 text-xs ${medioSena === v ? 'border-amber-500 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200' : 'text-muted-foreground'}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" className="flex-1" onClick={registrarSena} disabled={loading}>Registrar seña</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setCargandoSena(false)}>Cancelar</Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => setCargandoSena(true)}>
+                <BadgeDollarSign className="h-4 w-4" /> ¿Pagó seña? Registrarla
+              </Button>
+            )
+          )}
+
           {/* Monto */}
           {cita.precio_cobrado != null && (
             <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5">
-              <span className="text-sm text-muted-foreground">Monto cobrado</span>
+              <span className="text-sm text-muted-foreground">{sena.sena_monto ? 'Precio del turno' : 'Monto cobrado'}</span>
               <span className="text-base font-bold">{formatPrecio(cita.precio_cobrado)}</span>
             </div>
           )}

@@ -750,12 +750,13 @@ export function CalendarioResourceDayView({
                   >
                     {isSmall ? (
                       <p className="text-[11px] font-medium truncate leading-snug">
-                        {formatTime(start)} {cita.clientes ? (cita.clientes.apellido ? `${cita.clientes.nombre} ${cita.clientes.apellido}` : cita.clientes.nombre) : 'Sin cliente'} - {cita.servicios?.nombre || ''}
+                        {cita.sena_monto ? '💰 ' : ''}{formatTime(start)} {cita.clientes ? (cita.clientes.apellido ? `${cita.clientes.nombre} ${cita.clientes.apellido}` : cita.clientes.nombre) : 'Sin cliente'} - {cita.servicios?.nombre || ''}
                       </p>
                     ) : (
                       <>
                         <p className="text-[10px] text-muted-foreground leading-tight">
                           {formatTime(start)} - {formatTime(end)}
+                          {cita.sena_monto ? <span className="ml-1 rounded bg-amber-200/80 dark:bg-amber-800/60 px-1 font-semibold text-amber-900 dark:text-amber-200">💰 Seña</span> : null}
                         </p>
                         <p className="text-xs font-medium truncate leading-tight mt-0.5">
                           {cita.clientes ? (cita.clientes.apellido ? `${cita.clientes.nombre} ${cita.clientes.apellido}` : cita.clientes.nombre) : 'Sin cliente'}

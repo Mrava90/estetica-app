@@ -78,6 +78,9 @@ export interface Cita {
   promocion_aplicada_id: string | null      // referencia a promociones.id
   metodo_pago: string
   origen: string
+  sena_monto?: number | null                // seña paga por adelantado (00051)
+  sena_medio?: string | null
+  sena_fecha?: string | null                // YYYY-MM-DD
   created_at: string
   updated_at: string
 }
