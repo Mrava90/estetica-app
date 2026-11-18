@@ -50,6 +50,7 @@ export interface Cliente {
   dni: string | null
   email: string | null
   notas: string | null
+  reserva_web_bloqueada_at?: string | null
   created_at: string
   updated_at: string
 }

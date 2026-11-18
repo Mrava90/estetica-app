@@ -128,6 +128,24 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient()
 
+  // Clientas bloqueadas para la web (ficha de la clienta). Se busca por
+  // telefono, mail o DNI para que no entre con otro numero. Si la columna
+  // todavia no existe (migracion 00050 sin correr), la consulta falla y se sigue.
+  {
+    const ors = [`telefono.eq.${telFinal}`]
+    const mail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+    const doc = typeof dni === 'string' ? dni.replace(/\D/g, '') : ''
+    if (/^[^\s@,()]+@[^\s@,()]+$/.test(mail)) ors.push(`email.ilike.${mail}`)
+    if (doc.length >= 7) ors.push(`dni.eq.${doc}`)
+    const { data: bloqueada } = await admin.from('clientes').select('id')
+      .not('reserva_web_bloqueada_at', 'is', null).or(ors.join(',')).limit(1)
+    if (bloqueada && bloqueada.length > 0) {
+      return NextResponse.json({
+        error: 'No pudimos tomar tu reserva online. Escribinos por WhatsApp y coordinamos tu turno.',
+      }, { status: 403 })
+    }
+  }
+
   // Validar servicio/profesional activos + duracion real del servicio (para calcular fechaFin)
   // + validar que el profesional realiza ese servicio (hallazgo #6)
   // + traer dias_anticipacion_reserva de configuracion (para respetar la ventana del negocio).

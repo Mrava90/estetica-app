@@ -113,6 +113,17 @@ export default function ClienteDetailPage() {
     }
   }
 
+  async function toggleBloqueoWeb() {
+    if (!cliente) return
+    const bloquear = !cliente.reserva_web_bloqueada_at
+    if (bloquear && !window.confirm(`¿Bloquear a ${cliente.nombre} para sacar turnos por la web?\n\nUstedes le pueden seguir cargando turnos a mano.`)) return
+    const valor = bloquear ? new Date().toISOString() : null
+    const { error } = await supabase.from('clientes').update({ reserva_web_bloqueada_at: valor }).eq('id', cliente.id)
+    if (error) { toast.error('No se pudo guardar: ' + error.message); return }
+    setCliente({ ...cliente, reserva_web_bloqueada_at: valor })
+    toast.success(bloquear ? 'Bloqueada para reservar por la web' : 'Puede volver a reservar por la web')
+  }
+
   if (!cliente) return <div className="flex items-center justify-center py-12 text-muted-foreground">Cargando...</div>
 
   return (
@@ -164,6 +175,20 @@ export default function ClienteDetailPage() {
                 {loading ? 'Guardando...' : 'Guardar cambios'}
               </Button>
             </form>
+            <Separator className="my-4" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Reservas por la web</p>
+                <p className={`text-xs ${cliente.reserva_web_bloqueada_at ? 'text-destructive' : 'text-muted-foreground'}`}>
+                  {cliente.reserva_web_bloqueada_at
+                    ? `Bloqueada desde el ${new Date(cliente.reserva_web_bloqueada_at).toLocaleDateString('es-AR')}`
+                    : 'Puede sacar turno sola'}
+                </p>
+              </div>
+              <Button type="button" size="sm" variant={cliente.reserva_web_bloqueada_at ? 'outline' : 'destructive'} onClick={toggleBloqueoWeb}>
+                {cliente.reserva_web_bloqueada_at ? 'Desbloquear' : 'Bloquear'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
