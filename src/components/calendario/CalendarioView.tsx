@@ -12,6 +12,7 @@ import { CitaDetailPanel } from './CitaDetailPanel'
 import { BloqueoDialog } from './BloqueoDialog'
 import { RecordatoriosDialog } from './RecordatoriosDialog'
 import { ReenganchesDialog } from './ReenganchesDialog'
+import { consultaSenasPendientes } from '@/lib/senas'
 import { FiltrosProfesional } from './FiltrosProfesional'
 import { ImportarTurnosDialog } from './ImportarTurnosDialog'
 import { Button } from '@/components/ui/button'
@@ -48,6 +49,7 @@ export function CalendarioView() {
   const [recordatoriosPendientes, setRecordatoriosPendientes] = useState(0)
   const [reenganchesOpen, setReenganchesOpen] = useState(false)
   const [reenganchesPendientes, setReenganchesPendientes] = useState(0)
+  const [senasPendientes, setSenasPendientes] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
@@ -108,6 +110,10 @@ export function CalendarioView() {
       if (!res.ok) return
       const data = await res.json()
       setReenganchesPendientes((data.items || []).length)
+    } catch {}
+    try {
+      const { data } = await consultaSenasPendientes(createClient())
+      setSenasPendientes(data?.length || 0)
     } catch {}
   }, [])
 
@@ -380,6 +386,11 @@ export function CalendarioView() {
                   {reenganchesPendientes}
                 </span>
               )}
+              {senasPendientes > 0 && (
+                <span title="Señas pendientes" className="absolute -left-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+                  💰{senasPendientes}
+                </span>
+              )}
             </Button>
           )}
           {!isReadOnly && (
@@ -466,6 +477,11 @@ export function CalendarioView() {
                 {reenganchesPendientes > 0 && (
                   <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-fuchsia-500 px-1 text-[10px] font-bold text-white">
                     {reenganchesPendientes}
+                  </span>
+                )}
+                {senasPendientes > 0 && (
+                  <span title="Señas pendientes" className="absolute -left-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+                    💰{senasPendientes}
                   </span>
                 )}
               </Button>

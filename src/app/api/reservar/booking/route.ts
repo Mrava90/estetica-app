@@ -381,7 +381,7 @@ export async function POST(request: NextRequest) {
       if (citaOriginal && citaOriginal.cliente_id === clienteId && citaOriginal.status !== 'cancelada') {
         // La seña (si tenia) pasa al turno nuevo
         const { data: sena } = await admin.from('citas').select('sena_monto, sena_medio, sena_fecha').eq('id', reprogramarId).maybeSingle()
-        if (sena?.sena_monto) {
+        if (sena?.sena_monto != null) {
           await admin.from('citas').update({ sena_monto: sena.sena_monto, sena_medio: sena.sena_medio, sena_fecha: sena.sena_fecha }).eq('id', citaData.id)
           await admin.from('citas').update({ status: 'cancelada', sena_monto: null, sena_medio: null, sena_fecha: null }).eq('id', reprogramarId)
         } else {

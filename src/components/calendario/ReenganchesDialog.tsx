@@ -6,7 +6,9 @@ import { es } from 'date-fns/locale'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { MessageCircle, Loader2, Phone, Sparkles, X, RotateCcw, CalendarClock, BellRing } from 'lucide-react'
+import { MessageCircle, Loader2, Phone, Sparkles, X, RotateCcw, CalendarClock, BellRing, BadgeDollarSign, Check } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { consultaSenasPendientes, SENA_MONTO, SENA_ALIAS, type SenaPendiente } from '@/lib/senas'
 
 interface ReengancheItem {
   cita_id: string
@@ -27,12 +29,13 @@ interface Props {
   onClose: () => void
 }
 
-type Tab = 'pendientes' | 'programadas' | 'enviados'
+type Tab = 'pendientes' | 'programadas' | 'enviados' | 'senas'
 
 const TABS: { valor: Tab; label: string }[] = [
   { valor: 'pendientes', label: 'Pendientes' },
   { valor: 'programadas', label: 'Programadas' },
   { valor: 'enviados', label: 'Enviados' },
+  { valor: 'senas', label: '💰 Señas' },
 ]
 
 /** Atajos para posponer, en dias desde hoy. */
@@ -56,11 +59,18 @@ export function ReenganchesDialog({ open, onClose }: Props) {
   const [posponiendo, setPosponiendo] = useState<string | null>(null)
   const [fechaPos, setFechaPos] = useState('')
   const [notaPos, setNotaPos] = useState('')
+  const [senas, setSenas] = useState<SenaPendiente[]>([])
 
   const fetchData = useCallback(async (t: Tab = tab) => {
     setLoading(true)
     setPosponiendo(null)
     try {
+      if (t === 'senas') {
+        const { data, error } = await consultaSenasPendientes(createClient())
+        if (error) toast.error(error.message)
+        setSenas((data || []) as unknown as SenaPendiente[])
+        return
+      }
       const res = await fetch(`/api/reenganches?tipo=${t}`)
       const data = await res.json()
       if (res.ok) {
@@ -159,6 +169,38 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     }
   }
 
+  // ── Señas ─────────────────────────────────────────────────
+
+  function whatsappSena(s: SenaPendiente) {
+    const tel = s.clientes?.telefono
+    if (!tel) { toast.error('La clienta no tiene teléfono'); return }
+    let num = tel.replace(/[\s\-().+]/g, '')
+    if (num.startsWith('0')) num = num.slice(1)
+    if (!num.startsWith('54')) num = `54${num}`
+    const f = new Date(s.fecha_inicio)
+    const cuando = format(f, "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })
+    const msg = `Hola ${s.clientes?.nombre || ''}! Recibimos tu reserva para el ${cuando}${s.servicios ? ` (${s.servicios.nombre})` : ''}. Para confirmarla te pedimos una seña de ${SENA_MONTO.toLocaleString('es-AR')} al alias ${SENA_ALIAS}. Cuando la transfieras mandanos el comprobante por acá. ¡Gracias!`
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  async function resolverSena(s: SenaPendiente, cobrada: boolean) {
+    const nombre = s.clientes?.nombre || 'la clienta'
+    if (!cobrada && !confirm(`¿No cobrarle seña a ${nombre}? Sale de esta lista.`)) return
+    setEnviando(s.id)
+    try {
+      const d = new Date()
+      const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const { error } = await createClient().from('citas').update(cobrada
+        ? { sena_monto: SENA_MONTO, sena_medio: 'mercadopago', sena_fecha: hoy, updated_at: new Date().toISOString() }
+        : { sena_monto: 0, sena_medio: 'no_cobra', sena_fecha: null, updated_at: new Date().toISOString() }).eq('id', s.id)
+      if (error) { toast.error('No se pudo guardar: ' + error.message); return }
+      setSenas(prev => prev.filter(x => x.id !== s.id))
+      toast.success(cobrada ? `Seña de ${nombre} registrada` : 'Listo, sin seña')
+    } finally {
+      setEnviando(null)
+    }
+  }
+
   // ── Posponer ──────────────────────────────────────────────
 
   function abrirPosponer(item: ReengancheItem) {
@@ -225,12 +267,14 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     pendientes: 'Clientes atendidos hace 21-28 días que aún no volvieron, y los recordatorios pospuestos que vencen hoy.',
     programadas: 'Recordatorios pospuestos. Cada uno vuelve a Pendientes el día indicado, salvo que la clienta saque turno antes.',
     enviados: 'Clientes que ya fueron marcados como contactados en los últimos 60 días. Si te pidió que la contactes más adelante, usá Posponer.',
+    senas: `Turnos de diciembre que las clientas sacaron solas por la web y todavía no tienen la seña de ${SENA_MONTO.toLocaleString('es-AR')}. Escribile, y cuando llegue la transferencia tocá "Recibida".`,
   }[tab]
 
   const vacio = {
     pendientes: ['Ningún cliente pendiente de reenganche hoy.', 'Aparecen clientes que se atendieron hace 21-28 días y no volvieron ni tienen turno próximo.'],
     programadas: ['No hay recordatorios programados.', 'Usá "Posponer" en Pendientes o Enviados cuando una clienta te pida que la contactes más adelante.'],
     enviados: ['Aún no hay ningún cliente marcado como enviado.', 'Los envíos de los últimos 60 días aparecen acá.'],
+    senas: ['No hay señas pendientes.', 'Acá aparecen los turnos de diciembre sacados por la web sin seña registrada.'],
   }[tab]
 
   return (
@@ -266,6 +310,52 @@ export function ReenganchesDialog({ open, onClose }: Props) {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : tab === 'senas' ? (
+            senas.length === 0 ? (
+              <div className="text-center py-12 space-y-2">
+                <BadgeDollarSign className="h-8 w-8 text-muted-foreground/40 mx-auto" />
+                <p className="text-sm text-muted-foreground">{vacio[0]}</p>
+                <p className="text-[11px] text-muted-foreground/70">{vacio[1]}</p>
+              </div>
+            ) : (
+              <div className="divide-y">
+                {senas.map(s => {
+                  const nombre = s.clientes ? `${s.clientes.nombre}${s.clientes.apellido ? ' ' + s.clientes.apellido : ''}` : 'Sin cliente'
+                  const ocupado = enviando === s.id
+                  return (
+                    <div key={s.id} className="py-3 px-2 flex items-center gap-3 rounded hover:bg-muted/30">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <p className="font-medium text-sm truncate">{nombre}</p>
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                            Turno {format(new Date(s.fecha_inicio), "EEE d/MM HH:mm", { locale: es })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                          {s.servicios && <span className="truncate">{s.servicios.nombre}</span>}
+                          {s.profesionales && <span className="text-muted-foreground/70">con {s.profesionales.nombre}</span>}
+                          {s.clientes?.telefono && <span className="flex items-center gap-1 text-muted-foreground/70"><Phone className="h-3 w-3" />{s.clientes.telefono}</span>}
+                          <span className="text-muted-foreground/70">reservó el {format(new Date(s.created_at), 'd/MM')}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-muted-foreground" onClick={() => resolverSena(s, false)} disabled={ocupado} title="Clienta habitual: no se le cobra seña">
+                          No cobrar
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 gap-1.5 border-amber-400 text-amber-800 dark:text-amber-300" onClick={() => resolverSena(s, true)} disabled={ocupado} title={`Registrar seña de ${SENA_MONTO.toLocaleString('es-AR')}`}>
+                          {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                          Recibida
+                        </Button>
+                        <Button size="sm" className="h-8 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => whatsappSena(s)} disabled={!s.clientes?.telefono}>
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          WhatsApp
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
           ) : items.length === 0 ? (
             <div className="text-center py-12 space-y-2">
               <Sparkles className="h-8 w-8 text-muted-foreground/40 mx-auto" />
@@ -382,7 +472,7 @@ export function ReenganchesDialog({ open, onClose }: Props) {
           )}
         </div>
 
-        {!loading && items.length > 0 && (
+        {!loading && tab !== 'senas' && items.length > 0 && (
           <div className="shrink-0 pt-2 border-t text-[11px] text-muted-foreground">
             💡 Al enviar el WhatsApp, se marca como enviado y no vuelve a aparecer.
             Si la clienta te pide que la contactes más adelante, usá <strong>Posponer</strong>: vuelve a Pendientes ese día.
