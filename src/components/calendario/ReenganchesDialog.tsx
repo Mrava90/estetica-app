@@ -65,11 +65,12 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     setLoading(true)
     setPosponiendo(null)
     try {
-      if (t === 'senas') {
+      // Las señas se ven en su pestaña y tambien arriba de Pendientes
+      if (t === 'senas' || t === 'pendientes') {
         const { data, error } = await consultaSenasPendientes(createClient())
         if (error) toast.error(error.message)
         setSenas((data || []) as unknown as SenaPendiente[])
-        return
+        if (t === 'senas') return
       }
       const res = await fetch(`/api/reenganches?tipo=${t}`)
       const data = await res.json()
@@ -277,6 +278,46 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     senas: ['No hay señas pendientes.', 'Acá aparecen los turnos de diciembre sacados por la web sin seña registrada.'],
   }[tab]
 
+  const listaSenas = (
+              <div className="divide-y">
+                {senas.map(s => {
+                  const nombre = s.clientes ? `${s.clientes.nombre}${s.clientes.apellido ? ' ' + s.clientes.apellido : ''}` : 'Sin cliente'
+                  const ocupado = enviando === s.id
+                  return (
+                    <div key={s.id} className="py-3 px-2 flex items-center gap-3 rounded hover:bg-muted/30">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <p className="font-medium text-sm truncate">{nombre}</p>
+                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+                            Turno {format(new Date(s.fecha_inicio), "EEE d/MM HH:mm", { locale: es })}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                          {s.servicios && <span className="truncate">{s.servicios.nombre}</span>}
+                          {s.profesionales && <span className="text-muted-foreground/70">con {s.profesionales.nombre}</span>}
+                          {s.clientes?.telefono && <span className="flex items-center gap-1 text-muted-foreground/70"><Phone className="h-3 w-3" />{s.clientes.telefono}</span>}
+                          <span className="text-muted-foreground/70">reservó el {format(new Date(s.created_at), 'd/MM')}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-muted-foreground" onClick={() => resolverSena(s, false)} disabled={ocupado} title="Clienta habitual: no se le cobra seña">
+                          No cobrar
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 gap-1.5 border-amber-400 text-amber-800 dark:text-amber-300" onClick={() => resolverSena(s, true)} disabled={ocupado} title={`Registrar seña de ${SENA_MONTO.toLocaleString('es-AR')}`}>
+                          {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                          Recibida
+                        </Button>
+                        <Button size="sm" className="h-8 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => whatsappSena(s)} disabled={!s.clientes?.telefono}>
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          WhatsApp
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+  )
+
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="flex max-h-[90vh] w-full max-w-3xl flex-col">
@@ -318,45 +359,20 @@ export function ReenganchesDialog({ open, onClose }: Props) {
                 <p className="text-[11px] text-muted-foreground/70">{vacio[1]}</p>
               </div>
             ) : (
-              <div className="divide-y">
-                {senas.map(s => {
-                  const nombre = s.clientes ? `${s.clientes.nombre}${s.clientes.apellido ? ' ' + s.clientes.apellido : ''}` : 'Sin cliente'
-                  const ocupado = enviando === s.id
-                  return (
-                    <div key={s.id} className="py-3 px-2 flex items-center gap-3 rounded hover:bg-muted/30">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <p className="font-medium text-sm truncate">{nombre}</p>
-                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
-                            Turno {format(new Date(s.fecha_inicio), "EEE d/MM HH:mm", { locale: es })}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
-                          {s.servicios && <span className="truncate">{s.servicios.nombre}</span>}
-                          {s.profesionales && <span className="text-muted-foreground/70">con {s.profesionales.nombre}</span>}
-                          {s.clientes?.telefono && <span className="flex items-center gap-1 text-muted-foreground/70"><Phone className="h-3 w-3" />{s.clientes.telefono}</span>}
-                          <span className="text-muted-foreground/70">reservó el {format(new Date(s.created_at), 'd/MM')}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button size="sm" variant="ghost" className="h-8 px-2 text-xs text-muted-foreground" onClick={() => resolverSena(s, false)} disabled={ocupado} title="Clienta habitual: no se le cobra seña">
-                          No cobrar
-                        </Button>
-                        <Button size="sm" variant="outline" className="h-8 gap-1.5 border-amber-400 text-amber-800 dark:text-amber-300" onClick={() => resolverSena(s, true)} disabled={ocupado} title={`Registrar seña de ${SENA_MONTO.toLocaleString('es-AR')}`}>
-                          {ocupado ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                          Recibida
-                        </Button>
-                        <Button size="sm" className="h-8 gap-1.5 bg-green-600 hover:bg-green-700" onClick={() => whatsappSena(s)} disabled={!s.clientes?.telefono}>
-                          <MessageCircle className="h-3.5 w-3.5" />
-                          WhatsApp
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              listaSenas
             )
-          ) : items.length === 0 ? (
+          ) : (
+            <>
+              {tab === 'pendientes' && senas.length > 0 && (
+                <div className="mb-3 rounded-lg border-2 border-amber-300 bg-amber-50/60 dark:bg-amber-950/20 px-2 pt-2">
+                  <p className="flex items-center gap-1.5 px-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
+                    <BadgeDollarSign className="h-4 w-4" /> Pedir seña ({senas.length})
+                    <span className="font-normal text-xs text-amber-700/80 dark:text-amber-400/80">· turnos de diciembre sacados por la web</span>
+                  </p>
+                  {listaSenas}
+                </div>
+              )}
+          {items.length === 0 ? (
             <div className="text-center py-12 space-y-2">
               <Sparkles className="h-8 w-8 text-muted-foreground/40 mx-auto" />
               <p className="text-sm text-muted-foreground">{vacio[0]}</p>
@@ -469,6 +485,8 @@ export function ReenganchesDialog({ open, onClose }: Props) {
                 )
               })}
             </div>
+          )}
+            </>
           )}
         </div>
 
