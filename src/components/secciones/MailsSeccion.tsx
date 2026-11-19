@@ -356,6 +356,7 @@ export default function MailsSeccion() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={plantilla.promociones.imagen_url} alt="" className="max-h-64 rounded-md" />
                   )}
+                  {plantilla.promociones?.imagen_url && <span className="inline-block rounded-md bg-fuchsia-700 px-4 py-1.5 text-xs font-semibold text-white">Reservar turno</span>}
                   <p className="whitespace-pre-wrap text-muted-foreground">{vistaPrevia.cuerpo}</p>
                   {plantilla.promociones?.imagen_url && <span className="inline-block rounded-md bg-fuchsia-700 px-4 py-1.5 text-xs font-semibold text-white">Reservar turno</span>}
                 </div>

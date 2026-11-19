@@ -84,6 +84,7 @@ export function armarMail(asunto: string, cuerpo: string, c: Clienta, urlBaja: s
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
       <h2 style="color:#a21caf;margin:0 0 16px;">Ka Wirth Villa Ballester</h2>
       ${imagen}
+      ${boton ? boton.replace('margin:20px 0;', 'margin:0 0 22px;text-align:center;') : ''}
       ${parrafos}
       ${boton}
       <p style="color:#9ca3af;font-size:12px;margin-top:28px;border-top:1px solid #f3e8ff;padding-top:12px;">
