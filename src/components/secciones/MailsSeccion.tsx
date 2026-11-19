@@ -31,7 +31,10 @@ interface Plantilla {
   promociones: { nombre: string; imagen_url: string | null } | null
 }
 interface Destinataria { id: string; nombre: string; apellido: string | null; email: string }
-interface Grupo { dia: string; plantilla: string; enviados: number; fallidos: number }
+interface Grupo {
+  dia: string; plantilla: string; enviados: number; fallidos: number
+  reservaron: number; web: number; local: number; dias_medidos: number
+}
 
 const LOTE = 15 // igual que LOTE en src/lib/mails.ts
 const SIN_PROMO = 'ninguna'
@@ -185,21 +188,25 @@ export default function MailsSeccion() {
   async function enviar() {
     if (!plantilla || !lista?.length) return
     if (!confirm(`¿Mandar "${plantilla.asunto}" a ${lista.length} clienta${lista.length === 1 ? '' : 's'}?`)) return
-    let enviados = 0, omit = 0, errores = 0, tope = false
+    let enviados = 0, omit = 0, errores = 0, tope = false, frenado = false
     setProgreso({ hechos: 0, total: lista.length })
-    for (let i = 0; i < lista.length && !tope; i += LOTE) {
+    for (let i = 0; i < lista.length && !tope && !frenado; i += LOTE) {
+      // Pausa entre lotes para no apurar a Gmail
+      if (i > 0) await new Promise(r => setTimeout(r, 4000))
       const ids = lista.slice(i, i + LOTE).map(d => d.id)
       const r = await fetch('/api/mails/enviar', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plantilla_id: plantilla.id, cliente_ids: ids }),
       })
       const j = await r.json()
       if (!r.ok) { toast.error(j.error || 'Falló el envío'); break }
-      enviados += j.enviados; omit += j.omitidos.length; errores += j.errores.length; tope = j.topeAlcanzado
+      enviados += j.enviados; errores += j.errores.length; tope = j.topeAlcanzado; frenado = !!j.frenado
+      omit += j.omitidos.filter((o: { motivo: string }) => o.motivo !== 'Gmail frenó el envío').length
       setProgreso({ hechos: Math.min(i + LOTE, lista.length), total: lista.length })
     }
     setProgreso(null); setLista(null)
     toast.success(`Enviados: ${enviados}` + (omit ? ` · omitidos: ${omit}` : '') + (errores ? ` · con error: ${errores}` : ''))
     if (tope) toast.warning('Se llegó al tope diario de Gmail: el resto, mañana.')
+    if (frenado) toast.error('Gmail frenó el envío por un rato. Las que faltaron NO recibieron nada: probá de nuevo en 1 hora (no se le repite a las que ya lo recibieron).', { duration: 15000 })
     cargar()
   }
 
@@ -373,15 +380,29 @@ export default function MailsSeccion() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Enviados</CardTitle>
-          <CardDescription>{bajas} clienta{bajas === 1 ? '' : 's'} se dieron de baja de los mails.</CardDescription>
+          <CardDescription>
+            {bajas} clienta{bajas === 1 ? '' : 's'} se dieron de baja de los mails.
+            {' '}&quot;Reservaron&quot; = clientas que recibieron el mail y sacaron turno en los 7 días siguientes (web o cargado en el local).
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {grupos.length === 0 ? <p className="text-sm text-muted-foreground">Todavía no se mandó ninguno.</p> : (
             <div className="divide-y text-sm">
               {grupos.map(g => (
-                <div key={g.dia + g.plantilla} className="flex justify-between py-1.5">
-                  <span>{g.dia.split('-').reverse().join('/')} · {g.plantilla}</span>
-                  <span className="text-muted-foreground">{g.enviados} enviados{g.fallidos ? ` · ${g.fallidos} con error` : ''}</span>
+                <div key={g.dia + g.plantilla} className="py-1.5">
+                  <div className="flex justify-between gap-2">
+                    <span>{g.dia.split('-').reverse().join('/')} · {g.plantilla}</span>
+                    <span className="text-muted-foreground shrink-0">{g.enviados} enviados{g.fallidos ? ` · ${g.fallidos} con error` : ''}</span>
+                  </div>
+                  {g.enviados > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-fuchsia-700">
+                        {g.reservaron} reservaron ({Math.round(g.reservaron * 100 / g.enviados)}%)
+                      </span>
+                      {g.reservaron > 0 && ` · ${g.web} por la web, ${g.local} en el local`}
+                      {g.dias_medidos < 7 && ` · van ${g.dias_medidos === 0 ? 'menos de 1 día' : `${g.dias_medidos} de 7 días`}`}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

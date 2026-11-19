@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isAdminUser } from '@/lib/constants'
-import { DIAS_SIN_REPETIR, LOTE, TOPE_DIARIO, armarMail, firmarBaja, transporter } from '@/lib/mails'
+import { DIAS_SIN_REPETIR, LOTE, TOPE_DIARIO, armarMail, firmarBaja, transporterLote, esFrenoGmail } from '@/lib/mails'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -46,9 +46,13 @@ export async function POST(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://turnosballester.vercel.app'
 
   let enviados = 0
+  let frenado: string | null = null
+  const transporter = transporterLote()
   const omitidos: { id: string; motivo: string }[] = []
   const errores: { id: string; error: string }[] = []
   for (const id of cliente_ids as string[]) {
+    // Si Gmail freno (login/limite), no se sigue: esas clientas quedan para reintentar
+    if (frenado) { omitidos.push({ id, motivo: 'Gmail frenó el envío' }); continue }
     const c = (clientas || []).find(x => x.id === id)
     const email = (c?.email || '').trim()
     if (!c || !EMAIL_RE.test(email)) { omitidos.push({ id, motivo: 'sin email válido' }); continue }
@@ -72,9 +76,11 @@ export async function POST(request: NextRequest) {
       await admin.from('mail_envios').insert({ plantilla_id, asunto: m.asunto, cliente_id: id, email, ok: true, enviado_por: user.id })
     } catch (e) {
       const msg = (e as Error).message.slice(0, 300)
+      if (esFrenoGmail(msg)) { frenado = msg; omitidos.push({ id, motivo: 'Gmail frenó el envío' }); continue }
       errores.push({ id, error: msg })
       await admin.from('mail_envios').insert({ plantilla_id, asunto: m.asunto, cliente_id: id, email, ok: false, error: msg, enviado_por: user.id })
     }
   }
-  return NextResponse.json({ enviados, omitidos, errores, topeAlcanzado: restantes <= 0 })
+  transporter.close()
+  return NextResponse.json({ enviados, omitidos, errores, topeAlcanzado: restantes <= 0, frenado })
 }

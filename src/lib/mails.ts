@@ -24,6 +24,27 @@ export const transporter = nodemailer.createTransport({
   auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
 })
 
+/**
+ * Conexion para un lote de envios: UN solo login a Gmail para todo el lote.
+ * Sin pool, nodemailer abre una conexion (y un login) por mail, y Gmail corta
+ * con "454 Too many login attempts" (paso el 19/11/2026: 200 mails fallidos).
+ * Cerrar con .close() al terminar.
+ */
+export function transporterLote() {
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    pool: true,
+    maxConnections: 1,
+    maxMessages: 100,
+    auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_PASS },
+  })
+}
+
+/** Error de login/limite de Gmail: no tiene sentido seguir probando. */
+export const esFrenoGmail = (msg: string) => /Invalid login|Too many login|454[ -]4.7.0|421[ -]4.7.0|550[ -]5.4.5|Daily user sending limit/i.test(msg)
+
 function clave(): Buffer {
   const base = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!base) throw new Error('Falta SUPABASE_SERVICE_ROLE_KEY')
