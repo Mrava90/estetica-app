@@ -86,7 +86,6 @@ export function armarMail(asunto: string, cuerpo: string, c: Clienta, urlBaja: s
       ${imagen}
       ${boton ? boton.replace('margin:20px 0;', 'margin:0 0 22px;text-align:center;') : ''}
       ${parrafos}
-      ${boton}
       <p style="color:#9ca3af;font-size:12px;margin-top:28px;border-top:1px solid #f3e8ff;padding-top:12px;">
         Recibís este mail porque sos clienta de Ka Wirth Villa Ballester.
         <a href="${urlBaja}" style="color:#9ca3af;">No quiero recibir más mails</a>

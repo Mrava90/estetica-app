@@ -358,7 +358,6 @@ export default function MailsSeccion() {
                   )}
                   {plantilla.promociones?.imagen_url && <span className="inline-block rounded-md bg-fuchsia-700 px-4 py-1.5 text-xs font-semibold text-white">Reservar turno</span>}
                   <p className="whitespace-pre-wrap text-muted-foreground">{vistaPrevia.cuerpo}</p>
-                  {plantilla.promociones?.imagen_url && <span className="inline-block rounded-md bg-fuchsia-700 px-4 py-1.5 text-xs font-semibold text-white">Reservar turno</span>}
                 </div>
               )}
               <Button className="gap-2" onClick={enviar} disabled={!plantilla || lista.length === 0 || !!progreso}>
