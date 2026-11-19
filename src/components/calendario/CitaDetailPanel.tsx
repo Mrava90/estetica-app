@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { MessageCircle, Pencil, X, Banknote, Smartphone, Building2, Clock, Scissors, BadgeDollarSign } from 'lucide-react'
+import { abrirWhatsApp } from '@/lib/whatsapp'
 
 /** Seña fija (diciembre 2026). */
 const SENA_MONTO = 15000
@@ -118,11 +119,8 @@ export function CitaDetailPanel({ open, cita, onClose, onEdit, readOnly }: Props
 
   function handleWhatsApp() {
     if (!cita?.clientes?.telefono) return
-    const tel = cita.clientes.telefono.replace(/\D/g, '')
-    const msg = encodeURIComponent(
-      `Hola ${cita.clientes.nombre}! 👋 Te recordamos tu turno:\n\n🗓 ${fechaStr}\n🕐 ${horaInicio} – ${horaFin}\n💅 ${cita.servicios?.nombre || 'tu servicio'}\n\n¡Te esperamos!`
-    )
-    window.open(`https://wa.me/${tel}?text=${msg}`, '_blank')
+    abrirWhatsApp(cita.cliente_id, cita.clientes.telefono,
+      `Hola ${cita.clientes.nombre}! 👋 Te recordamos tu turno:\n\n🗓 ${fechaStr}\n🕐 ${horaInicio} – ${horaFin}\n💅 ${cita.servicios?.nombre || 'tu servicio'}\n\n¡Te esperamos!`)
   }
 
   return (

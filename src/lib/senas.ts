@@ -1,6 +1,6 @@
 /**
- * Señas de diciembre 2026: turnos sacados por la web que todavia no tienen
- * la seña registrada. Aparecen en Reenganche → Señas para que Fabi le escriba
+ * Señas de diciembre 2026: turnos (web o cargados a mano) que todavia no tienen
+ * la seña definida. Aparecen en Reenganche → Señas para que Fabi le escriba
  * a la clienta. sena_monto = 0 con sena_medio 'no_cobra' = no se le cobra
  * (clienta habitual): sale de la lista.
  */
@@ -24,7 +24,6 @@ export interface SenaPendiente {
 export function consultaSenasPendientes(supabase: SupabaseClient) {
   return supabase.from('citas')
     .select('id, fecha_inicio, created_at, clientes(nombre, apellido, telefono), servicios(nombre), profesionales(nombre)')
-    .eq('origen', 'online')
     .neq('status', 'cancelada')
     .gte('fecha_inicio', SENA_DESDE)
     .lt('fecha_inicio', SENA_HASTA)

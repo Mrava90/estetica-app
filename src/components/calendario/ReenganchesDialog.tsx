@@ -180,7 +180,7 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     if (!num.startsWith('54')) num = `54${num}`
     const f = new Date(s.fecha_inicio)
     const cuando = format(f, "EEEE d 'de' MMMM 'a las' HH:mm", { locale: es })
-    const msg = `Hola ${s.clientes?.nombre || ''}! Recibimos tu reserva para el ${cuando}${s.servicios ? ` (${s.servicios.nombre})` : ''}. Para confirmarla te pedimos una seña de ${SENA_MONTO.toLocaleString('es-AR')} al alias ${SENA_ALIAS}. Cuando la transfieras mandanos el comprobante por acá. ¡Gracias!`
+    const msg = `Hola ${s.clientes?.nombre || ''}! Tenemos tu reserva para el ${cuando}${s.servicios ? ` (${s.servicios.nombre})` : ''}. Para confirmarla te pedimos una seña de ${SENA_MONTO.toLocaleString('es-AR')} al alias ${SENA_ALIAS}. Cuando la transfieras mandanos el comprobante por acá. ¡Gracias!`
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
@@ -268,14 +268,14 @@ export function ReenganchesDialog({ open, onClose }: Props) {
     pendientes: 'Clientes atendidos hace 21-28 días que aún no volvieron, y los recordatorios pospuestos que vencen hoy.',
     programadas: 'Recordatorios pospuestos. Cada uno vuelve a Pendientes el día indicado, salvo que la clienta saque turno antes.',
     enviados: 'Clientes que ya fueron marcados como contactados en los últimos 60 días. Si te pidió que la contactes más adelante, usá Posponer.',
-    senas: `Turnos de diciembre que las clientas sacaron solas por la web y todavía no tienen la seña de ${SENA_MONTO.toLocaleString('es-AR')}. Escribile, y cuando llegue la transferencia tocá "Recibida".`,
+    senas: `Turnos de diciembre que todavía no tienen la seña definida (de ${SENA_MONTO.toLocaleString('es-AR')}. ). Escribile, y cuando llegue la transferencia tocá "Recibida"; si no se le cobra, "No cobrar". También se puede definir dentro del turno.`,
   }[tab]
 
   const vacio = {
     pendientes: ['Ningún cliente pendiente de reenganche hoy.', 'Aparecen clientes que se atendieron hace 21-28 días y no volvieron ni tienen turno próximo.'],
     programadas: ['No hay recordatorios programados.', 'Usá "Posponer" en Pendientes o Enviados cuando una clienta te pida que la contactes más adelante.'],
     enviados: ['Aún no hay ningún cliente marcado como enviado.', 'Los envíos de los últimos 60 días aparecen acá.'],
-    senas: ['No hay señas pendientes.', 'Acá aparecen los turnos de diciembre sacados por la web sin seña registrada.'],
+    senas: ['No hay señas pendientes.', 'Acá aparecen los turnos de diciembre que todavía no tienen la seña definida.'],
   }[tab]
 
   const listaSenas = (
@@ -367,7 +367,7 @@ export function ReenganchesDialog({ open, onClose }: Props) {
                 <div className="mb-3 rounded-lg border-2 border-amber-300 bg-amber-50/60 dark:bg-amber-950/20 px-2 pt-2">
                   <p className="flex items-center gap-1.5 px-2 text-sm font-semibold text-amber-800 dark:text-amber-300">
                     <BadgeDollarSign className="h-4 w-4" /> Pedir seña ({senas.length})
-                    <span className="font-normal text-xs text-amber-700/80 dark:text-amber-400/80">· turnos de diciembre sacados por la web</span>
+                    <span className="font-normal text-xs text-amber-700/80 dark:text-amber-400/80">· turnos de diciembre sin seña definida</span>
                   </p>
                   {listaSenas}
                 </div>

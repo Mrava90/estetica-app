@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { Phone, Banknote, Smartphone, Building2, Check, RotateCcw, BadgeDollarSign } from 'lucide-react'
+import { abrirWhatsApp } from '@/lib/whatsapp'
 
 /** Seña fija (diciembre 2026). Opcional: solo se carga si la clienta la pagó. */
 const SENA_MONTO = 15000
@@ -421,7 +422,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
           precio_original: precioOriginalSaved,
           promocion_aplicada_id: promoAplicoId,
           origen: 'manual',
-          ...(sena.sena_monto ? sena : {}),
+          ...(sena.sena_monto != null ? sena : {}),
         })
 
         if (error) throw error
@@ -444,7 +445,7 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
     if (error) { toast.error('No se pudo guardar la seña: ' + error.message); return }
     setSena(nueva)
     setSenaAbierta(false)
-    toast.success(nueva.sena_monto ? 'Seña registrada' : 'Seña quitada')
+    toast.success(nueva.sena_monto ? 'Seña registrada' : nueva.sena_medio === 'no_cobra' ? 'Listo: sin seña' : 'Seña quitada')
   }
 
   function registrarSena() {
@@ -537,11 +538,8 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
 
   function generarWhatsAppLink() {
     if (!cita?.clientes?.telefono) return
-    const tel = cita.clientes.telefono.replace(/\D/g, '')
-    const msg = encodeURIComponent(
-      `Hola ${cita.clientes.nombre}, te recordamos tu cita para ${cita.servicios?.nombre || 'tu servicio'} el ${formatFechaHora(cita.fecha_inicio)}. ¡Te esperamos!`
-    )
-    window.open(`https://wa.me/${tel}?text=${msg}`, '_blank')
+    abrirWhatsApp(cita.cliente_id, cita.clientes.telefono,
+      `Hola ${cita.clientes.nombre}, te recordamos tu cita para ${cita.servicios?.nombre || 'tu servicio'} el ${formatFechaHora(cita.fecha_inicio)}. ¡Te esperamos!`)
   }
 
   const clienteIdValue = watch('cliente_id')
@@ -871,6 +869,11 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
                 Quitar seña
               </button>
             </div>
+          ) : sena.sena_medio === 'no_cobra' ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5"><BadgeDollarSign className="h-4 w-4" /> Sin seña (no se le cobra)</span>
+              <button type="button" onClick={() => guardarSena(SIN_SENA)} disabled={loading} className="text-[11px] hover:underline">Cambiar</button>
+            </div>
           ) : senaAbierta ? (
             <div className="rounded-lg border border-dashed px-3 py-2.5 space-y-2">
               <div className="flex items-center gap-2">
@@ -893,10 +896,16 @@ export function CitaDialog({ open, onClose, cita, selectedDate, selectedProfesio
               </div>
             </div>
           ) : (
-            <Button type="button" variant="outline" size="sm" className="w-full gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-50 dark:text-amber-300"
-              onClick={() => { setSenaMontoInput(String(SENA_MONTO)); setSenaAbierta(true) }}>
-              <BadgeDollarSign className="h-4 w-4" /> ¿Pagó seña? Registrarla
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" className="flex-1 gap-1.5 border-amber-300 text-amber-800 hover:bg-amber-50 dark:text-amber-300"
+                onClick={() => { setSenaMontoInput(String(SENA_MONTO)); setSenaAbierta(true) }}>
+                <BadgeDollarSign className="h-4 w-4" /> ¿Pagó seña? Registrarla
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="text-muted-foreground" disabled={loading}
+                onClick={() => guardarSena({ sena_monto: 0, sena_medio: 'no_cobra', sena_fecha: null })}>
+                No se cobra
+              </Button>
+            </div>
           )}
 
           {/* ── Fecha/Hora ── */}

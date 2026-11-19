@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Download, Phone } from 'lucide-react'
+import { abrirWhatsApp } from '@/lib/whatsapp'
 
 export default function CitasPage() {
   const [citas, setCitas] = useState<CitaConRelaciones[]>([])
@@ -53,11 +54,8 @@ export default function CitasPage() {
 
   function generarWhatsAppLink(cita: CitaConRelaciones) {
     if (!cita.clientes?.telefono) return
-    const tel = cita.clientes.telefono.replace(/\D/g, '')
-    const msg = encodeURIComponent(
-      `Hola ${cita.clientes.nombre}, te recordamos tu cita para ${cita.servicios?.nombre || 'tu servicio'} el ${formatFechaHora(cita.fecha_inicio)}. ¡Te esperamos!`
-    )
-    window.open(`https://wa.me/${tel}?text=${msg}`, '_blank')
+    abrirWhatsApp(cita.cliente_id, cita.clientes.telefono,
+      `Hola ${cita.clientes.nombre}, te recordamos tu cita para ${cita.servicios?.nombre || 'tu servicio'} el ${formatFechaHora(cita.fecha_inicio)}. ¡Te esperamos!`)
   }
 
   return (
